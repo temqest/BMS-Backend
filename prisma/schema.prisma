@@ -1,0 +1,106 @@
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url = env("DATABASE_URL")
+}
+
+//Facility schema
+model Facility {
+    facility_id String @id @default(uuid())
+    facility_name String
+    address String
+    contact_number String
+    email String
+    type String
+    created_at DateTime @default(now())
+
+    users User[]
+
+}
+
+//User schema
+model User {
+    user_id String @id @default(uuid())
+    facility_id String
+    first_name String
+    Middle_Name String?
+    Last_Name String
+    role String
+    phone_number String
+    email String
+    address String
+    password String
+    sync_status String? @default("synced")
+
+    facility Facility @relation(fields: [facility_id], references: [facility_id])
+    mother Mother?
+    visitsHandled PrenatalVisit[]
+}
+
+//Mother Schema
+model Mother {
+    mother_id String @id @default(uuid())
+    user_id String? @unique
+    family_serial_no String
+    full_name String
+    complete_address String
+    birth_date DateTime
+    civil_status String
+    blood_type String
+    sync_status String? @default("synced")
+
+    user User? @relation(fields: [user_id], references: [user_id])
+    pregnancies Pregnancy[]
+}
+
+//Pregnancy Schema
+model Pregnancy {
+    pregnancy_id String @id @default(uuid())
+    mother_id String
+    date_of_registration DateTime @default(now())
+    lmp_date DateTime
+    gravida Int
+    parity Int
+    previous_delivery_history String?
+    co_morbidities String?
+    age_group String
+    bmi_1st_trimester Decimal?
+    bmi_category String?
+    pregnancy_status String
+    sync_status String? @default("synced")
+
+    mother Mother @relation(fields: [mother_id], references: [mother_id])
+    prenatalVisits PrenatalVisit[]
+
+}
+
+//PrenatalVisit Schema
+model PrenatalVisit {
+    visit_id String @id @default(uuid())
+    pregnancy_id String
+    health_worker_id String
+    visit_date DateTime @default(now())
+    trimester Int
+    visit_number Int
+    age_of_gestation_weeks Int
+    weight_kg Decimal
+    temperature_celsius Decimal
+    pulse_rate_bpm Int
+    bp_diastolic Int
+    bp_systolic Int
+    fundic_height_cm Decimal?
+    fetal_heart_tone_bpm Int?
+    chief_complaint String?
+    danger_signs_observed String?
+    risk_level_assessed String?
+    sync_status String? @default("synced")
+
+    pregnancy Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id])
+    healthWorker User @relation(fields: [health_worker_id], references: [user_id])
+
+}
+
