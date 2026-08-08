@@ -1,105 +1,299 @@
-
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "postgresql"
-    url = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 //Facility schema
 model Facility {
-    facility_id String @id @default(uuid())
-    facility_name String
-    address String
-    contact_number String
-    email String
-    type String
-    created_at DateTime @default(now())
+  facility_id    String   @id @default(uuid())
+  facility_name  String
+  address        String
+  contact_number String
+  email          String
+  type           String
+  created_at     DateTime @default(now())
 
-    users User[]
-
+  users               User[]
+  onlineReferralsFrom Online_Referral[] @relation("FromFacility")
+  onlineReferralsTo   Online_Referral[] @relation("ToFacility")
 }
 
 //User schema
 model User {
-    user_id String @id @default(uuid())
-    facility_id String?
-    first_name String
-    middle_name String?
-    last_name String
-    role String
-    phone_number String?
-    email String?
-    address String
-    password String?
-    is_active Boolean @default(true)
-    sync_status String? @default("synced")
+  user_id      String  @id @default(uuid())
+  facility_id  String?
+  first_name   String
+  middle_name  String?
+  last_name    String
+  role         String
+  phone_number String?
+  email        String?
+  address      String
+  password     String?
+  is_active    Boolean @default(true)
+  sync_status  String? @default("synced")
 
-    facility Facility? @relation(fields: [facility_id], references: [facility_id])
-    mother Mother?
-    visitsHandled PrenatalVisit[]
+  facility          Facility?            @relation(fields: [facility_id], references: [facility_id])
+  mother            Mother?
+  visitsHandled     PrenatalVisit[]
+  sentMessages      In_App_Message[]     @relation("MessageSender")
+  receivedMessages  In_App_Message[]     @relation("MessageReceiver")
+  appointments      Appointment[]
+  notifications     Notification[]
+  auditRevisionLogs Audit_Revision_Log[]
 }
 
 //Mother Schema
 model Mother {
-    mother_id String @id @default(uuid())
-    user_id String? @unique
-    family_serial_no String?
-    birth_date DateTime
-    civil_status String
-    blood_type String
-    sync_status String? @default("synced")
+  mother_id        String   @id @default(uuid())
+  user_id          String?  @unique
+  family_serial_no String?
+  birth_date       DateTime
+  civil_status     String
+  blood_type       String
+  sync_status      String?  @default("synced")
 
-    user User? @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
-    pregnancies Pregnancy[]
+  user        User?       @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  pregnancies Pregnancy[]
 }
 
 //Pregnancy Schema
 model Pregnancy {
-    pregnancy_id String @id @default(uuid())
-    mother_id String
-    date_of_registration DateTime @default(now())
-    lmp_date DateTime
-    gravida Int
-    parity Int
-    previous_delivery_history String?
-    co_morbidities String?
-    age_group String
-    bmi_1st_trimester Decimal?
-    bmi_category String?
-    pregnancy_status String
-    sync_status String? @default("synced")
+  pregnancy_id              String   @id @default(uuid())
+  mother_id                 String
+  date_of_registration      DateTime @default(now())
+  lmp_date                  DateTime
+  gravida                   Int
+  parity                    Int
+  previous_delivery_history String?
+  co_morbidities            String?
+  age_group                 String
+  bmi_1st_trimester         Decimal?
+  bmi_category              String?
+  pregnancy_status          String
+  sync_status               String?  @default("synced")
 
-    mother Mother @relation(fields: [mother_id], references: [mother_id], onDelete: Cascade)
-    prenatalVisits PrenatalVisit[]
+  mother         Mother          @relation(fields: [mother_id], references: [mother_id], onDelete: Cascade)
+  prenatalVisits PrenatalVisit[]
 
+  immunizationRecords    Immunization_Record[]
+  supplementationRecords Supplementation_Record[]
+  labScreenings          Lab_Screening[]
+  cdssAlerts             CDSS_Alert[]
+  onlineReferrals        Online_Referral[]
+  deliveryOutcomes       Delivery_Outcome[]
 }
 
 //PrenatalVisit Schema
 model PrenatalVisit {
-    visit_id String @id @default(uuid())
-    pregnancy_id String
-    health_worker_id String
-    visit_date DateTime @default(now())
-    trimester Int
-    visit_number Int
-    age_of_gestation_weeks Int
-    weight_kg Decimal
-    temperature_celsius Decimal
-    pulse_rate_bpm Int
-    bp_diastolic Int
-    bp_systolic Int
-    fundic_height_cm Decimal?
-    fetal_heart_tone_bpm Int?
-    chief_complaint String?
-    danger_signs_observed String?
-    risk_level_assessed String?
-    sync_status String? @default("synced")
+  visit_id               String   @id @default(uuid())
+  pregnancy_id           String
+  health_worker_id       String
+  visit_date             DateTime @default(now())
+  trimester              Int
+  visit_number           Int
+  age_of_gestation_weeks Int
+  weight_kg              Decimal
+  temperature_celsius    Decimal
+  pulse_rate_bpm         Int
+  bp_diastolic           Int
+  bp_systolic            Int
+  fundic_height_cm       Decimal?
+  fetal_heart_tone_bpm   Int?
+  chief_complaint        String?
+  danger_signs_observed  String?
+  risk_level_assessed    String?
+  sync_status            String?  @default("synced")
 
-    pregnancy Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
-    healthWorker User @relation(fields: [health_worker_id], references: [user_id])
+  pregnancy    Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
+  healthWorker User      @relation(fields: [health_worker_id], references: [user_id])
 
+  supplementationRecords Supplementation_Record[]
+  labScreenings          Lab_Screening[]
+  cdssAlerts             CDSS_Alert[]
 }
 
+//Immunization Record Schema
+model Immunization_Record {
+  immunization_id        String   @id @default(uuid())
+  pregnancy_id           String
+  vaccine_dose           String
+  date_administered      DateTime @default(now())
+  fully_immunized_mother Boolean  @default(false)
+  sync_status            String   @default("synced")
+
+  pregnancy Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
+}
+
+//Supplementation Record Schema
+model Supplementation_Record {
+  supplement_id       String   @id @default(uuid())
+  pregnancy_id        String
+  visit_id            String
+  supplement_type     String
+  tablets_given_count Int
+  date_given          DateTime @default(now())
+  is_completed        Boolean  @default(false)
+  sync_status         String   @default("synced")
+
+  pregnancy Pregnancy     @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
+  visit     PrenatalVisit @relation(fields: [visit_id], references: [visit_id], onDelete: Cascade)
+}
+
+//Lab Screening Schema
+model Lab_Screening {
+  screening_id      String   @id @default(uuid())
+  pregnancy_id      String
+  visit_id          String
+  screening_type    String
+  result            String
+  date_of_screening DateTime @default(now())
+  remarks           String?
+  sync_status       String   @default("synced")
+
+  pregnancy Pregnancy     @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
+  visit     PrenatalVisit @relation(fields: [visit_id], references: [visit_id], onDelete: Cascade)
+}
+
+//CDSS Alert Schema
+model CDSS_Alert {
+  alert_id      String    @id @default(uuid())
+  pregnancy_id  String
+  visit_id      String
+  alert_type    String
+  alert_message String
+  severity      String
+  is_resolved   Boolean   @default(false)
+  resolved_by   String?
+  resolved_at   DateTime?
+  sync_status   String    @default("synced")
+
+  pregnancy Pregnancy     @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
+  visit     PrenatalVisit @relation(fields: [visit_id], references: [visit_id], onDelete: Cascade)
+}
+
+//Online Referral Schema
+model Online_Referral {
+  referral_id      String   @id @default(uuid())
+  pregnancy_id     String
+  from_facility_id String
+  to_facility_id   String
+  reason           String
+  date_referred    DateTime @default(now())
+  status           String   @default("pending")
+  sync_status      String   @default("synced")
+
+  pregnancy    Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
+  fromFacility Facility  @relation("FromFacility", fields: [from_facility_id], references: [facility_id])
+  toFacility   Facility  @relation("ToFacility", fields: [to_facility_id], references: [facility_id])
+}
+
+//Delivery Outcome Schema
+model Delivery_Outcome {
+  delivery_id             String   @id @default(uuid())
+  pregnancy_id            String
+  delivery_date           DateTime @default(now())
+  place_of_delivery       String
+  mode_of_delivery        String
+  duration_of_labor_hours Decimal?
+  blood_loss_ml           Int?
+  delivery_complications  String?
+  sync_status             String   @default("synced")
+
+  pregnancy        Pregnancy          @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
+  newbornRecords   Newborn_Record[]
+  postpartumVisits postpartum_visit[]
+}
+
+//Newborn Record Schema
+model Newborn_Record {
+  newborn_id      String  @id @default(uuid())
+  delivery_id     String
+  sex             String
+  birth_date_kg   Decimal
+  status_at_birth String
+  apgrar_score    Int
+  sync_status     String  @default("synced")
+
+  delivery Delivery_Outcome @relation(fields: [delivery_id], references: [delivery_id], onDelete: Cascade)
+}
+
+//Postpartum Visit Schema
+model postpartum_visit {
+  postpartum_visit_id    String   @id @default(uuid())
+  delivery_id            String
+  visit_date             DateTime @default(now())
+  trimester              Int
+  visit_number           Int
+  age_of_gestation_weeks Int
+  weight_kg              Decimal
+  temperature_celsius    Decimal
+  pulse_rate_bpm         Int
+  bp_diastolic           Int
+  bp_systolic            Int
+  fundic_height_cm       Decimal?
+  fetal_heart_tone_bpm   Int?
+  chief_complaint        String?
+  danger_signs_observed  String?
+  risk_level_assessed    String?
+  sync_status            String   @default("synced")
+
+  delivery Delivery_Outcome @relation(fields: [delivery_id], references: [delivery_id], onDelete: Cascade)
+}
+
+//Appointment Schema
+model Appointment {
+  appointment_id   String   @id @default(uuid())
+  user_id          String
+  appointment_date DateTime @default(now())
+  appointment_time String
+  sync_status      String   @default("synced")
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+}
+
+//Notification Schema
+model Notification {
+  notification_id      String   @id @default(uuid())
+  user_id              String
+  notification_type    String
+  notification_message String
+  notification_date    DateTime @default(now())
+  is_read              Boolean  @default(false)
+  sync_status          String   @default("synced")
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+}
+
+//In-App Message Schema
+model In_App_Message {
+  message_id      String   @id @default(uuid())
+  sender_id       String
+  receiver_id     String
+  message_type    String
+  message_content String
+  message_date    DateTime @default(now())
+  is_read         Boolean  @default(false)
+  sync_status     String   @default("synced")
+
+  sender   User @relation("MessageSender", fields: [sender_id], references: [user_id])
+  receiver User @relation("MessageReceiver", fields: [receiver_id], references: [user_id])
+}
+
+//Audit Revision Log Schema
+model Audit_Revision_Log {
+  audit_id         String   @id @default(uuid())
+  user_id          String
+  table_name       String
+  action_type      String
+  previous_state   String?
+  new_state        String?
+  client_timestamp DateTime @default(now())
+  sync_status      String   @default("synced")
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+}
