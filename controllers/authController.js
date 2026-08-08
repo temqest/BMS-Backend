@@ -89,7 +89,8 @@ const login = async (req, res, next) => {
                 OR: [
                     {phone_number : identifier},
                     {email : identifier},
-                ]
+                ],
+                is_active : true
             },
             include: {facility : true},
         });

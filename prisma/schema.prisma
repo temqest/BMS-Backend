@@ -25,18 +25,19 @@ model Facility {
 //User schema
 model User {
     user_id String @id @default(uuid())
-    facility_id String
+    facility_id String?
     first_name String
-    Middle_Name String?
-    Last_Name String
+    middle_name String?
+    last_name String
     role String
-    phone_number String
-    email String
+    phone_number String?
+    email String?
     address String
-    password String
+    password String?
+    is_active Boolean @default(true)
     sync_status String? @default("synced")
 
-    facility Facility @relation(fields: [facility_id], references: [facility_id])
+    facility Facility? @relation(fields: [facility_id], references: [facility_id])
     mother Mother?
     visitsHandled PrenatalVisit[]
 }
@@ -45,15 +46,13 @@ model User {
 model Mother {
     mother_id String @id @default(uuid())
     user_id String? @unique
-    family_serial_no String
-    full_name String
-    complete_address String
+    family_serial_no String?
     birth_date DateTime
     civil_status String
     blood_type String
     sync_status String? @default("synced")
 
-    user User? @relation(fields: [user_id], references: [user_id])
+    user User? @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
     pregnancies Pregnancy[]
 }
 
@@ -73,7 +72,7 @@ model Pregnancy {
     pregnancy_status String
     sync_status String? @default("synced")
 
-    mother Mother @relation(fields: [mother_id], references: [mother_id])
+    mother Mother @relation(fields: [mother_id], references: [mother_id], onDelete: Cascade)
     prenatalVisits PrenatalVisit[]
 
 }
@@ -99,7 +98,7 @@ model PrenatalVisit {
     risk_level_assessed String?
     sync_status String? @default("synced")
 
-    pregnancy Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id])
+    pregnancy Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
     healthWorker User @relation(fields: [health_worker_id], references: [user_id])
 
 }

@@ -8,6 +8,8 @@ const authRouter = require('./router/authRouter');
 
 const faciliityRouter = require('./router/facilityRouter');
 
+const motherRouter = require('./router/motherRouter');
+
 app.use(cors());
 app.use(express.json());
 
@@ -18,6 +20,8 @@ app.get('/health', (req, res) => {
 app.use('/api/v1/auth', authRouter);
 
 app.use('/api/v1/facility', faciliityRouter);
+
+app.use('/api/v1/mother', motherRouter);
 
 app.use((err, req, res, next) => {
     console.error("Unhandled Server Error", err);
