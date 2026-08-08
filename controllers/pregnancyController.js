@@ -148,9 +148,43 @@ const getPregnancyByID = async (req, res, next) => {
  
 };
 
+const getAllPreganciesByMother = async (req, res, next) => {
+
+    try {
+
+        const {mother_id} = req.params;
+
+        if(!mother_id) {
+            return res.status(400).json({error : "Missing Mother ID!"});
+        }
+
+        const mother = await prisma.mother.findUnique({
+            where : {mother_id : mother_id}
+        });
+
+        if(!mother) {
+            return res.status(400).json({error : "Mother Not found!"})
+        }
+
+        const pregnancy = await prisma.pregnancy.findMany({
+            where : {mother_id : mother_id},
+            orderBy : {date_of_registration : "desc"}
+        });
+
+        return res.status(200).json({
+            message: "Pregnancies retrieved successfully",
+            pregnancy: pregnancy,
+        })
+
+    } catch (error) {
+        return next(error);
+    }
+}
+
 module.exports = {
     registerPregnancy,
     updatePregnancy,
     deletePregnancy,
     getPregnancyByID,
+    getAllPreganciesByMother,
 }
