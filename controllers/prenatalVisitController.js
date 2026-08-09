@@ -1,5 +1,5 @@
 const prisma = require('../util/db');
-const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+const validate = require('../util/validation');
 
 
 const registerPrenatalVisit = async (req, res, next) => {
@@ -112,7 +112,7 @@ const updatePrenatalVisit = async (req, res, next) => {
             return res.status(400).json({error: "Missing Visit ID"})
         }
 
-        if(!(await isPrenatalVisitExist(visit_id))) {
+        if(!(await validate.isPrenatalVisitExist(visit_id))) {
             return res.status(404).json({error: "Prenatal Visit not found"});
         }
 
@@ -159,7 +159,7 @@ const deletePrenatalVisit = async (req, res, next) => {
             return res.status(400).json({error : "Missing Visit ID"});
         }
 
-        if(!(await isPrenatalVisitExist(visit_id))) {
+        if(!(await validate.isPrenatalVisitExist(visit_id))) {
             return res.status(404).json({error: "Prenatal Visit not found!"});
         }
 
@@ -262,7 +262,7 @@ const getPrentalVisitByPregnancy = async (req, res, next) => {
             return res.status(400).json({error : "Missing Pregnancy ID!"});
         }
 
-        if(!(await isPregnancyExist(pregnancy_id))) {
+        if(!(await validate.isPregnancyExist(pregnancy_id))) {
             return res.status(404).json({error: "Pregnancy Not Found!"})
         }
 
@@ -305,7 +305,7 @@ const getAllPrenatalVisitsByMother = async (req, res, next) => {
             return res.status(400).json("Missing Mother ID")
         }
 
-        if(!(await isMotherExist(mother_id))) {
+        if(!(await validate.isMotherExist(mother_id))) {
             return res.status(404).json({error: "Mother Not Found!"})
         }
 
@@ -350,7 +350,7 @@ const getAllPrenatalVisitsByHealthWorker = async (req, res, next) => {
             return res.status(400).json("Missing Health Worker ID");
         }
 
-        if(!(await isUserExist(health_worker_id))) {
+        if(!(await validate.isUserExist(health_worker_id))) {
             return res.status(404).json({error: "Health Worker Not Found!"});
         }
 
@@ -393,7 +393,7 @@ const getAllPrenatalVisitByFacility = async(req, res, next) => {
             return res.status(400).json("Missing Facility ID")
         }
 
-        if(!(await isFacilityExist(facility_id))) {
+        if(!(await validate.isFacilityExist(facility_id))) {
             return res.status(404).json({error: "Facility Not Found!"});
         }
 

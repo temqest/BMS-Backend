@@ -1,5 +1,5 @@
 const prisma = require('../util/db');
-const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+const validate = require('../util/validation');
 
 
 const createImmunizationRecord = async (req, res, next) => {
@@ -12,11 +12,7 @@ const createImmunizationRecord = async (req, res, next) => {
             return res.status(400).json({error : "Missing Required Fields"});
         }
 
-        const isPregnancyExist = await prisma.pregnancy.findUnique({
-            where : {pregnancy_id : pregnancy_id}
-        })
-
-        if(!__isPregnancyExist){
+        if(!(await validate.isPregnancyExist(pregnancy_id))) {
             return res.status(404).json({error: "Pregnancy Not Found"})
         }
 
@@ -52,7 +48,7 @@ const updateImmunizationRecord = async (req, res, next) => {
             return res.status(400).json({error : "Missing Required Fields"})
         }
 
-        if(!(await isImmunizationRecordExist(immunization_id))) {
+        if(!(await validate.isImmunizationRecordExist(immunization_id))) {
             return res.status(404).json({error: "Immunization Record Doesn't Exist!"});
         }
 
@@ -85,7 +81,7 @@ const deleteImmunizationRecord = async (req, res, next) => {
             return res.status(400).json({error : "Immunization ID is Missing!"});
         }
 
-        if(!(await isImmunizationRecordExist(immunization_id))) {
+        if(!(await validate.isImmunizationRecordExist(immunization_id))) {
             return res.status(404).json({error: "Immunization Record Doesn't Exist!"});
         }
 

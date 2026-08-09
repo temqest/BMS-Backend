@@ -1,5 +1,5 @@
 const prisma = require('../util/db');
-const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+const validate = require('../util/validation');
 
 
 const registerFacility = async (req, res, next) => {
@@ -130,7 +130,7 @@ const deleteFacility = async (req, res, next) => {
             return res.status(400).json({error : "Missing Facility ID!"});
         }
 
-        if(!(await isFacilityExist(facility_id))) {
+        if(!(await validate.isFacilityExist(facility_id))) {
             return res.status(404).json({error : "Facility Doesn't Exist!"});
         }
 

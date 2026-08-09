@@ -1,5 +1,5 @@
 const prisma = require('../util/db');
-const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+const validate = require('../util/validation');
 
 
 const registerNewbornRecord = async (req, res, next) => {
@@ -10,7 +10,7 @@ const registerNewbornRecord = async (req, res, next) => {
             return res.status(400).json({ error: "Missing Required Fields" });
         }
 
-        if(!(await isDeliveryOutcomeExist(delivery_id))) {
+        if(!(await validate.isDeliveryOutcomeExist(delivery_id))) {
             return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
@@ -39,7 +39,7 @@ const updateNewbornRecord = async (req, res, next) => {
         const { newborn_id } = req.params;
         const { sex, birth_weight_kg, status_at_birth, apgar_score } = req.body;
 
-        if(!(await isNewbornExist(newborn_id))) {
+        if(!(await validate.isNewbornExist(newborn_id))) {
             return res.status(404).json({error: "Newborn Record Not Found!"});
         }
 
@@ -70,7 +70,7 @@ const deleteNewbornRecord = async (req, res, next) => {
     try {
         const { newborn_id } = req.params;
 
-        if(!(await isNewbornExist(newborn_id))) {
+        if(!(await validate.isNewbornExist(newborn_id))) {
             return res.status(404).json({error: "Newborn Record Not Found!"});
         }
 
@@ -90,7 +90,7 @@ const getNewbornRecordById = async (req, res, next) => {
     try {
         const { newborn_id } = req.params;
 
-        if(!(await isNewbornExist(newborn_id))) {
+        if(!(await validate.isNewbornExist(newborn_id))) {
             return res.status(404).json({error: "Newborn Record Not Found!"});
         }
 
@@ -107,7 +107,7 @@ const getNewbornRecordByDelivery = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
 
-        if(!(await isDeliveryOutcomeExist(delivery_id))) {
+        if(!(await validate.isDeliveryOutcomeExist(delivery_id))) {
             return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 

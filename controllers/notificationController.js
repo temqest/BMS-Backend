@@ -11,7 +11,7 @@ const sendNotificationToUser = async (req, res, next) => {
             return res.status(400).json({error : "Missing Required Fields!"});
         }
 
-        if(!await isUserExist(user_id)) {
+        if(!await validate.isUserExist(user_id)) {
             return res.status(404).json({error : "User not found!"});
         }
 
@@ -44,7 +44,7 @@ const getNotificationByID = async (req, res, next) => {
             return res.status(400).json({error : "Missing Notification ID!"});
         }
 
-        if(!await isNotificationExist(notification_id)) {
+        if(!await validate.isNotificationExist(notification_id)) {
             return res.status(404).json({error : "Notification Doesn't Exist!"});
         }
 
@@ -81,7 +81,7 @@ const getAllNotificationByUser = async (req, res, next) => {
             return res.status(400).json({error : "Missing User ID!"});
         }
 
-        if(!await isUserExist(user_id)) {
+        if(!await validate.isUserExist(user_id)) {
             return res.status(404).json({error : "User not found!"});
         }
 
@@ -112,7 +112,7 @@ const deleteNotification = async (req, res, next) => {
             return res.status(400).json({error : "Missing Notification ID!"});
         }
 
-        if(!await isNotificationExist(notification_id)) {
+        if(!await validate.isNotificationExist(notification_id)) {
             return res.status(404).json({error : "Notification Doesn't Exist!"});
         }
 
@@ -176,7 +176,7 @@ const getUnreadNotificationCount = async (req, res, next) => {
             return res.status(400).json({error : "Missing User ID!"});
         }
 
-        if(!await isUserExist(user_id)) {
+        if(!await validate.isUserExist(user_id)) {
             return res.status(404).json({error : "User doesn't Exist!"});
         }
 
@@ -204,7 +204,7 @@ const markAllNotificationAsRead = async (req, res, next) => {
             return res.status(400).json({error : "Missing User ID!"});
         }
 
-        if(!await isUserExist(user_id)) {
+        if(!await validate.isUserExist(user_id)) {
             return res.status(404).json({error : "User doesn't Exist!"});
         }
 

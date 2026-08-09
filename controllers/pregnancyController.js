@@ -1,5 +1,5 @@
 const prisma = require('../util/db');
-const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+const validate = require('../util/validation');
 
 
 const registerPregnancy = async (req, res, next) => {

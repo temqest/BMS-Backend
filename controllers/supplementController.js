@@ -1,5 +1,5 @@
 const prisma = require('../util/db');
-const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+const validate = require('../util/validation');
 
 
 const registerSupplementRecord = async (req, res, next) => {
@@ -12,11 +12,7 @@ const registerSupplementRecord = async (req, res, next) => {
             return res.status(400).json({error : "Missing Required Fields"});
         }
 
-        const isPregnancyExist = await prisma.pregnancy.findUnique({
-            where : {pregnancy_id : pregnancy_id}
-        })
-
-        if(!__isPregnancyExist) {
+        if(!(await validate.isPregnancyExist(pregnancy_id))) {
             return res.status(404).json({error: "Pregnancy ID doesn't Exist"});
         }
 
@@ -50,11 +46,7 @@ const updateSupplementRecord = async (req, res, next) => {
             return res.status(400).json({error : "Missing Required Fields"});
         }
 
-        const isSupplementRecordExist = await prisma.supplementation_Record.findUnique({
-            where : {supplement_id : supplement_id}
-        })
-
-        if(!__isSupplementRecordExist) {
+        if(!(await validate.isSupplementRecordExist(supplement_id))) {
             return res.status(404).json({error: "Supplement Record doesn't Exist"});
         }
 
@@ -84,7 +76,7 @@ const deleteSupplementRecord = async (req, res, next) => {
 
         const {supplement_id} = req.params;
 
-        if(!(await isSupplementRecordExist(supplement_id))) {
+        if(!(await validate.isSupplementRecordExist(supplement_id))) {
             return res.status(404).json({error: "Supplement Record Not Found!"});
         }
 
@@ -131,7 +123,7 @@ const getSupplementRecordByPregnancy = async (req, res, next) => {
 
         const {pregnancy_id} = req.params;
 
-        if(!(await isPregnancyExist(pregnancy_id))) {
+        if(!(await validate.isPregnancyExist(pregnancy_id))) {
             return res.status(404).json({error: "Pregnancy doesn't Exist!"});
         }
 
@@ -155,7 +147,7 @@ const getSupplementRecordByHealthWorker = async (req, res, next) => {
 
         const {health_worker_id} = req.params;
 
-        if(!(await isUserExist(health_worker_id))) {
+        if(!(await validate.isUserExist(health_worker_id))) {
             return res.status(404).json({error: "Health Worker doesn't Exist!"});
         }
 

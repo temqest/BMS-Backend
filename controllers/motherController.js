@@ -1,5 +1,5 @@
 const prisma = require('../util/db');
-const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+const validate = require('../util/validation');
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -224,7 +224,7 @@ const updateMother = async (req, res, next) => {
             return res.status(400).json({error : "Mother ID is required"});
         }
 
-        if(!(await isMotherExist(mother_id))) {
+        if(!(await validate.isMotherExist(mother_id))) {
             return res.status(403).json({error : "Mother not found"});
         }
 
@@ -276,7 +276,7 @@ const softDeleteMother = async (req, res, next) => {
             return res.status(400).json({error : "Missing Mother ID"});
         }
 
-        if(!(await isMotherExist(mother_id))) {
+        if(!(await validate.isMotherExist(mother_id))) {
             return res.status(404).json({error: "Mother not found!"});
         }
 
@@ -306,7 +306,7 @@ const hardDeleteMother = async (req, res, next) => {
             return res.status(400).json({error : "Missing Mother ID"});
         }
 
-        if(!(await isMotherExist(mother_id))) {
+        if(!(await validate.isMotherExist(mother_id))) {
             return res.status(404).json({error: "Mother not found!"});
         }
 

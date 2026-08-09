@@ -1,5 +1,5 @@
 const prisma = require('../util/db');
-const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+const validate = require('../util/validation');
 
 
 const registerLabScreening = async (req, res, next) => {
@@ -12,19 +12,11 @@ const registerLabScreening = async (req, res, next) => {
             return res.status(400).json({error : "Missing Required Fields"});
         }
 
-        const existingPregnancy = await prisma.pregnancy.findUnique({
-            where : {pregnancy_id : pregnancy_id}
-        })
-
-        if(!__existingPregnancy) {
+        if(!(await validate.isPregnancyExist(pregnancy_id))) {
             return res.status(404).json({error: "Pregnancy Not Found!"});
         }
 
-        const existingVisit = await prisma.prenatalVisit.findUnique({
-            where : {visit_id : visit_id}
-        })
-
-        if(!__existingVisit) {
+        if(!(await validate.isPrenatalVisitExist(visit_id))) {
             return res.status(404).json({error: "Visit Not Found!"});
         }
 
@@ -56,7 +48,7 @@ const updateLabScreening = async (req, res, next) => {
 
         const {screening_id} = req.params;
 
-        if(!(await isLabScreeningExist(screening_id))) {
+        if(!(await validate.isLabScreeningExist(screening_id))) {
             return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
@@ -92,7 +84,7 @@ const deleteLabScreening = async (req, res, next) => {
 
         const {screening_id} = req.params;
 
-        if(!(await isLabScreeningExist(screening_id))) {
+        if(!(await validate.isLabScreeningExist(screening_id))) {
             return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
@@ -115,7 +107,7 @@ const getLabScreeningById = async (req, res, next) => {
 
         const {screening_id} = req.params;
 
-        if(!(await isLabScreeningExist(screening_id))) {
+        if(!(await validate.isLabScreeningExist(screening_id))) {
             return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
@@ -135,7 +127,7 @@ const getLabScreeningByPregnancy = async (req, res, next) => {
 
         const {pregnancy_id} = req.params;
 
-        if(!(await isPregnancyExist(pregnancy_id))) {
+        if(!(await validate.isPregnancyExist(pregnancy_id))) {
             return res.status(404).json({error: "Pregnancy Not Found!"});
         }
 
@@ -166,7 +158,7 @@ const getLabScreeningByVisit = async (req, res, next) => {
 
         const {visit_id} = req.params;
 
-        if(!(await isPrenatalVisitExist(visit_id))) {
+        if(!(await validate.isPrenatalVisitExist(visit_id))) {
             return res.status(404).json({error: "Visit Not Found!"});
         }
 
