@@ -217,9 +217,9 @@ model Newborn_Record {
   newborn_id      String  @id @default(uuid())
   delivery_id     String
   sex             String
-  birth_date_kg   Decimal
+  birth_weight_kg Decimal
   status_at_birth String
-  apgrar_score    Int
+  apgar_score     Int
   sync_status     String  @default("synced")
 
   delivery Delivery_Outcome @relation(fields: [delivery_id], references: [delivery_id], onDelete: Cascade)
