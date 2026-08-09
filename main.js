@@ -20,6 +20,7 @@ const supplementRouter = require('./router/supplementRouter')
 
 const labScreeningRouter = require('./router/labScreeningRouter');
 const deliveryOutcomeRouter = require('./router/deliveryOutcomeRouter');
+const newbornRecordRouter = require('./router/newbornRecordRouter');
 
 app.use(cors());
 app.use(express.json());
@@ -44,6 +45,7 @@ app.use('/api/v1/supplement', supplementRouter)
 
 app.use('/api/v1/lab-screening', labScreeningRouter)
 app.use('/api/v1/delivery-outcome', deliveryOutcomeRouter)
+app.use('/api/v1/newborn-record', newbornRecordRouter)
 
 app.use((err, req, res, next) => {
     console.error("Unhandled Server Error", err);
