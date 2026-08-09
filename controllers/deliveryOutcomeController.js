@@ -10,9 +10,7 @@ const registerDeliveryOutcome = async (req, res, next) => {
             return res.status(400).json({ error: "Missing Required Fields" });
         }
 
-        const _existingPregnancy = await isPregnancyExist(pregnancy_id);
-
-        if(!__existingPregnancy) {
+        if(!(await isPregnancyExist(pregnancy_id))) {
             return res.status(404).json({error: "Pregnancy Not Found!"});
         }
 
@@ -43,9 +41,7 @@ const updateDeliveryOutcome = async (req, res, next) => {
         const { delivery_id } = req.params;
         const { place_of_delivery, mode_of_delivery, delivery_date, duration_of_labor_hours, blood_loss_ml, delivery_complications } = req.body;
 
-        const _isDeliveryExist = await isDeliveryOutcomeExist(delivery_id);
-
-        if(!__isDeliveryExist) {
+        if(!(await isDeliveryOutcomeExist(delivery_id))) {
             return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
@@ -78,9 +74,7 @@ const deleteDeliveryOutcome = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
 
-        const _isDeliveryExist = await isDeliveryOutcomeExist(delivery_id);
-
-        if(!__isDeliveryExist) {
+        if(!(await isDeliveryOutcomeExist(delivery_id))) {
             return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
@@ -100,9 +94,7 @@ const getDeliveryOutcomeById = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
 
-        const _isDeliveryExist = await isDeliveryOutcomeExist(delivery_id);
-
-        if(!__isDeliveryExist) {
+        if(!(await isDeliveryOutcomeExist(delivery_id))) {
             return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
@@ -119,9 +111,7 @@ const getDeliveryOutcomeByPregnancy = async (req, res, next) => {
     try {
         const { pregnancy_id } = req.params;
 
-        const _isPregnancyExist = await isPregnancyExist(pregnancy_id);
-
-        if(!__isPregnancyExist) {
+        if(!(await isPregnancyExist(pregnancy_id))) {
             return res.status(404).json({error: "Pregnancy Not Found!"});
         }
 

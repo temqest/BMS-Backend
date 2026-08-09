@@ -52,9 +52,7 @@ const updateImmunizationRecord = async (req, res, next) => {
             return res.status(400).json({error : "Missing Required Fields"})
         }
 
-        const _isImmunizationExist = await isImmunizationRecordExist(immunization_id);
-
-        if(!__isImmunizationExist) {
+        if(!(await isImmunizationRecordExist(immunization_id))) {
             return res.status(404).json({error: "Immunization Record Doesn't Exist!"});
         }
 
@@ -87,9 +85,7 @@ const deleteImmunizationRecord = async (req, res, next) => {
             return res.status(400).json({error : "Immunization ID is Missing!"});
         }
 
-        const _isImmunizationExist = await isImmunizationRecordExist(immunization_id);
-
-        if(!__isImmunizationExist) {
+        if(!(await isImmunizationRecordExist(immunization_id))) {
             return res.status(404).json({error: "Immunization Record Doesn't Exist!"});
         }
 

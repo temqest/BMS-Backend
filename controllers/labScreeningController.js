@@ -56,9 +56,7 @@ const updateLabScreening = async (req, res, next) => {
 
         const {screening_id} = req.params;
 
-        const _isScreeningExist = await isLabScreeningExist(screening_id);
-
-        if(!__isScreeningExist) {
+        if(!(await isLabScreeningExist(screening_id))) {
             return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
@@ -94,9 +92,7 @@ const deleteLabScreening = async (req, res, next) => {
 
         const {screening_id} = req.params;
 
-        const _isScreeningExist = await isLabScreeningExist(screening_id);
-
-        if(!__isScreeningExist) {
+        if(!(await isLabScreeningExist(screening_id))) {
             return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
@@ -119,9 +115,7 @@ const getLabScreeningById = async (req, res, next) => {
 
         const {screening_id} = req.params;
 
-        const _isScreeningExist = await isLabScreeningExist(screening_id);
-
-        if(!__isScreeningExist) {
+        if(!(await isLabScreeningExist(screening_id))) {
             return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
@@ -141,9 +135,7 @@ const getLabScreeningByPregnancy = async (req, res, next) => {
 
         const {pregnancy_id} = req.params;
 
-        const _isPregnancyExist = await isPregnancyExist(pregnancy_id);
-
-        if(!__isPregnancyExist) {
+        if(!(await isPregnancyExist(pregnancy_id))) {
             return res.status(404).json({error: "Pregnancy Not Found!"});
         }
 
@@ -174,9 +166,7 @@ const getLabScreeningByVisit = async (req, res, next) => {
 
         const {visit_id} = req.params;
 
-        const _isVisitExist = await isPrenatalVisitExist(visit_id);
-
-        if(!__isVisitExist) {
+        if(!(await isPrenatalVisitExist(visit_id))) {
             return res.status(404).json({error: "Visit Not Found!"});
         }
 

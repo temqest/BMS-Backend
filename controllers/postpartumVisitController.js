@@ -25,9 +25,7 @@ const registerPostpartumVisit = async (req, res, next) => {
             return res.status(400).json({ error: "Missing Required Fields" });
         }
 
-        const _existingDelivery = await isDeliveryOutcomeExist(delivery_id);
-
-        if(!__existingDelivery) {
+        if(!(await isDeliveryOutcomeExist(delivery_id))) {
             return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
@@ -79,9 +77,7 @@ const updatePostpartumVisit = async (req, res, next) => {
             iron_supplement_given
         } = req.body;
 
-        const _isVisitExist = await isPostpartumVisitExist(postpartum_visit_id);
-
-        if(!__isVisitExist) {
+        if(!(await isPostpartumVisitExist(postpartum_visit_id))) {
             return res.status(404).json({error: "Postpartum Visit Not Found!"});
         }
 
@@ -121,9 +117,7 @@ const deletePostpartumVisit = async (req, res, next) => {
     try {
         const { postpartum_visit_id } = req.params;
 
-        const _isVisitExist = await isPostpartumVisitExist(postpartum_visit_id);
-
-        if(!__isVisitExist) {
+        if(!(await isPostpartumVisitExist(postpartum_visit_id))) {
             return res.status(404).json({error: "Postpartum Visit Not Found!"});
         }
 
@@ -143,9 +137,7 @@ const getPostpartumVisitById = async (req, res, next) => {
     try {
         const { postpartum_visit_id } = req.params;
 
-        const _isVisitExist = await isPostpartumVisitExist(postpartum_visit_id);
-
-        if(!__isVisitExist) {
+        if(!(await isPostpartumVisitExist(postpartum_visit_id))) {
             return res.status(404).json({error: "Postpartum Visit Not Found!"});
         }
 
@@ -162,9 +154,7 @@ const getPostpartumVisitByDelivery = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
 
-        const _isDeliveryExist = await isDeliveryOutcomeExist(delivery_id);
-
-        if(!__isDeliveryExist) {
+        if(!(await isDeliveryOutcomeExist(delivery_id))) {
             return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 

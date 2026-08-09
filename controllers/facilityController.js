@@ -130,9 +130,7 @@ const deleteFacility = async (req, res, next) => {
             return res.status(400).json({error : "Missing Facility ID!"});
         }
 
-        const _isFacilityExist = await isFacilityExist(facility_id);
-
-        if(!__isFacilityExist) {
+        if(!(await isFacilityExist(facility_id))) {
             return res.status(404).json({error : "Facility Doesn't Exist!"});
         }
 

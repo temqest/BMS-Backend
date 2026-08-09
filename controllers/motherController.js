@@ -224,9 +224,7 @@ const updateMother = async (req, res, next) => {
             return res.status(400).json({error : "Mother ID is required"});
         }
 
-        const _existingMother = await isMotherExist(mother_id);
-
-        if(!__existingMother) {
+        if(!(await isMotherExist(mother_id))) {
             return res.status(403).json({error : "Mother not found"});
         }
 
@@ -278,9 +276,7 @@ const softDeleteMother = async (req, res, next) => {
             return res.status(400).json({error : "Missing Mother ID"});
         }
 
-        const _isMotherExist = await isMotherExist(mother_id);
-
-        if(!__isMotherExist) {
+        if(!(await isMotherExist(mother_id))) {
             return res.status(404).json({error: "Mother not found!"});
         }
 
@@ -310,9 +306,7 @@ const hardDeleteMother = async (req, res, next) => {
             return res.status(400).json({error : "Missing Mother ID"});
         }
 
-        const _isMotherExist = await isMotherExist(mother_id);
-
-        if(!__isMotherExist) {
+        if(!(await isMotherExist(mother_id))) {
             return res.status(404).json({error: "Mother not found!"});
         }
 

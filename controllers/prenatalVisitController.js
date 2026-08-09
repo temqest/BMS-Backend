@@ -112,9 +112,7 @@ const updatePrenatalVisit = async (req, res, next) => {
             return res.status(400).json({error: "Missing Visit ID"})
         }
 
-        const _isVisitExist = await isPrenatalVisitExist(visit_id);
-
-        if(!__isVisitExist) {
+        if(!(await isPrenatalVisitExist(visit_id))) {
             return res.status(404).json({error: "Prenatal Visit not found"});
         }
 
@@ -161,9 +159,7 @@ const deletePrenatalVisit = async (req, res, next) => {
             return res.status(400).json({error : "Missing Visit ID"});
         }
 
-        const _isVisitExist = await isPrenatalVisitExist(visit_id);
-
-        if(!__isVisitExist) {
+        if(!(await isPrenatalVisitExist(visit_id))) {
             return res.status(404).json({error: "Prenatal Visit not found!"});
         }
 
@@ -266,9 +262,7 @@ const getPrentalVisitByPregnancy = async (req, res, next) => {
             return res.status(400).json({error : "Missing Pregnancy ID!"});
         }
 
-        const _isPregnancyExist = await isPregnancyExist(pregnancy_id);
-
-        if(!__isPregnancyExist) {
+        if(!(await isPregnancyExist(pregnancy_id))) {
             return res.status(404).json({error: "Pregnancy Not Found!"})
         }
 
@@ -311,9 +305,7 @@ const getAllPrenatalVisitsByMother = async (req, res, next) => {
             return res.status(400).json("Missing Mother ID")
         }
 
-        const _isMotherExist = await isMotherExist(mother_id);
-
-        if(!__isMotherExist) {
+        if(!(await isMotherExist(mother_id))) {
             return res.status(404).json({error: "Mother Not Found!"})
         }
 
@@ -358,9 +350,7 @@ const getAllPrenatalVisitsByHealthWorker = async (req, res, next) => {
             return res.status(400).json("Missing Health Worker ID");
         }
 
-        const _isHealthWorkerExist = await isUserExist(health_worker_id);
-
-        if(!__isHealthWorkerExist) {
+        if(!(await isUserExist(health_worker_id))) {
             return res.status(404).json({error: "Health Worker Not Found!"});
         }
 
@@ -403,9 +393,7 @@ const getAllPrenatalVisitByFacility = async(req, res, next) => {
             return res.status(400).json("Missing Facility ID")
         }
 
-        const _isFacilityExist = await isFacilityExist(facility_id);
-
-        if(!__isFacilityExist) {
+        if(!(await isFacilityExist(facility_id))) {
             return res.status(404).json({error: "Facility Not Found!"});
         }
 

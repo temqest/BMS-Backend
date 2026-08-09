@@ -84,9 +84,7 @@ const deleteSupplementRecord = async (req, res, next) => {
 
         const {supplement_id} = req.params;
 
-        const _isSupplementRecordExist = await isSupplementRecordExist(supplement_id);
-
-        if(!__isSupplementRecordExist) {
+        if(!(await isSupplementRecordExist(supplement_id))) {
             return res.status(404).json({error: "Supplement Record Not Found!"});
         }
 
@@ -133,9 +131,7 @@ const getSupplementRecordByPregnancy = async (req, res, next) => {
 
         const {pregnancy_id} = req.params;
 
-        const _isPregnancyExist = await isPregnancyExist(pregnancy_id);
-
-        if(!__isPregnancyExist) {
+        if(!(await isPregnancyExist(pregnancy_id))) {
             return res.status(404).json({error: "Pregnancy doesn't Exist!"});
         }
 
@@ -159,9 +155,7 @@ const getSupplementRecordByHealthWorker = async (req, res, next) => {
 
         const {health_worker_id} = req.params;
 
-        const _isHealthWorkerExist = await isUserExist(health_worker_id);
-
-        if(!__isHealthWorkerExist) {
+        if(!(await isUserExist(health_worker_id))) {
             return res.status(404).json({error: "Health Worker doesn't Exist!"});
         }
 
