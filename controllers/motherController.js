@@ -4,6 +4,17 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-maternal-key-change-in-production'
 
+const calculateAge = (birthDate) => {
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+        age--;
+    }
+    return age;
+};
+
 const registerMother = async (req, res, next) => {
 
     try {
@@ -70,6 +81,7 @@ const registerMother = async (req, res, next) => {
                     user_id : user.user_id,
                     family_serial_no : family_serial_no,
                     birth_date : new Date(birth_date),
+                    age : calculateAge(birth_date),
                     civil_status : civil_status,
                     blood_type : blood_type,
                     sync_status : "synced",
@@ -148,6 +160,7 @@ const selfRegisterMother = async (req, res, next) => {
                     user_id : user.user_id,
                     family_serial_no : family_serial_no,
                     birth_date : new Date(birth_date),
+                    age : calculateAge(birth_date),
                     civil_status : civil_status,
                     blood_type : blood_type,
                     sync_status : "synced",
@@ -176,6 +189,7 @@ const selfRegisterMother = async (req, res, next) => {
                 phone_number : result.user.phone_number,
                 email : result.user.email,
                 birth_date : result.mother.birth_date,
+                age : result.mother.age,
                 civil_status : result.mother.civil_status,
                 blood_type : result.mother.blood_type
             }
@@ -235,6 +249,7 @@ const updateMother = async (req, res, next) => {
                 where : {mother_id : mother_id},
                 data : {
                     birth_date : birth_date ? new Date(birth_date) : undefined,
+                    age : birth_date ? calculateAge(birth_date) : undefined,
                     civil_status : civil_status,
                     blood_type : blood_type,
                 }
@@ -500,6 +515,7 @@ const updateMyProfile = async (req, res, next) => {
                 where : {user_id : my_user_id},
                 data : {
                     birth_date : birth_date ? new Date(birth_date) : undefined,
+                    age : birth_date ? calculateAge(birth_date) : undefined,
                     civil_status : civil_status,
                     blood_type : blood_type
                 }

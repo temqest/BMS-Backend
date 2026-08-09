@@ -16,6 +16,8 @@ const prenatalVisitRouter = require('./router/prenatalVisitRouter')
 
 const immunizationRouter = require('./router/immunizationRouter')
 
+const supplementRouter = require('./router/supplementRouter')
+
 app.use(cors());
 app.use(express.json());
 
@@ -34,6 +36,8 @@ app.use('/api/v1/pregnancy', pregnancyRouter);
 app.use('/api/v1/prenatal-visit', prenatalVisitRouter);
 
 app.use('/api/v1/immunization', immunizationRouter)
+
+app.use('/api/v1/supplement', supplementRouter)
 
 app.use((err, req, res, next) => {
     console.error("Unhandled Server Error", err);

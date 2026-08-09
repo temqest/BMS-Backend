@@ -53,6 +53,7 @@ model Mother {
   user_id          String?  @unique
   family_serial_no String?
   birth_date       DateTime
+  age              Int?
   civil_status     String
   blood_type       String
   sync_status      String?  @default("synced")
@@ -75,6 +76,8 @@ model Pregnancy {
   bmi_1st_trimester         Decimal?
   bmi_category              String?
   pregnancy_status          String
+  deworming_given           Boolean  @default(false)
+  deworming_date            DateTime?
   sync_status               String?  @default("synced")
 
   mother         Mother          @relation(fields: [mother_id], references: [mother_id], onDelete: Cascade)
@@ -227,19 +230,18 @@ model postpartum_visit {
   postpartum_visit_id    String   @id @default(uuid())
   delivery_id            String
   visit_date             DateTime @default(now())
-  trimester              Int
   visit_number           Int
-  age_of_gestation_weeks Int
   weight_kg              Decimal
   temperature_celsius    Decimal
   pulse_rate_bpm         Int
   bp_diastolic           Int
   bp_systolic            Int
   fundic_height_cm       Decimal?
-  fetal_heart_tone_bpm   Int?
   chief_complaint        String?
   danger_signs_observed  String?
   risk_level_assessed    String?
+  vitamin_a_given        Boolean  @default(false)
+  iron_supplement_given  Boolean  @default(false)
   sync_status            String   @default("synced")
 
   delivery Delivery_Outcome @relation(fields: [delivery_id], references: [delivery_id], onDelete: Cascade)
