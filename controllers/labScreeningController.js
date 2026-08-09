@@ -1,0 +1,212 @@
+const prisma = require('../util/db')
+
+const registerLabScreening = async (req, res, next) => {
+
+    try {
+
+        const  {pregnancy_id, visit_id, screening_type, result, date_of_screening, remarks} = req.body;
+
+        if(!pregnancy_id || !visit_id || !screening_type || !result || !date_of_screening) {
+            return res.status(400).json({error : "Missing Required Fields"});
+        }
+
+        const existingPregnancy = await prisma.pregnancy.findUnique({
+            where : {pregnancy_id : pregnancy_id}
+        })
+
+        if(!existingPregnancy) {
+            return res.status(400).json({error : "Pregnancy Not Found!"});
+        }
+
+        const existingVisit = await prisma.prenatalVisit.findUnique({
+            where : {visit_id : visit_id}
+        })
+
+        if(!existingVisit) {
+            return res.status(400).json({error : "Visit Not Found!"});
+        }
+
+        const labScreening = await prisma.lab_Screening.create({
+            data : {
+                pregnancy_id : pregnancy_id,
+                visit_id : visit_id,
+                screening_type : screening_type,
+                result : result,
+                date_of_screening : date_of_screening,
+                remarks : remarks,
+                sync_status : "synced"
+            }
+        });
+
+        res.status(200).json({
+            message : "Lab Screening Successfully Registered!",
+            data : labScreening
+        })
+
+    } catch (error) {
+        return next(error);
+    }
+}
+
+const updateLabScreening = async (req, res, next) => {
+
+    try {
+
+        const {screening_id} = req.params;
+
+        const isScreeningExist = await prisma.lab_Screening.findUnique({
+            where : {screening_id : screening_id}
+        });
+
+        if(!isScreeningExist) {
+            return res.status(400).json({error : "Lab Screening Not Found!"});
+        }
+
+        const {screening_type, result, date_of_screening, remarks} = req.body;
+
+        if (!screening_type || !result || !date_of_screening) {
+            return res.status(400).json({error : "Missing Required Fields"});
+        }
+
+        const updatedLabScreening = await prisma.lab_Screening.update({
+            where : {screening_id : screening_id},
+            data : {
+                screening_type : screening_type,
+                result : result,
+                date_of_screening : date_of_screening,
+                remarks : remarks
+            }
+        });
+
+        return res.status(200).json({
+            message : "Lab Screening Updated Successfully!",
+            data : updatedLabScreening
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const deleteLabScreening = async (req, res, next) => {
+
+    try {
+
+        const {screening_id} = req.params;
+
+        const isScreeningExist = await prisma.lab_Screening.findUnique({
+            where : {screening_id : screening_id}
+        });
+
+        if(!isScreeningExist) {
+            return res.status(400).json({error : "Lab Screening Not Found!"});
+        }
+
+        await prisma.lab_Screening.delete({
+            where : {screening_id : screening_id}
+        });
+
+        return res.status(200).json({
+            message : "Lab Screening Deleted Successfully!"
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const getLabScreeningById = async (req, res, next) => {
+
+    try {
+
+        const {screening_id} = req.params;
+
+        const isScreeningExist = await prisma.lab_Screening.findUnique({
+            where : {screening_id : screening_id}
+        });
+
+        if(!isScreeningExist) {
+            return res.status(400).json({error : "Lab Screening Not Found!"});
+        }
+
+        return res.status(200).json({
+            message : "Lab Screening Fetched Successfully!",
+            data : isScreeningExist
+        });
+
+    } catch (error) {
+        return next(error)
+    }
+};
+
+const getLabScreeningByPregnancy = async (req, res, next) => {
+
+    try {
+
+        const {pregnancy_id} = req.params;
+
+        const isPregnancyExist = await prisma.pregnancy.findUnique({
+            where : {pregnancy_id : pregnancy_id}
+        });
+
+        if(!isPregnancyExist) {
+            return res.status(400).json({error : "Pregnancy Not Found!"});
+        }
+
+        const labScreening = await prisma.lab_Screening.findMany({
+            where : {pregnancy_id : pregnancy_id},
+            include : {
+                visit : {
+                    select : {
+                        visit_date : true,
+                    }
+                }
+            }
+        });
+
+        return res.status(200).json({
+            message : "Lab Screening Successfully Retrived",
+            data : labScreening
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const getLabScreeningByVisit = async (req, res, next) => {
+
+    try {
+
+        const {visit_id} = req.params;
+
+        const isVisitExist = await prisma.prenatalVisit.findUnique({
+            where : {visit_id : visit_id}
+        });
+
+        if(!isVisitExist) {
+            return res.status(400).json({error : "Visit Not Found!"});
+        }
+
+        const labScreening = await prisma.lab_Screening.findMany({
+            where : {visit_id : visit_id}
+        });
+
+        return res.status(200).json({
+            message : "Lab Screening Successfully Retrived",
+            data : labScreening
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+module.exports = {
+    registerLabScreening,
+    updateLabScreening,
+    deleteLabScreening,
+    getLabScreeningById,
+    getLabScreeningByPregnancy,
+    getLabScreeningByVisit
+};

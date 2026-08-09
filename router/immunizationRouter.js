@@ -9,8 +9,8 @@ router.put('/update/:immunization_id', verifyToken, checkUserRole(['SystemAdmin'
 
 router.delete('/delete/:immunization_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife']), deleteImmunizationRecord)
 
-router.get('/search/:immunization_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife']), getImmunizationRecordById)
+router.get('/get/:immunization_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife']), getImmunizationRecordById)
 
-router.get('/pregnancy/:pregnancy_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife']), getImmunizationRecordByPregnancyId)
+router.get('/get/pregnancy/:pregnancy_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife']), getImmunizationRecordByPregnancyId)
 
 module.exports = router;
