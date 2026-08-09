@@ -1,4 +1,6 @@
 const prisma = require('../util/db');
+const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+
 
 const registerPrenatalVisit = async (req, res, next) => {
     
@@ -42,7 +44,7 @@ const registerPrenatalVisit = async (req, res, next) => {
         });
 
         if(!pregnancy) {
-            return res.status(400).json({error : "Pregnancy Not Found!"});
+            return res.status(404).json({error: "Pregnancy Not Found!"});
         }
 
         const health_worker = await prisma.user.findUnique({
@@ -50,7 +52,7 @@ const registerPrenatalVisit = async (req, res, next) => {
         });
 
         if(!health_worker) {
-            return res.status(400).json({error : "Health Worker Not Found!"});
+            return res.status(404).json({error: "Health Worker Not Found!"});
         }
 
         const newPrenatalVisit = await prisma.prenatalVisit.create({
@@ -110,12 +112,10 @@ const updatePrenatalVisit = async (req, res, next) => {
             return res.status(400).json({error: "Missing Visit ID"})
         }
 
-        const isVisitExist = await prisma.prenatalVisit.findUnique({
-            where : {visit_id : visit_id}
-        });
+        const _isVisitExist = await isPrenatalVisitExist(visit_id);
 
-        if(!isVisitExist) {
-            return res.status(400).json({error : "Prenatal Visit not found"});
+        if(!__isVisitExist) {
+            return res.status(404).json({error: "Prenatal Visit not found"});
         }
 
         const updatedVisit = await prisma.prenatalVisit.update({
@@ -161,12 +161,10 @@ const deletePrenatalVisit = async (req, res, next) => {
             return res.status(400).json({error : "Missing Visit ID"});
         }
 
-        const isVisitExist = await prisma.prenatalVisit.findUnique({
-            where : {visit_id : visit_id}
-        });
+        const _isVisitExist = await isPrenatalVisitExist(visit_id);
 
-        if(!isVisitExist) {
-            return res.status(400).json({error : "Prenatal Visit not found!"});
+        if(!__isVisitExist) {
+            return res.status(404).json({error: "Prenatal Visit not found!"});
         }
 
         await prisma.prenatalVisit.delete({
@@ -226,8 +224,8 @@ const getPrenatalVisitById = async (req, res, next) => {
             }
         })
 
-        if(!isVisitExist) {
-            return res.status(400).json({error : "Prenatal Visit not found!"});
+        if(!__isVisitExist) {
+            return res.status(404).json({error: "Prenatal Visit not found!"});
         }
 
         const visitResult = await prisma.prenatalVisit.findUnique({
@@ -268,14 +266,10 @@ const getPrentalVisitByPregnancy = async (req, res, next) => {
             return res.status(400).json({error : "Missing Pregnancy ID!"});
         }
 
-        const isPregnancyExist = await prisma.pregnancy.findUnique({
-            where : {
-                pregnancy_id : pregnancy_id
-            }
-        });
+        const _isPregnancyExist = await isPregnancyExist(pregnancy_id);
 
-        if(!isPregnancyExist) {
-            return res.status(400).json({error : "Pregnancy Not Found!"})
+        if(!__isPregnancyExist) {
+            return res.status(404).json({error: "Pregnancy Not Found!"})
         }
 
         const visit = await prisma.prenatalVisit.findMany({
@@ -317,14 +311,10 @@ const getAllPrenatalVisitsByMother = async (req, res, next) => {
             return res.status(400).json("Missing Mother ID")
         }
 
-        const isMotherExist = await prisma.mother.findUnique({
-            where : {
-                mother_id : mother_id
-            }
-        });
+        const _isMotherExist = await isMotherExist(mother_id);
 
-        if(!isMotherExist) {
-            return res.status(400).json({error : "Mother Not Found!"})
+        if(!__isMotherExist) {
+            return res.status(404).json({error: "Mother Not Found!"})
         }
 
         const visits = await prisma.prenatalVisit.findMany({
@@ -368,14 +358,10 @@ const getAllPrenatalVisitsByHealthWorker = async (req, res, next) => {
             return res.status(400).json("Missing Health Worker ID");
         }
 
-        const isHealthWorkerExist = await prisma.user.findUnique({
-            where : {
-                user_id : health_worker_id
-            }
-        });
+        const _isHealthWorkerExist = await isUserExist(health_worker_id);
 
-        if(!isHealthWorkerExist) {
-            return res.status(400).json({error : "Health Worker Not Found!"});
+        if(!__isHealthWorkerExist) {
+            return res.status(404).json({error: "Health Worker Not Found!"});
         }
 
         const visits = await prisma.prenatalVisit.findMany({
@@ -417,12 +403,10 @@ const getAllPrenatalVisitByFacility = async(req, res, next) => {
             return res.status(400).json("Missing Facility ID")
         }
 
-        const isFacilityExist = await prisma.facility.findUnique({
-            where : {facility_id : facility_id}
-        });
+        const _isFacilityExist = await isFacilityExist(facility_id);
 
-        if(!isFacilityExist) {
-            return res.status(400).json({error : "Facility Not Found!"});
+        if(!__isFacilityExist) {
+            return res.status(404).json({error: "Facility Not Found!"});
         }
 
         const visits = await prisma.prenatalVisit.findMany({

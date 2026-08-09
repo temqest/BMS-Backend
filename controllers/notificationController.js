@@ -1,45 +1,5 @@
-const { use } = require('react');
 const prisma = require('../util/db');
-
-const isUserExist = async (userID) => {
-
-    try {
-
-        const user = await prisma.user.findUnique({
-            where : {user_id : userID}
-        });
-
-        if(!user) {
-            return false;
-        }
-
-        return true;
-
-    } catch (error) {
-        console.error("Error while checking User: " + error);
-        return false;
-    }
-}
-
-const isNotificationExist = async (notificationID) => {
-
-    try {
-
-        const notification = await prisma.notification.findUnique({
-            where : {notification_id : notificationID}
-        });
-
-        if(!notification) {
-            return false;
-        }
-
-        return true;
-
-    } catch (error) {
-        console.error("Error while checking Notification: " + error);
-        return false;
-    }
-}
+const { isUserExist, isNotificationExist } = require('../util/validation');
 
 const sendNotificationToUser = async (req, res, next) => {
 

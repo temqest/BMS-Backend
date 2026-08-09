@@ -1,4 +1,6 @@
-const prisma = require('../util/db')
+const prisma = require('../util/db');
+const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+
 
 const registerFacility = async (req, res, next) => {
 
@@ -47,7 +49,7 @@ const searchFacility  = async (req, res, next) => {
     try {
         const { search } = req.query;
 
-        if(!search) {
+        if(!__search) {
             return res.status(400).json({error : "Missing search query"});
         }
 
@@ -92,7 +94,7 @@ const updateFacility = async (req, res, next) => {
             },
         });
 
-        if(!isFacilityExist) {
+        if(!__isFacilityExist) {
             return res.status(404).json({error : "Facility Doesn't Exist!"});
         }
 
@@ -128,13 +130,9 @@ const deleteFacility = async (req, res, next) => {
             return res.status(400).json({error : "Missing Facility ID!"});
         }
 
-        const isFacilityExist = await prisma.facility.findUnique({
-            where : {
-                facility_id : facility_id
-            }
-        });
+        const _isFacilityExist = await isFacilityExist(facility_id);
 
-        if(!isFacilityExist) {
+        if(!__isFacilityExist) {
             return res.status(404).json({error : "Facility Doesn't Exist!"});
         }
 

@@ -1,4 +1,6 @@
 const prisma = require('../util/db');
+const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+
 
 const registerDeliveryOutcome = async (req, res, next) => {
     try {
@@ -8,12 +10,10 @@ const registerDeliveryOutcome = async (req, res, next) => {
             return res.status(400).json({ error: "Missing Required Fields" });
         }
 
-        const existingPregnancy = await prisma.pregnancy.findUnique({
-            where: { pregnancy_id: pregnancy_id }
-        });
+        const _existingPregnancy = await isPregnancyExist(pregnancy_id);
 
-        if (!existingPregnancy) {
-            return res.status(400).json({ error: "Pregnancy Not Found!" });
+        if(!__existingPregnancy) {
+            return res.status(404).json({error: "Pregnancy Not Found!"});
         }
 
         const deliveryOutcome = await prisma.delivery_Outcome.create({
@@ -43,12 +43,10 @@ const updateDeliveryOutcome = async (req, res, next) => {
         const { delivery_id } = req.params;
         const { place_of_delivery, mode_of_delivery, delivery_date, duration_of_labor_hours, blood_loss_ml, delivery_complications } = req.body;
 
-        const isDeliveryExist = await prisma.delivery_Outcome.findUnique({
-            where: { delivery_id: delivery_id }
-        });
+        const _isDeliveryExist = await isDeliveryOutcomeExist(delivery_id);
 
-        if (!isDeliveryExist) {
-            return res.status(400).json({ error: "Delivery Outcome Not Found!" });
+        if(!__isDeliveryExist) {
+            return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
         if (!place_of_delivery || !mode_of_delivery) {
@@ -80,12 +78,10 @@ const deleteDeliveryOutcome = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
 
-        const isDeliveryExist = await prisma.delivery_Outcome.findUnique({
-            where: { delivery_id: delivery_id }
-        });
+        const _isDeliveryExist = await isDeliveryOutcomeExist(delivery_id);
 
-        if (!isDeliveryExist) {
-            return res.status(400).json({ error: "Delivery Outcome Not Found!" });
+        if(!__isDeliveryExist) {
+            return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
         await prisma.delivery_Outcome.delete({
@@ -104,12 +100,10 @@ const getDeliveryOutcomeById = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
 
-        const isDeliveryExist = await prisma.delivery_Outcome.findUnique({
-            where: { delivery_id: delivery_id }
-        });
+        const _isDeliveryExist = await isDeliveryOutcomeExist(delivery_id);
 
-        if (!isDeliveryExist) {
-            return res.status(400).json({ error: "Delivery Outcome Not Found!" });
+        if(!__isDeliveryExist) {
+            return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
         return res.status(200).json({
@@ -125,12 +119,10 @@ const getDeliveryOutcomeByPregnancy = async (req, res, next) => {
     try {
         const { pregnancy_id } = req.params;
 
-        const isPregnancyExist = await prisma.pregnancy.findUnique({
-            where: { pregnancy_id: pregnancy_id }
-        });
+        const _isPregnancyExist = await isPregnancyExist(pregnancy_id);
 
-        if (!isPregnancyExist) {
-            return res.status(400).json({ error: "Pregnancy Not Found!" });
+        if(!__isPregnancyExist) {
+            return res.status(404).json({error: "Pregnancy Not Found!"});
         }
 
         const deliveryOutcomes = await prisma.delivery_Outcome.findMany({

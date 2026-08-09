@@ -1,4 +1,6 @@
 const prisma = require('../util/db');
+const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+
 
 const registerNewbornRecord = async (req, res, next) => {
     try {
@@ -8,12 +10,10 @@ const registerNewbornRecord = async (req, res, next) => {
             return res.status(400).json({ error: "Missing Required Fields" });
         }
 
-        const existingDelivery = await prisma.delivery_Outcome.findUnique({
-            where: { delivery_id: delivery_id }
-        });
+        const _existingDelivery = await isDeliveryOutcomeExist(delivery_id);
 
-        if (!existingDelivery) {
-            return res.status(400).json({ error: "Delivery Outcome Not Found!" });
+        if(!__existingDelivery) {
+            return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
         const newbornRecord = await prisma.newborn_Record.create({
@@ -41,12 +41,10 @@ const updateNewbornRecord = async (req, res, next) => {
         const { newborn_id } = req.params;
         const { sex, birth_weight_kg, status_at_birth, apgar_score } = req.body;
 
-        const isNewbornExist = await prisma.newborn_Record.findUnique({
-            where: { newborn_id: newborn_id }
-        });
+        const _isNewbornExist = await isNewbornExist(newborn_id);
 
-        if (!isNewbornExist) {
-            return res.status(400).json({ error: "Newborn Record Not Found!" });
+        if(!__isNewbornExist) {
+            return res.status(404).json({error: "Newborn Record Not Found!"});
         }
 
         if (!sex || !birth_weight_kg || !status_at_birth || apgar_score === undefined) {
@@ -76,12 +74,10 @@ const deleteNewbornRecord = async (req, res, next) => {
     try {
         const { newborn_id } = req.params;
 
-        const isNewbornExist = await prisma.newborn_Record.findUnique({
-            where: { newborn_id: newborn_id }
-        });
+        const _isNewbornExist = await isNewbornExist(newborn_id);
 
-        if (!isNewbornExist) {
-            return res.status(400).json({ error: "Newborn Record Not Found!" });
+        if(!__isNewbornExist) {
+            return res.status(404).json({error: "Newborn Record Not Found!"});
         }
 
         await prisma.newborn_Record.delete({
@@ -100,12 +96,10 @@ const getNewbornRecordById = async (req, res, next) => {
     try {
         const { newborn_id } = req.params;
 
-        const isNewbornExist = await prisma.newborn_Record.findUnique({
-            where: { newborn_id: newborn_id }
-        });
+        const _isNewbornExist = await isNewbornExist(newborn_id);
 
-        if (!isNewbornExist) {
-            return res.status(400).json({ error: "Newborn Record Not Found!" });
+        if(!__isNewbornExist) {
+            return res.status(404).json({error: "Newborn Record Not Found!"});
         }
 
         return res.status(200).json({
@@ -121,12 +115,10 @@ const getNewbornRecordByDelivery = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
 
-        const isDeliveryExist = await prisma.delivery_Outcome.findUnique({
-            where: { delivery_id: delivery_id }
-        });
+        const _isDeliveryExist = await isDeliveryOutcomeExist(delivery_id);
 
-        if (!isDeliveryExist) {
-            return res.status(400).json({ error: "Delivery Outcome Not Found!" });
+        if(!__isDeliveryExist) {
+            return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
         const newbornRecords = await prisma.newborn_Record.findMany({

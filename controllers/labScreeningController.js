@@ -1,4 +1,6 @@
-const prisma = require('../util/db')
+const prisma = require('../util/db');
+const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+
 
 const registerLabScreening = async (req, res, next) => {
 
@@ -14,16 +16,16 @@ const registerLabScreening = async (req, res, next) => {
             where : {pregnancy_id : pregnancy_id}
         })
 
-        if(!existingPregnancy) {
-            return res.status(400).json({error : "Pregnancy Not Found!"});
+        if(!__existingPregnancy) {
+            return res.status(404).json({error: "Pregnancy Not Found!"});
         }
 
         const existingVisit = await prisma.prenatalVisit.findUnique({
             where : {visit_id : visit_id}
         })
 
-        if(!existingVisit) {
-            return res.status(400).json({error : "Visit Not Found!"});
+        if(!__existingVisit) {
+            return res.status(404).json({error: "Visit Not Found!"});
         }
 
         const labScreening = await prisma.lab_Screening.create({
@@ -54,12 +56,10 @@ const updateLabScreening = async (req, res, next) => {
 
         const {screening_id} = req.params;
 
-        const isScreeningExist = await prisma.lab_Screening.findUnique({
-            where : {screening_id : screening_id}
-        });
+        const _isScreeningExist = await isLabScreeningExist(screening_id);
 
-        if(!isScreeningExist) {
-            return res.status(400).json({error : "Lab Screening Not Found!"});
+        if(!__isScreeningExist) {
+            return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
         const {screening_type, result, date_of_screening, remarks} = req.body;
@@ -94,12 +94,10 @@ const deleteLabScreening = async (req, res, next) => {
 
         const {screening_id} = req.params;
 
-        const isScreeningExist = await prisma.lab_Screening.findUnique({
-            where : {screening_id : screening_id}
-        });
+        const _isScreeningExist = await isLabScreeningExist(screening_id);
 
-        if(!isScreeningExist) {
-            return res.status(400).json({error : "Lab Screening Not Found!"});
+        if(!__isScreeningExist) {
+            return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
         await prisma.lab_Screening.delete({
@@ -121,12 +119,10 @@ const getLabScreeningById = async (req, res, next) => {
 
         const {screening_id} = req.params;
 
-        const isScreeningExist = await prisma.lab_Screening.findUnique({
-            where : {screening_id : screening_id}
-        });
+        const _isScreeningExist = await isLabScreeningExist(screening_id);
 
-        if(!isScreeningExist) {
-            return res.status(400).json({error : "Lab Screening Not Found!"});
+        if(!__isScreeningExist) {
+            return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
         return res.status(200).json({
@@ -145,12 +141,10 @@ const getLabScreeningByPregnancy = async (req, res, next) => {
 
         const {pregnancy_id} = req.params;
 
-        const isPregnancyExist = await prisma.pregnancy.findUnique({
-            where : {pregnancy_id : pregnancy_id}
-        });
+        const _isPregnancyExist = await isPregnancyExist(pregnancy_id);
 
-        if(!isPregnancyExist) {
-            return res.status(400).json({error : "Pregnancy Not Found!"});
+        if(!__isPregnancyExist) {
+            return res.status(404).json({error: "Pregnancy Not Found!"});
         }
 
         const labScreening = await prisma.lab_Screening.findMany({
@@ -180,12 +174,10 @@ const getLabScreeningByVisit = async (req, res, next) => {
 
         const {visit_id} = req.params;
 
-        const isVisitExist = await prisma.prenatalVisit.findUnique({
-            where : {visit_id : visit_id}
-        });
+        const _isVisitExist = await isPrenatalVisitExist(visit_id);
 
-        if(!isVisitExist) {
-            return res.status(400).json({error : "Visit Not Found!"});
+        if(!__isVisitExist) {
+            return res.status(404).json({error: "Visit Not Found!"});
         }
 
         const labScreening = await prisma.lab_Screening.findMany({

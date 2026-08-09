@@ -1,4 +1,6 @@
-const prisma = require('../util/db')
+const prisma = require('../util/db');
+const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+
 
 const registerPregnancy = async (req, res, next) => {
 
@@ -163,7 +165,7 @@ const getAllPreganciesByMother = async (req, res, next) => {
         });
 
         if(!mother) {
-            return res.status(400).json({error : "Mother Not found!"})
+            return res.status(404).json({error: "Mother Not found!"})
         }
 
         const pregnancy = await prisma.pregnancy.findMany({

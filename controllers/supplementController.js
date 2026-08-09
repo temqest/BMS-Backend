@@ -1,4 +1,6 @@
-const prisma = require('../util/db')
+const prisma = require('../util/db');
+const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+
 
 const registerSupplementRecord = async (req, res, next) => {
 
@@ -14,8 +16,8 @@ const registerSupplementRecord = async (req, res, next) => {
             where : {pregnancy_id : pregnancy_id}
         })
 
-        if(!isPregnancyExist) {
-            return res.status(400).json({error : "Pregnancy ID doesn't Exist"});
+        if(!__isPregnancyExist) {
+            return res.status(404).json({error: "Pregnancy ID doesn't Exist"});
         }
 
         const newSupplementRecord = await prisma.supplementation_Record.create({
@@ -52,8 +54,8 @@ const updateSupplementRecord = async (req, res, next) => {
             where : {supplement_id : supplement_id}
         })
 
-        if(!isSupplementRecordExist) {
-            return res.status(400).json({error : "Supplement Record doesn't Exist"});
+        if(!__isSupplementRecordExist) {
+            return res.status(404).json({error: "Supplement Record doesn't Exist"});
         }
 
         const updatedSupplementRecord = await prisma.supplementation_Record.update({
@@ -82,12 +84,10 @@ const deleteSupplementRecord = async (req, res, next) => {
 
         const {supplement_id} = req.params;
 
-        const isSupplementRecordExist = await prisma.supplementation_Record.findUnique({
-            where : {supplement_id : supplement_id}
-        });
+        const _isSupplementRecordExist = await isSupplementRecordExist(supplement_id);
 
-        if(!isSupplementRecordExist) {
-            return res.status(400).json({error : "Supplement Record Not Found!"});
+        if(!__isSupplementRecordExist) {
+            return res.status(404).json({error: "Supplement Record Not Found!"});
         }
 
         await prisma.supplementation_Record.delete({
@@ -114,7 +114,7 @@ const getSupplementRecordByID = async (req, res, next) => {
         });
 
         if(!supplement_record) {
-            return res.status(400).json({error : "Supplement Record Doesn't Exist!"});
+            return res.status(404).json({error: "Supplement Record Doesn't Exist!"});
         }
 
         return res.status(200).json({
@@ -133,12 +133,10 @@ const getSupplementRecordByPregnancy = async (req, res, next) => {
 
         const {pregnancy_id} = req.params;
 
-        const isPregnancyExist = await prisma.pregnancy.findUnique({
-            where : {pregnancy_id : pregnancy_id}
-        });
+        const _isPregnancyExist = await isPregnancyExist(pregnancy_id);
 
-        if(!isPregnancyExist) {
-            return res.status(400).json({error : "Pregnancy doesn't Exist!"});
+        if(!__isPregnancyExist) {
+            return res.status(404).json({error: "Pregnancy doesn't Exist!"});
         }
 
         const supplement_records = await prisma.supplementation_Record.findMany({
@@ -161,12 +159,10 @@ const getSupplementRecordByHealthWorker = async (req, res, next) => {
 
         const {health_worker_id} = req.params;
 
-        const isHealthWorkerExist = await prisma.user.findUnique({
-            where : {user_id : health_worker_id}
-        });
+        const _isHealthWorkerExist = await isUserExist(health_worker_id);
 
-        if(!isHealthWorkerExist) {
-            return res.status(400).json({error : "Health Worker doesn't Exist!"});
+        if(!__isHealthWorkerExist) {
+            return res.status(404).json({error: "Health Worker doesn't Exist!"});
         }
 
         const supplement_records = await prisma.supplementation_Record.findMany({

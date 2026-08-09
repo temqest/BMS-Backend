@@ -1,4 +1,6 @@
-const prisma = require('../util/db')
+const prisma = require('../util/db');
+const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+
 
 const createImmunizationRecord = async (req, res, next) => {
 
@@ -14,8 +16,8 @@ const createImmunizationRecord = async (req, res, next) => {
             where : {pregnancy_id : pregnancy_id}
         })
 
-        if(!isPregnancyExist){
-            return res.status(400).json({error : "Pregnancy Not Found"})
+        if(!__isPregnancyExist){
+            return res.status(404).json({error: "Pregnancy Not Found"})
         }
 
         const vaccine = await prisma.immunization_Record.create({
@@ -50,12 +52,10 @@ const updateImmunizationRecord = async (req, res, next) => {
             return res.status(400).json({error : "Missing Required Fields"})
         }
 
-        const isImmunizationExist = await prisma.immunization_Record.findUnique({
-            where : {immunization_id : immunization_id}
-        });
+        const _isImmunizationExist = await isImmunizationRecordExist(immunization_id);
 
-        if(!isImmunizationExist) {
-            return res.status(400).json({error : "Immunization Record Doesn't Exist!"});
+        if(!__isImmunizationExist) {
+            return res.status(404).json({error: "Immunization Record Doesn't Exist!"});
         }
 
         const updateImmunizationRecord = await prisma.immunization_Record.update({
@@ -87,12 +87,10 @@ const deleteImmunizationRecord = async (req, res, next) => {
             return res.status(400).json({error : "Immunization ID is Missing!"});
         }
 
-        const isImmunizationExist = await prisma.immunization_Record.findUnique({
-            where : {immunization_id : immunization_id}
-        });
+        const _isImmunizationExist = await isImmunizationRecordExist(immunization_id);
 
-        if(!isImmunizationExist) {
-            return res.status(400).json({error : "Immunization Record Doesn't Exist!"});
+        if(!__isImmunizationExist) {
+            return res.status(404).json({error: "Immunization Record Doesn't Exist!"});
         }
 
         await prisma.immunization_Record.delete({
@@ -123,7 +121,7 @@ const getImmunizationRecordById = async (req, res, next) => {
         });
 
         if(!immunization) {
-            return res.status(400).json({error : "Immunization Record Doesn't Exist!"});
+            return res.status(404).json({error: "Immunization Record Doesn't Exist!"});
         }
 
         return res.status(200).json({
@@ -150,7 +148,7 @@ const getImmunizationRecordByPregnancyId = async (req, res, next) => {
         });
 
         if(!immunization) {
-            return res.status(400).json({error : "Immunization Record Doesn't Exist!"});
+            return res.status(404).json({error: "Immunization Record Doesn't Exist!"});
         }
 
         return res.status(200).json({

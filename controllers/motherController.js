@@ -1,4 +1,6 @@
 const prisma = require('../util/db');
+const { isUserExist, isMotherExist, isPregnancyExist, isFacilityExist, isPrenatalVisitExist, isDeliveryOutcomeExist, isNewbornExist, isPostpartumVisitExist, isLabScreeningExist, isImmunizationRecordExist, isSupplementRecordExist, isNotificationExist } = require('../util/validation');
+
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -222,11 +224,9 @@ const updateMother = async (req, res, next) => {
             return res.status(400).json({error : "Mother ID is required"});
         }
 
-        const existingMother = await prisma.mother.findUnique({
-            where : {mother_id : mother_id}
-        });
+        const _existingMother = await isMotherExist(mother_id);
 
-        if(!existingMother) {
+        if(!__existingMother) {
             return res.status(403).json({error : "Mother not found"});
         }
 
@@ -278,12 +278,10 @@ const softDeleteMother = async (req, res, next) => {
             return res.status(400).json({error : "Missing Mother ID"});
         }
 
-        const isMotherExist = await prisma.mother.findUnique({
-            where : {mother_id : mother_id}
-        });
+        const _isMotherExist = await isMotherExist(mother_id);
 
-        if(!isMotherExist) {
-            return res.status(400).json({error : "Mother not found!"});
+        if(!__isMotherExist) {
+            return res.status(404).json({error: "Mother not found!"});
         }
 
         const softDeletedResult = await prisma.user.update({
@@ -312,12 +310,10 @@ const hardDeleteMother = async (req, res, next) => {
             return res.status(400).json({error : "Missing Mother ID"});
         }
 
-        const isMotherExist = await prisma.mother.findUnique({
-            where : {mother_id : mother_id}
-        });
+        const _isMotherExist = await isMotherExist(mother_id);
 
-        if(!isMotherExist) {
-            return res.status(400).json({error : "Mother not found!"});
+        if(!__isMotherExist) {
+            return res.status(404).json({error: "Mother not found!"});
         }
 
         const entireMother = await prisma.$transaction(async (prismaClient) => {
@@ -390,7 +386,7 @@ const searchMotherByID = async (req, res, next) => {
             }
         });
 
-        if(!searchMotherResult) {
+        if(!__searchMotherResult) {
             return res.status(404).json({error : "Mother not found"});
         }
 
