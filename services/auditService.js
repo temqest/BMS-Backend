@@ -1,21 +1,5 @@
 const prisma = require('../util/db');
 
-/**
- * Audit Trail Service
- * Records system actions, updates, creations, deletions, and conflicts
- * into the Audit_Revision_Log database table.
- */
-
-/**
- * Creates an audit log record
- * @param {Object} params
- * @param {string} params.userId - User performing the action
- * @param {string} params.tableName - Affected model/table name (e.g. 'mother', 'prenatalVisit')
- * @param {string} params.actionType - Action type (e.g. 'CREATE', 'UPDATE', 'DELETE', 'CONFLICT_RESOLVED')
- * @param {Object|string} [params.previousState=null] - Record state before change
- * @param {Object|string} [params.newState=null] - Record state after change
- * @returns {Promise<Object|null>} - Created audit log record
- */
 async function logAuditTrail({ userId, tableName, actionType, previousState = null, newState = null }) {
     try {
         if (!userId || !tableName || !actionType) {
