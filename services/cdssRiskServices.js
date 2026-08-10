@@ -71,6 +71,7 @@ const calculateDemographicWeights = (mother, pregnancy) => {
 };
 
 const evaluate_clinical_vitals = async (visit_id) => {
+    
     const visit = await prisma.prenatalVisit.findUnique({
         where: { visit_id: visit_id },
         include: {
@@ -93,7 +94,12 @@ const evaluate_clinical_vitals = async (visit_id) => {
     const dangerScore = scoreDangerSigns(visit.danger_signs_observed);
 
     const vitalScores = [sysScore, diaScore, hrScore, tempScore, dangerScore];
-    const sumVitalScores = vitalScores.reduce((a, b) => a + b, 0);
+    
+    let sumVitalScores = 0;
+    for (let i = 0; i < vitalScores.length; i++) {
+        sumVitalScores += vitalScores[i];
+    }
+    
     const maxVitalScore = Math.max(...vitalScores);
 
     const demographicWeight = calculateDemographicWeights(visit.pregnancy?.mother, visit.pregnancy);
