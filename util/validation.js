@@ -140,6 +140,15 @@ const isOnlineReferralExist = async (referral_id) => {
     }
 }
 
+const isCDSSAlertExist = async (alert_id) => {
+    try {
+        const record = await prisma.cDSS_Alert.findUnique({ where: { alert_id } });
+        return record !== null;
+    } catch (error) {
+        console.error("Error in isCDSSAlertExist:", error);
+        return false;
+    }
+};
 
 module.exports = {
     isUserExist,
@@ -156,4 +165,5 @@ module.exports = {
     isNotificationExist,
     isMessageExist,
     isOnlineReferralExist,
+    isCDSSAlertExist,
 };

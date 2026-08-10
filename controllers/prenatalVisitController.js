@@ -1,6 +1,6 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
-
+const { evaluate_clinical_vitals } = require('../services/cdssRiskServices');
 
 const registerPrenatalVisit = async (req, res, next) => {
     
@@ -76,9 +76,12 @@ const registerPrenatalVisit = async (req, res, next) => {
             }
         });
 
+        const cdssAssessment = await evaluate_clinical_vitals(newPrenatalVisit.visit_id);
+
         return res.status(200).json({
             message: "Prenatal Visit Registered Successfully",
             prenatalVisit: newPrenatalVisit,
+            cdssAssessment: cdssAssessment,
         })
 
     } catch (error) {
@@ -138,9 +141,12 @@ const updatePrenatalVisit = async (req, res, next) => {
             }
         });
 
+        const cdssAssessment = await evaluate_clinical_vitals(updatedVisit.visit_id);
+
         return res.status(200).json({
             message : "Prenatal Visit Successfully Updated!",
             result : updatedVisit,
+            cdssAssessment: cdssAssessment,
         });
 
         

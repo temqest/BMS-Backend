@@ -34,6 +34,8 @@ const auditTrailRouter = require('./router/auditTrailRouter');
 
 const referralRouter = require('./router/referralRouter');
 
+const cdssRouter = require('./router/cdssRouter');
+
 app.use(cors());
 app.use(express.json());
 
@@ -70,6 +72,8 @@ app.use('/api/v1/message', messageRouter)
 app.use('/api/v1/audit-trail', auditTrailRouter)
 
 app.use('/api/v1/referral', referralRouter)
+
+app.use('/api/v1/cdss', cdssRouter)
 
 app.use((err, req, res, next) => {
     console.error("Unhandled Server Error", err);
