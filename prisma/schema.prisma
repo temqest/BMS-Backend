@@ -181,18 +181,25 @@ model CDSS_Alert {
 
 //Online Referral Schema
 model Online_Referral {
-  referral_id      String   @id @default(uuid())
-  pregnancy_id     String
-  from_facility_id String
-  to_facility_id   String
-  reason           String
-  date_referred    DateTime @default(now())
-  status           String   @default("pending")
-  sync_status      String   @default("synced")
+  referral_id            String    @id @default(uuid())
+  pregnancy_id           String
+  from_facility_id       String
+  to_facility_id         String?
+  external_facility_name String?
+  reason                 String
+  date_referred          DateTime  @default(now())
+  secure_link            String?
+  shared_pin             String?
+  is_completed           Boolean   @default(false)
+  status                 String    @default("pending") // e.g. "pending", "accepted", "rejected", "completed"
+  response_notes         String?
+  outcome                String?
+  date_responded         DateTime?
+  sync_status            String    @default("synced")
 
   pregnancy    Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   fromFacility Facility  @relation("FromFacility", fields: [from_facility_id], references: [facility_id])
-  toFacility   Facility  @relation("ToFacility", fields: [to_facility_id], references: [facility_id])
+  toFacility   Facility? @relation("ToFacility", fields: [to_facility_id], references: [facility_id])
 }
 
 //Delivery Outcome Schema

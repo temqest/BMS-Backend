@@ -32,6 +32,8 @@ const messageRouter = require('./router/messageRouter');
 
 const auditTrailRouter = require('./router/auditTrailRouter');
 
+const referralRouter = require('./router/referralRouter');
+
 app.use(cors());
 app.use(express.json());
 
@@ -66,6 +68,8 @@ app.use('/api/v1/notification', notificationRouter)
 app.use('/api/v1/message', messageRouter)
 
 app.use('/api/v1/audit-trail', auditTrailRouter)
+
+app.use('/api/v1/referral', referralRouter)
 
 app.use((err, req, res, next) => {
     console.error("Unhandled Server Error", err);
