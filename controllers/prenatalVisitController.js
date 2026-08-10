@@ -2,6 +2,7 @@ const prisma = require('../util/db');
 const validate = require('../util/validation');
 const { evaluate_clinical_vitals } = require('../services/cdssRiskServices');
 const { updateWithMVCC } = require('../services/conflicResolution');
+const { logAuditTrail } = require('../services/auditService');
 
 const registerPrenatalVisit = async (req, res, next) => {
     
@@ -83,6 +84,13 @@ const registerPrenatalVisit = async (req, res, next) => {
         });
 
         const cdssAssessment = await evaluate_clinical_vitals(newPrenatalVisit.visit_id);
+
+        await logAuditTrail({
+            userId: health_worker_id,
+            tableName: 'prenatalVisit',
+            actionType: 'CREATE',
+            newState: newPrenatalVisit
+        });
 
         return res.status(200).json({
             message: "Prenatal Visit Registered Successfully",
@@ -169,12 +177,20 @@ const deletePrenatalVisit = async (req, res, next) => {
             return res.status(400).json({error : "Missing Visit ID"});
         }
 
-        if(!(await validate.isPrenatalVisitExist(visit_id))) {
+        const existingVisit = await validate.isPrenatalVisitExist(visit_id);
+        if(!existingVisit) {
             return res.status(404).json({error: "Prenatal Visit not found!"});
         }
 
         await prisma.prenatalVisit.delete({
             where : {visit_id : visit_id}
+        });
+
+        await logAuditTrail({
+            userId: req.user?.user_id || req.user?.id || 'system',
+            tableName: 'prenatalVisit',
+            actionType: 'DELETE',
+            previousState: existingVisit
         });
 
         return res.status(200).json({

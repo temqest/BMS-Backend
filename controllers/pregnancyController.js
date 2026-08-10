@@ -1,6 +1,7 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
 const { updateWithMVCC } = require('../services/conflicResolution');
+const { logAuditTrail } = require('../services/auditService');
 
 const registerPregnancy = async (req, res, next) => {
     try {
@@ -45,6 +46,13 @@ const registerPregnancy = async (req, res, next) => {
             }
         });
 
+        await logAuditTrail({
+            userId: req.user?.user_id || req.user?.id || motherId,
+            tableName: 'pregnancy',
+            actionType: 'CREATE',
+            newState: pregnancy
+        });
+
         res.status(201).json({
             message: "Pregnancy registered successfully",
             pregnancy: pregnancy,
@@ -86,9 +94,20 @@ const deletePregnancy = async (req, res, next) => {
     const {pregnancy_id} = req.params;
 
     try {
+        const existing = await prisma.pregnancy.findUnique({ where: { pregnancy_id } });
+
         const pregnancy = await prisma.pregnancy.delete({
             where : {pregnancy_id: pregnancy_id},
         });
+
+        if (existing) {
+            await logAuditTrail({
+                userId: req.user?.user_id || req.user?.id || 'system',
+                tableName: 'pregnancy',
+                actionType: 'DELETE',
+                previousState: existing
+            });
+        }
 
         res.status(200).json({
             message: "Pregnancy deleted successfully",
