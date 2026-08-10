@@ -39,6 +39,11 @@ const registerPrenatalVisit = async (req, res, next) => {
             return res.status(400).json({error: "Missing Required Fields"});
         }
 
+        const vitalsValidationErrors = validate.validateClinicalVitals(req.body);
+        if (vitalsValidationErrors.length > 0) {
+            return res.status(400).json({ error: "Invalid Medical Data", details: vitalsValidationErrors });
+        }
+
         const pregnancy = await prisma.pregnancy.findUnique({
             where : {pregnancy_id : pregnancy_id}
         });
@@ -117,6 +122,11 @@ const updatePrenatalVisit = async (req, res, next) => {
 
         if(!(await validate.isPrenatalVisitExist(visit_id))) {
             return res.status(404).json({error: "Prenatal Visit not found"});
+        }
+
+        const vitalsValidationErrors = validate.validateClinicalVitals(req.body);
+        if (vitalsValidationErrors.length > 0) {
+            return res.status(400).json({ error: "Invalid Medical Data", details: vitalsValidationErrors });
         }
 
         const updatedVisit = await prisma.prenatalVisit.update({

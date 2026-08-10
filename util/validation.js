@@ -160,6 +160,58 @@ const isAppointmentExist = async (appointment_id) => {
     }
 };
 
+const validateClinicalVitals = (data) => {
+    const errors = [];
+    const {
+        trimester,
+        visit_number,
+        age_of_gestation_weeks,
+        weight_kg,
+        temperature_celsius,
+        pulse_rate_bpm,
+        bp_diastolic,
+        bp_systolic,
+        fundic_height_cm,
+        fetal_heart_tone_bpm,
+    } = data;
+
+    if (trimester !== undefined && (trimester < 1 || trimester > 3)) {
+        errors.push("Trimester must be between 1 and 3.");
+    }
+    if (visit_number !== undefined && (visit_number < 1 || visit_number > 20)) {
+        errors.push("Visit number must be a positive integer (1-20).");
+    }
+    if (age_of_gestation_weeks !== undefined && (age_of_gestation_weeks < 1 || age_of_gestation_weeks > 45)) {
+        errors.push("Age of gestation must be between 1 and 45 weeks.");
+    }
+    if (weight_kg !== undefined && (weight_kg < 30 || weight_kg > 250)) {
+        errors.push("Weight (kg) must be between 30 and 250 kg.");
+    }
+    if (temperature_celsius !== undefined && (temperature_celsius < 30.0 || temperature_celsius > 45.0)) {
+        errors.push("Temperature (°C) must be between 30.0°C and 45.0°C.");
+    }
+    if (pulse_rate_bpm !== undefined && (pulse_rate_bpm < 30 || pulse_rate_bpm > 250)) {
+        errors.push("Pulse rate (BPM) must be between 30 and 250 BPM.");
+    }
+    if (bp_systolic !== undefined && (bp_systolic < 50 || bp_systolic > 300)) {
+        errors.push("Systolic blood pressure must be between 50 and 300 mmHg.");
+    }
+    if (bp_diastolic !== undefined && (bp_diastolic < 30 || bp_diastolic > 200)) {
+        errors.push("Diastolic blood pressure must be between 30 and 200 mmHg.");
+    }
+    if (bp_systolic !== undefined && bp_diastolic !== undefined && Number(bp_diastolic) >= Number(bp_systolic)) {
+        errors.push("Diastolic BP cannot be equal to or higher than Systolic BP.");
+    }
+    if (fundic_height_cm !== undefined && fundic_height_cm !== null && (fundic_height_cm < 5 || fundic_height_cm > 60)) {
+        errors.push("Fundic height must be between 5 and 60 cm.");
+    }
+    if (fetal_heart_tone_bpm !== undefined && fetal_heart_tone_bpm !== null && (fetal_heart_tone_bpm < 50 || fetal_heart_tone_bpm > 220)) {
+        errors.push("Fetal heart tone must be between 50 and 220 BPM.");
+    }
+
+    return errors;
+};
+
 module.exports = {
     isUserExist,
     isMotherExist,
@@ -177,4 +229,5 @@ module.exports = {
     isOnlineReferralExist,
     isCDSSAlertExist,
     isAppointmentExist,
+    validateClinicalVitals,
 };
