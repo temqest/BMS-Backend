@@ -7,16 +7,18 @@ const {
     getNewbornRecordById,
     getNewbornRecordByDelivery
 } = require('../controllers/newbornRecordController');
-const {verifyToken, checkUserRole} = require('../middleware/authMiddleware');
+const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-router.post('/register', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), registerNewbornRecord);
+const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
 
-router.put('/update/:newborn_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), updateNewbornRecord);
+router.post('/register', verifyToken, checkUserRole(allowedRoles), registerNewbornRecord);
 
-router.delete('/delete/:newborn_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), deleteNewbornRecord);
+router.put('/update/:newborn_id', verifyToken, checkUserRole(allowedRoles), updateNewbornRecord);
 
-router.get('/get/:newborn_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), getNewbornRecordById);
+router.delete('/delete/:newborn_id', verifyToken, checkUserRole(allowedRoles), deleteNewbornRecord);
 
-router.get('/get/delivery/:delivery_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), getNewbornRecordByDelivery);
+router.get('/get/:newborn_id', verifyToken, checkUserRole(allowedRoles), getNewbornRecordById);
+
+router.get('/get/delivery/:delivery_id', verifyToken, checkUserRole(allowedRoles), getNewbornRecordByDelivery);
 
 module.exports = router;

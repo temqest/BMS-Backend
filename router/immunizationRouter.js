@@ -1,16 +1,18 @@
-const express =require('express')
-const router  = express.Router()
-const {createImmunizationRecord, updateImmunizationRecord, deleteImmunizationRecord, getImmunizationRecordById, getImmunizationRecordByPregnancyId} = require('../controllers/immunizationController')
-const {verifyToken, checkUserRole} = require('../middleware/authMiddleware')
+const express = require('express');
+const router = express.Router();
+const { createImmunizationRecord, updateImmunizationRecord, deleteImmunizationRecord, getImmunizationRecordById, getImmunizationRecordByPregnancyId } = require('../controllers/immunizationController');
+const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-router.post('/register', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife']), createImmunizationRecord)
+const staffRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife'];
 
-router.put('/update/:immunization_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife']), updateImmunizationRecord)
+router.post('/register', verifyToken, checkUserRole(staffRoles), createImmunizationRecord);
 
-router.delete('/delete/:immunization_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife']), deleteImmunizationRecord)
+router.put('/update/:immunization_id', verifyToken, checkUserRole(staffRoles), updateImmunizationRecord);
 
-router.get('/get/:immunization_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife']), getImmunizationRecordById)
+router.delete('/delete/:immunization_id', verifyToken, checkUserRole(staffRoles), deleteImmunizationRecord);
 
-router.get('/get/pregnancy/:pregnancy_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife']), getImmunizationRecordByPregnancyId)
+router.get('/get/:immunization_id', verifyToken, checkUserRole(staffRoles), getImmunizationRecordById);
+
+router.get('/get/pregnancy/:pregnancy_id', verifyToken, checkUserRole(staffRoles), getImmunizationRecordByPregnancyId);
 
 module.exports = router;

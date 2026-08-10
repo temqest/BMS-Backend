@@ -30,6 +30,8 @@ const notificationRouter = require('./router/notificationRouter');
 
 const messageRouter = require('./router/messageRouter');
 
+const auditTrailRouter = require('./router/auditTrailRouter');
+
 app.use(cors());
 app.use(express.json());
 
@@ -63,6 +65,8 @@ app.use('/api/v1/notification', notificationRouter)
 
 app.use('/api/v1/message', messageRouter)
 
+app.use('/api/v1/audit-trail', auditTrailRouter)
+
 app.use((err, req, res, next) => {
     console.error("Unhandled Server Error", err);
 
@@ -75,4 +79,3 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`)
 })
-

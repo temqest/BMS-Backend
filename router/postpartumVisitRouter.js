@@ -7,16 +7,18 @@ const {
     getPostpartumVisitById,
     getPostpartumVisitByDelivery
 } = require('../controllers/postpartumVisitController');
-const {verifyToken, checkUserRole} = require('../middleware/authMiddleware');
+const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-router.post('/register', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), registerPostpartumVisit);
+const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
 
-router.put('/update/:postpartum_visit_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), updatePostpartumVisit);
+router.post('/register', verifyToken, checkUserRole(allowedRoles), registerPostpartumVisit);
 
-router.delete('/delete/:postpartum_visit_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), deletePostpartumVisit);
+router.put('/update/:postpartum_visit_id', verifyToken, checkUserRole(allowedRoles), updatePostpartumVisit);
 
-router.get('/get/:postpartum_visit_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), getPostpartumVisitById);
+router.delete('/delete/:postpartum_visit_id', verifyToken, checkUserRole(allowedRoles), deletePostpartumVisit);
 
-router.get('/get/delivery/:delivery_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), getPostpartumVisitByDelivery);
+router.get('/get/:postpartum_visit_id', verifyToken, checkUserRole(allowedRoles), getPostpartumVisitById);
+
+router.get('/get/delivery/:delivery_id', verifyToken, checkUserRole(allowedRoles), getPostpartumVisitByDelivery);
 
 module.exports = router;

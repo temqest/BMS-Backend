@@ -8,19 +8,20 @@ const {
     getLabScreeningByPregnancy, 
     getLabScreeningByVisit
 } = require('../controllers/labScreeningController');
-const {verifyToken, checkUserRole} = require('../middleware/authMiddleware');
+const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
+const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
 
-router.post('/register', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), registerLabScreening);
+router.post('/register', verifyToken, checkUserRole(allowedRoles), registerLabScreening);
 
-router.put('/update/:screening_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), updateLabScreening);
+router.put('/update/:screening_id', verifyToken, checkUserRole(allowedRoles), updateLabScreening);
 
-router.delete('/delete/:screening_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), deleteLabScreening);
+router.delete('/delete/:screening_id', verifyToken, checkUserRole(allowedRoles), deleteLabScreening);
 
-router.get('/get/:screening_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), getLabScreeningById);
+router.get('/get/:screening_id', verifyToken, checkUserRole(allowedRoles), getLabScreeningById);
 
-router.get('/get/pregnancy/:pregnancy_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), getLabScreeningByPregnancy);
+router.get('/get/pregnancy/:pregnancy_id', verifyToken, checkUserRole(allowedRoles), getLabScreeningByPregnancy);
 
-router.get('/get/visit/:visit_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), getLabScreeningByVisit);
+router.get('/get/visit/:visit_id', verifyToken, checkUserRole(allowedRoles), getLabScreeningByVisit);
 
 module.exports = router;

@@ -1,20 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const messageController = require('../controllers/messageController');
-const auth = require('../middleware/authMiddleware');
+const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-router.post('/create', auth.verifyToken, auth.checkUserRole(["SystemAdmin", "Admin", "HealthWorker", "Nurse", "Midwife", "Mother"]), messageController.createMessage)
+const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
 
-router.put('/update', auth.verifyToken, auth.checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Midwife', "Nurse", 'Mother']), messageController.updateMessage)
+router.post('/create', verifyToken, checkUserRole(allowedRoles), messageController.createMessage);
 
-router.delete('/delete', auth.verifyToken, auth.checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Midwife', 'Nurse', 'Mother']), messageController.deleteMessage)
+router.put('/update', verifyToken, checkUserRole(allowedRoles), messageController.updateMessage);
 
-router.put('/markAsRead', auth.verifyToken, auth.checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Midwife', 'Nurse', 'Mother']), messageController.markMessageAsRead)
+router.delete('/delete', verifyToken, checkUserRole(allowedRoles), messageController.deleteMessage);
 
-router.put('/markAllAsRead', auth.verifyToken, auth.checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Midwife', 'Nurse', 'Mother']), messageController.markAllAsRead)
+router.put('/markAsRead', verifyToken, checkUserRole(allowedRoles), messageController.markMessageAsRead);
 
-router.get('/getAll', auth.verifyToken, auth.checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Midwife', 'Nurse', 'Mother']), messageController.getAllMessageForUser)
+router.put('/markAllAsRead', verifyToken, checkUserRole(allowedRoles), messageController.markAllAsRead);
 
-router.get('/getUnreadCount', auth.verifyToken, auth.checkUserRole(['SystemAdmin', 'Admin', 'HealthWorker', 'Midwife', 'Nurse', 'Mother']), messageController.getUnreadCount)
+router.get('/getAll', verifyToken, checkUserRole(allowedRoles), messageController.getAllMessageForUser);
+
+router.get('/getUnreadCount', verifyToken, checkUserRole(allowedRoles), messageController.getUnreadCount);
 
 module.exports = router;

@@ -1,24 +1,26 @@
 const express = require('express');
 const router = express.Router();
-const {verifyToken, checkUserRole} = require('../middleware/authMiddleware');
-const {registerPrenatalVisit, updatePrenatalVisit, deletePrenatalVisit, getAllPrenatalVisits, getPrentalVisitByPregnancy, getAllPrenatalVisitsByMother, getAllPrenatalVisitsByHealthWorker, getAllPrenatalVisitByFacility, getPrenatalVisitById} = require('../controllers/prenatalVisitController');
+const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
+const { registerPrenatalVisit, updatePrenatalVisit, deletePrenatalVisit, getAllPrenatalVisits, getPrentalVisitByPregnancy, getAllPrenatalVisitsByMother, getAllPrenatalVisitsByHealthWorker, getAllPrenatalVisitByFacility, getPrenatalVisitById } = require('../controllers/prenatalVisitController');
 
-router.post('/register', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Nurse', 'Midwife', 'health_worker']), registerPrenatalVisit);
+const staffRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife'];
 
-router.put('/update/:visit_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Nurse', 'Midwife', 'health_worker']), updatePrenatalVisit);
+router.post('/register', verifyToken, checkUserRole(staffRoles), registerPrenatalVisit);
 
-router.delete('/delete/:visit_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Nurse', 'Midwife', 'health_worker']), deletePrenatalVisit);
+router.put('/update/:visit_id', verifyToken, checkUserRole(staffRoles), updatePrenatalVisit);
 
-router.get('/all', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Nurse', 'Midwife', 'health_worker']), getAllPrenatalVisits);
+router.delete('/delete/:visit_id', verifyToken, checkUserRole(staffRoles), deletePrenatalVisit);
 
-router.get('/pregnancy/:pregnancy_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Nurse', 'Midwife', 'health_worker']), getPrentalVisitByPregnancy);
+router.get('/all', verifyToken, checkUserRole(staffRoles), getAllPrenatalVisits);
 
-router.get('/mother/:mother_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Nurse', 'Midwife', 'health_worker']), getAllPrenatalVisitsByMother);
+router.get('/pregnancy/:pregnancy_id', verifyToken, checkUserRole(staffRoles), getPrentalVisitByPregnancy);
 
-router.get('/health-worker/:health_worker_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Nurse', 'Midwife', 'health_worker']), getAllPrenatalVisitsByHealthWorker);
+router.get('/mother/:mother_id', verifyToken, checkUserRole(staffRoles), getAllPrenatalVisitsByMother);
 
-router.get('/facility/:facility_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Nurse', 'Midwife', 'health_worker']), getAllPrenatalVisitByFacility);
+router.get('/health-worker/:health_worker_id', verifyToken, checkUserRole(staffRoles), getAllPrenatalVisitsByHealthWorker);
 
-router.get('/visit/:visit_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Nurse', 'Midwife', 'health_worker']), getPrenatalVisitById);
+router.get('/facility/:facility_id', verifyToken, checkUserRole(staffRoles), getAllPrenatalVisitByFacility);
+
+router.get('/visit/:visit_id', verifyToken, checkUserRole(staffRoles), getPrenatalVisitById);
 
 module.exports = router;

@@ -1,16 +1,19 @@
-const express = require('express')
-const router = express.Router()
-const {verifyToken, checkUserRole} = require('../middleware/authMiddleware')
-const {registerFacility, searchFacility, updateFacility, deleteFacility, viewAllFacility} = require('../controllers/facilityController')
+const express = require('express');
+const router = express.Router();
+const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
+const { registerFacility, searchFacility, updateFacility, deleteFacility, viewAllFacility } = require('../controllers/facilityController');
 
-router.post('/register', verifyToken, checkUserRole(['SystemAdmin']), registerFacility);
+const sysAdminOnly = ['SystemAdmin'];
+const adminRoles = ['SystemAdmin', 'Admin'];
+
+router.post('/register', verifyToken, checkUserRole(sysAdminOnly), registerFacility);
 
 router.get('/search', searchFacility);
 
-router.put('/update', verifyToken, checkUserRole(['Admin', 'SystemAdmin']), updateFacility);
+router.put('/update', verifyToken, checkUserRole(adminRoles), updateFacility);
 
-router.delete('/delete', verifyToken, checkUserRole(['SystemAdmin']), deleteFacility);
+router.delete('/delete', verifyToken, checkUserRole(sysAdminOnly), deleteFacility);
 
-router.get('/getAll', verifyToken, checkUserRole(['SystemAdmin']), viewAllFacility);
+router.get('/getAll', verifyToken, checkUserRole(sysAdminOnly), viewAllFacility);
 
 module.exports = router;

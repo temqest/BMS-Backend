@@ -11,18 +11,20 @@ const {
 } = require('../controllers/notificationController');
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-router.post('/send', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), sendNotificationToUser);
+const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
 
-router.get('/get/:notification_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), getNotificationByID);
+router.post('/send', verifyToken, checkUserRole(allowedRoles), sendNotificationToUser);
 
-router.get('/get/user/:user_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), getAllNotificationByUser);
+router.get('/get/:notification_id', verifyToken, checkUserRole(allowedRoles), getNotificationByID);
 
-router.delete('/delete/:notification_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), deleteNotification);
+router.get('/get/user/:user_id', verifyToken, checkUserRole(allowedRoles), getAllNotificationByUser);
 
-router.put('/update/:notification_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), updateNotification);
+router.delete('/delete/:notification_id', verifyToken, checkUserRole(allowedRoles), deleteNotification);
 
-router.get('/unread/count/:user_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), getUnreadNotificationCount);
+router.put('/update/:notification_id', verifyToken, checkUserRole(allowedRoles), updateNotification);
 
-router.put('/mark/read/:user_id', verifyToken, checkUserRole(['SystemAdmin', 'Admin', 'Midwife', 'Nurse', 'HealthWorker', 'Mother']), markAllNotificationAsRead);
+router.get('/unread/count/:user_id', verifyToken, checkUserRole(allowedRoles), getUnreadNotificationCount);
+
+router.put('/mark/read/:user_id', verifyToken, checkUserRole(allowedRoles), markAllNotificationAsRead);
 
 module.exports = router;
