@@ -120,6 +120,27 @@ const isNotificationExist = async (notification_id) => {
     }
 };
 
+const isMessageExist = async (message_id) => {
+    try {
+        const record = await prisma.in_App_Message.findUnique({where : {message_id}});
+        return record !== null;
+    } catch (error) {
+        console.error("Error in isMessageExist:", error);
+        return false;
+    }
+}
+
+const isOnlineReferralExist = async (referral_id) => {
+    try {
+        const record = await prisma.online_Referral.findUnique({where : {referral_id}});
+        return record !== null;
+    } catch (error) {
+        console.error("Error in isOnlineReferralExist:", error);
+        return false;
+    }
+}
+
+
 module.exports = {
     isUserExist,
     isMotherExist,
@@ -132,5 +153,7 @@ module.exports = {
     isLabScreeningExist,
     isImmunizationRecordExist,
     isSupplementRecordExist,
-    isNotificationExist
+    isNotificationExist,
+    isMessageExist,
+    isOnlineReferralExist,
 };

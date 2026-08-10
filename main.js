@@ -28,6 +28,8 @@ const postpartumVisitRouter = require('./router/postpartumVisitRouter');
 
 const notificationRouter = require('./router/notificationRouter');
 
+const messageRouter = require('./router/messageRouter');
+
 app.use(cors());
 app.use(express.json());
 
@@ -58,6 +60,8 @@ app.use('/api/v1/newborn-record', newbornRecordRouter)
 app.use('/api/v1/postpartum-visit', postpartumVisitRouter)
 
 app.use('/api/v1/notification', notificationRouter)
+
+app.use('/api/v1/message', messageRouter)
 
 app.use((err, req, res, next) => {
     console.error("Unhandled Server Error", err);
