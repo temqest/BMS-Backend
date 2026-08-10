@@ -100,7 +100,12 @@ const evaluate_clinical_vitals = async (visit_id) => {
         sumVitalScores += vitalScores[i];
     }
     
-    const maxVitalScore = Math.max(...vitalScores);
+    let maxVitalScore = vitalScores[0];
+    for (let i = 1; i < vitalScores.length; i++) {
+        if (vitalScores[i] > maxVitalScore) {
+            maxVitalScore = vitalScores[i];
+        }
+    }
 
     const demographicWeight = calculateDemographicWeights(visit.pregnancy?.mother, visit.pregnancy);
 
