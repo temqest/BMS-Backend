@@ -1,6 +1,7 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
 const { evaluate_clinical_vitals } = require('../services/cdssRiskServices');
+const { updateWithMVCC } = require('../services/conflicResolution');
 
 const registerPrenatalVisit = async (req, res, next) => {
     
@@ -129,33 +130,26 @@ const updatePrenatalVisit = async (req, res, next) => {
             return res.status(400).json({ error: "Invalid Medical Data", details: vitalsValidationErrors });
         }
 
-        const updatedVisit = await prisma.prenatalVisit.update({
-            where : {
-                visit_id : visit_id
-            },
-            data : {
-                trimester: trimester,
-                visit_number: visit_number,
-                age_of_gestation_weeks: age_of_gestation_weeks,
-                weight_kg: weight_kg,
-                temperature_celsius: temperature_celsius,
-                pulse_rate_bpm: pulse_rate_bpm,
-                bp_diastolic: bp_diastolic,
-                bp_systolic: bp_systolic,
-                fundic_height_cm: fundic_height_cm,
-                fetal_heart_tone_bpm: fetal_heart_tone_bpm,
-                chief_complaint: chief_complaint,
-                danger_signs_observed: danger_signs_observed,
-                risk_level_assessed: risk_level_assessed,
-                sync_status: "synced",
-            }
+        const { strategy, version, ...clientData } = req.body;
+        const mvccResult = await updateWithMVCC('prenatalVisit', visit_id, { version, ...clientData }, {
+            strategy,
+            userId: req.user?.user_id || req.user?.id
         });
 
+        if (!mvccResult.resolved) {
+            return res.status(409).json({
+                error: "Conflict detected requiring manual review",
+                details: mvccResult
+            });
+        }
+
+        const updatedVisit = mvccResult.record;
         const cdssAssessment = await evaluate_clinical_vitals(updatedVisit.visit_id);
 
         return res.status(200).json({
-            message : "Prenatal Visit Successfully Updated!",
-            result : updatedVisit,
+            message: "Prenatal Visit Successfully Updated!",
+            result: updatedVisit,
+            strategyUsed: mvccResult.strategyUsed,
             cdssAssessment: cdssAssessment,
         });
 

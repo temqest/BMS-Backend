@@ -1,6 +1,6 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
-
+const { updateWithMVCC } = require('../services/conflicResolution');
 
 const registerDeliveryOutcome = async (req, res, next) => {
     try {
@@ -39,31 +39,28 @@ const registerDeliveryOutcome = async (req, res, next) => {
 const updateDeliveryOutcome = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
-        const { place_of_delivery, mode_of_delivery, delivery_date, duration_of_labor_hours, blood_loss_ml, delivery_complications } = req.body;
+        const { strategy, version, ...clientData } = req.body;
 
         if(!(await validate.isDeliveryOutcomeExist(delivery_id))) {
             return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
-        if (!place_of_delivery || !mode_of_delivery) {
-            return res.status(400).json({ error: "Missing Required Fields" });
-        }
-
-        const updatedDeliveryOutcome = await prisma.delivery_Outcome.update({
-            where: { delivery_id: delivery_id },
-            data: {
-                place_of_delivery,
-                mode_of_delivery,
-                delivery_date: delivery_date ? new Date(delivery_date) : undefined,
-                duration_of_labor_hours,
-                blood_loss_ml,
-                delivery_complications
-            }
+        const mvccResult = await updateWithMVCC('delivery_Outcome', delivery_id, { version, ...clientData }, {
+            strategy,
+            userId: req.user?.user_id || req.user?.id
         });
+
+        if (!mvccResult.resolved) {
+            return res.status(409).json({
+                error: "Conflict detected requiring manual review",
+                details: mvccResult
+            });
+        }
 
         return res.status(200).json({
             message: "Delivery Outcome Updated Successfully!",
-            data: updatedDeliveryOutcome
+            data: mvccResult.record,
+            strategyUsed: mvccResult.strategyUsed
         });
     } catch (error) {
         return next(error);
@@ -94,13 +91,14 @@ const getDeliveryOutcomeById = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
 
-        if(!(await validate.isDeliveryOutcomeExist(delivery_id))) {
+        const deliveryExist = await validate.isDeliveryOutcomeExist(delivery_id);
+        if(!deliveryExist) {
             return res.status(404).json({error: "Delivery Outcome Not Found!"});
         }
 
         return res.status(200).json({
             message: "Delivery Outcome Fetched Successfully!",
-            data: isDeliveryExist
+            data: deliveryExist
         });
     } catch (error) {
         return next(error);

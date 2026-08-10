@@ -1,5 +1,6 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
+const { updateWithMVCC } = require('../services/conflicResolution');
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -228,37 +229,28 @@ const updateMother = async (req, res, next) => {
             return res.status(403).json({error : "Mother not found"});
         }
 
-        const updatedResult = await prisma.$transaction(async(prismaClient) => {
+        const { strategy, version, ...clientData } = req.body;
+        if (clientData.birth_date) {
+            clientData.birth_date = new Date(clientData.birth_date);
+            clientData.age = calculateAge(clientData.birth_date);
+        }
 
-            const user = await prismaClient.user.update({
-                where : {user_id : existingMother.user_id},
-                data : {
-                    first_name : first_name,
-                    middle_name : middle_name,
-                    last_name : last_name,
-                    address : address,
-                    phone_number : phone_number,
-                    email : email,
-                    is_active : is_active,
-                }
-            })
-
-            const mother = await prismaClient.mother.update({
-                where : {mother_id : mother_id},
-                data : {
-                    birth_date : birth_date ? new Date(birth_date) : undefined,
-                    age : birth_date ? calculateAge(birth_date) : undefined,
-                    civil_status : civil_status,
-                    blood_type : blood_type,
-                }
-            })
-
-            return {user, mother}
+        const mvccResult = await updateWithMVCC('mother', mother_id, { version, ...clientData }, {
+            strategy,
+            userId: req.user?.user_id || req.user?.id
         });
 
+        if (!mvccResult.resolved) {
+            return res.status(409).json({
+                error: "Conflict detected requiring manual review",
+                details: mvccResult
+            });
+        }
+
         return res.status(200).json({
-            message : "Mother updated successfully",
-            result : updatedResult
+            message: "Mother updated successfully",
+            result: mvccResult.record,
+            strategyUsed: mvccResult.strategyUsed
         });
 
 

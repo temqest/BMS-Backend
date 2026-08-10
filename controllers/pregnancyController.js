@@ -1,11 +1,9 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
-
+const { updateWithMVCC } = require('../services/conflicResolution');
 
 const registerPregnancy = async (req, res, next) => {
-
     try {
-
         const {
             motherId,
             lmp_date, 
@@ -20,14 +18,14 @@ const registerPregnancy = async (req, res, next) => {
         } = req.body;
 
         if(!motherId || !gravida || !parity || !age_group || !lmp_date || !pregnancy_status){
-            return res.status(400).json({ error: "Missing Required Fields"})
+            return res.status(400).json({ error: "Missing Required Fields"});
         }
 
         const today = new Date();
         const Lmp_Date = new Date(lmp_date);
 
         if(Lmp_Date > today){
-            return res.status(400).json({error: "LMP Date Cannot Be In The Future"})
+            return res.status(400).json({error: "LMP Date Cannot Be In The Future"});
         }
 
         const pregnancy = await prisma.pregnancy.create({
@@ -45,12 +43,12 @@ const registerPregnancy = async (req, res, next) => {
                 pregnancy_status,
                 sync_status: "synced",
             }
-        })
+        });
 
         res.status(201).json({
             message: "Pregnancy registered successfully",
             pregnancy: pregnancy,
-        })
+        });
 
     } catch (error) {
         return next(error);
@@ -58,55 +56,50 @@ const registerPregnancy = async (req, res, next) => {
 };
 
 const updatePregnancy = async (req, res, next) => {
-
     const {pregnancy_id} = req.params;
-
-    const { pregnancy_status } = req.body;
-
-    if(!pregnancy_status){
-        return res.status(400).json({error: "Missing Required Fields"})
-    }
+    const { strategy, version, ...clientData } = req.body;
 
     try {
-        const pregnancy = await prisma.pregnancy.update({
-            where : {pregnancy_id: pregnancy_id},
-            data : {
-                pregnancy_status,
-                sync_status: "synced",
-            }
-        })
+        const mvccResult = await updateWithMVCC('pregnancy', pregnancy_id, { version, ...clientData }, {
+            strategy,
+            userId: req.user?.user_id || req.user?.id
+        });
+
+        if (!mvccResult.resolved) {
+            return res.status(409).json({
+                error: "Conflict detected requiring manual review",
+                details: mvccResult
+            });
+        }
 
         res.status(200).json({
             message: "Pregnancy updated successfully",
-            pregnancy: pregnancy,
-        })
+            pregnancy: mvccResult.record,
+            strategyUsed: mvccResult.strategyUsed,
+        });
     } catch (error) {
         return next(error);
     }
-
-}
+};
 
 const deletePregnancy = async (req, res, next) => {
-    
     const {pregnancy_id} = req.params;
 
     try {
         const pregnancy = await prisma.pregnancy.delete({
             where : {pregnancy_id: pregnancy_id},
-        })
+        });
 
         res.status(200).json({
             message: "Pregnancy deleted successfully",
             pregnancy: pregnancy,
-        })
+        });
     } catch (error) {
         return next(error);
     }
-
 };
 
 const getPregnancyByID = async (req, res, next) => {
-
     try {
         const {pregnancy_id} = req.params;
 
@@ -136,7 +129,7 @@ const getPregnancyByID = async (req, res, next) => {
         });
 
         if(!pregnancy) {
-            return res.status(404).json({error : "Pregnancy not found"})
+            return res.status(404).json({error : "Pregnancy not found"});
         }
 
         res.status(200).json({
@@ -147,13 +140,10 @@ const getPregnancyByID = async (req, res, next) => {
     } catch (error) {
         return next(error);
     }
- 
 };
 
 const getAllPreganciesByMother = async (req, res, next) => {
-
     try {
-
         const {mother_id} = req.params;
 
         if(!mother_id) {
@@ -165,7 +155,7 @@ const getAllPreganciesByMother = async (req, res, next) => {
         });
 
         if(!mother) {
-            return res.status(404).json({error: "Mother Not found!"})
+            return res.status(404).json({error: "Mother Not found!"});
         }
 
         const pregnancy = await prisma.pregnancy.findMany({
@@ -176,12 +166,12 @@ const getAllPreganciesByMother = async (req, res, next) => {
         return res.status(200).json({
             message: "Pregnancies retrieved successfully",
             pregnancy: pregnancy,
-        })
+        });
 
     } catch (error) {
         return next(error);
     }
-}
+};
 
 module.exports = {
     registerPregnancy,
@@ -189,4 +179,4 @@ module.exports = {
     deletePregnancy,
     getPregnancyByID,
     getAllPreganciesByMother,
-}
+};

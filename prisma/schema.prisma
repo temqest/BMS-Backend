@@ -16,6 +16,8 @@ model Facility {
   email          String
   type           String
   created_at     DateTime @default(now())
+  updated_at     DateTime @default(now()) @updatedAt
+  version        Int      @default(1)
 
   users               User[]
   onlineReferralsFrom Online_Referral[] @relation("FromFacility")
@@ -25,7 +27,7 @@ model Facility {
 
 //User schema
 model User {
-  user_id      String  @id @default(uuid())
+  user_id      String   @id @default(uuid())
   facility_id  String?
   first_name   String
   middle_name  String?
@@ -35,8 +37,10 @@ model User {
   email        String?
   address      String
   password     String?
-  is_active    Boolean @default(true)
-  sync_status  String? @default("synced")
+  is_active    Boolean  @default(true)
+  sync_status  String?  @default("synced")
+  version      Int      @default(1)
+  updated_at   DateTime @default(now()) @updatedAt
 
   facility          Facility?            @relation(fields: [facility_id], references: [facility_id])
   mother            Mother?
@@ -58,6 +62,8 @@ model Mother {
   civil_status     String
   blood_type       String
   sync_status      String?  @default("synced")
+  version          Int      @default(1)
+  updated_at       DateTime @default(now()) @updatedAt
 
   user        User?       @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
   pregnancies Pregnancy[]
@@ -65,9 +71,9 @@ model Mother {
 
 //Pregnancy Schema
 model Pregnancy {
-  pregnancy_id              String   @id @default(uuid())
+  pregnancy_id              String    @id @default(uuid())
   mother_id                 String
-  date_of_registration      DateTime @default(now())
+  date_of_registration      DateTime  @default(now())
   lmp_date                  DateTime
   gravida                   Int
   parity                    Int
@@ -77,9 +83,11 @@ model Pregnancy {
   bmi_1st_trimester         Decimal?
   bmi_category              String?
   pregnancy_status          String
-  deworming_given           Boolean  @default(false)
+  deworming_given           Boolean   @default(false)
   deworming_date            DateTime?
-  sync_status               String?  @default("synced")
+  sync_status               String?   @default("synced")
+  version                   Int       @default(1)
+  updated_at                DateTime  @default(now()) @updatedAt
 
   mother         Mother          @relation(fields: [mother_id], references: [mother_id], onDelete: Cascade)
   prenatalVisits PrenatalVisit[]
@@ -112,6 +120,8 @@ model PrenatalVisit {
   danger_signs_observed  String?
   risk_level_assessed    String?
   sync_status            String?  @default("synced")
+  version                Int      @default(1)
+  updated_at             DateTime @default(now()) @updatedAt
 
   pregnancy    Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   healthWorker User      @relation(fields: [health_worker_id], references: [user_id])
@@ -129,6 +139,8 @@ model Immunization_Record {
   date_administered      DateTime @default(now())
   fully_immunized_mother Boolean  @default(false)
   sync_status            String   @default("synced")
+  version                Int      @default(1)
+  updated_at             DateTime @default(now()) @updatedAt
 
   pregnancy Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
 }
@@ -143,6 +155,8 @@ model Supplementation_Record {
   date_given          DateTime @default(now())
   is_completed        Boolean  @default(false)
   sync_status         String   @default("synced")
+  version             Int      @default(1)
+  updated_at          DateTime @default(now()) @updatedAt
 
   pregnancy Pregnancy     @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   visit     PrenatalVisit @relation(fields: [visit_id], references: [visit_id], onDelete: Cascade)
@@ -158,6 +172,8 @@ model Lab_Screening {
   date_of_screening DateTime @default(now())
   remarks           String?
   sync_status       String   @default("synced")
+  version           Int      @default(1)
+  updated_at        DateTime @default(now()) @updatedAt
 
   pregnancy Pregnancy     @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   visit     PrenatalVisit @relation(fields: [visit_id], references: [visit_id], onDelete: Cascade)
@@ -175,6 +191,8 @@ model CDSS_Alert {
   resolved_by   String?
   resolved_at   DateTime?
   sync_status   String    @default("synced")
+  version       Int       @default(1)
+  updated_at    DateTime  @default(now()) @updatedAt
 
   pregnancy Pregnancy     @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   visit     PrenatalVisit @relation(fields: [visit_id], references: [visit_id], onDelete: Cascade)
@@ -197,6 +215,8 @@ model Online_Referral {
   outcome                String?
   date_responded         DateTime?
   sync_status            String    @default("synced")
+  version                Int       @default(1)
+  updated_at             DateTime  @default(now()) @updatedAt
 
   pregnancy    Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   fromFacility Facility  @relation("FromFacility", fields: [from_facility_id], references: [facility_id])
@@ -214,6 +234,8 @@ model Delivery_Outcome {
   blood_loss_ml           Int?
   delivery_complications  String?
   sync_status             String   @default("synced")
+  version                 Int      @default(1)
+  updated_at              DateTime @default(now()) @updatedAt
 
   pregnancy        Pregnancy          @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   newbornRecords   Newborn_Record[]
@@ -222,35 +244,39 @@ model Delivery_Outcome {
 
 //Newborn Record Schema
 model Newborn_Record {
-  newborn_id      String  @id @default(uuid())
+  newborn_id      String   @id @default(uuid())
   delivery_id     String
   sex             String
   birth_weight_kg Decimal
   status_at_birth String
   apgar_score     Int
-  sync_status     String  @default("synced")
+  sync_status     String   @default("synced")
+  version         Int      @default(1)
+  updated_at      DateTime @default(now()) @updatedAt
 
   delivery Delivery_Outcome @relation(fields: [delivery_id], references: [delivery_id], onDelete: Cascade)
 }
 
 //Postpartum Visit Schema
 model postpartum_visit {
-  postpartum_visit_id    String   @id @default(uuid())
-  delivery_id            String
-  visit_date             DateTime @default(now())
-  visit_number           Int
-  weight_kg              Decimal
-  temperature_celsius    Decimal
-  pulse_rate_bpm         Int
-  bp_diastolic           Int
-  bp_systolic            Int
-  fundic_height_cm       Decimal?
-  chief_complaint        String?
-  danger_signs_observed  String?
-  risk_level_assessed    String?
-  vitamin_a_given        Boolean  @default(false)
-  iron_supplement_given  Boolean  @default(false)
-  sync_status            String   @default("synced")
+  postpartum_visit_id   String   @id @default(uuid())
+  delivery_id           String
+  visit_date            DateTime @default(now())
+  visit_number          Int
+  weight_kg             Decimal
+  temperature_celsius   Decimal
+  pulse_rate_bpm        Int
+  bp_diastolic          Int
+  bp_systolic           Int
+  fundic_height_cm      Decimal?
+  chief_complaint       String?
+  danger_signs_observed String?
+  risk_level_assessed   String?
+  vitamin_a_given       Boolean  @default(false)
+  iron_supplement_given Boolean  @default(false)
+  sync_status           String   @default("synced")
+  version               Int      @default(1)
+  updated_at            DateTime @default(now()) @updatedAt
 
   delivery Delivery_Outcome @relation(fields: [delivery_id], references: [delivery_id], onDelete: Cascade)
 }
@@ -266,6 +292,8 @@ model Appointment {
   reason           String?
   status           String   @default("scheduled")      // e.g. "scheduled", "completed", "cancelled", "missed"
   sync_status      String   @default("synced")
+  version          Int      @default(1)
+  updated_at       DateTime @default(now()) @updatedAt
 
   user     User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
   facility Facility? @relation(fields: [facility_id], references: [facility_id])
@@ -280,6 +308,8 @@ model Notification {
   notification_date    DateTime @default(now())
   is_read              Boolean  @default(false)
   sync_status          String   @default("synced")
+  version              Int      @default(1)
+  updated_at           DateTime @default(now()) @updatedAt
 
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 }
@@ -294,6 +324,8 @@ model In_App_Message {
   message_date    DateTime @default(now())
   is_read         Boolean  @default(false)
   sync_status     String   @default("synced")
+  version         Int      @default(1)
+  updated_at      DateTime @default(now()) @updatedAt
 
   sender   User @relation("MessageSender", fields: [sender_id], references: [user_id])
   receiver User @relation("MessageReceiver", fields: [receiver_id], references: [user_id])

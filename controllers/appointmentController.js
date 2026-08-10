@@ -1,5 +1,6 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
+const { updateWithMVCC } = require('../services/conflicResolution');
 
 const createAppointment = async (req, res, next) => {
     try {
@@ -205,21 +206,27 @@ const updateAppointment = async (req, res, next) => {
             return res.status(404).json({ error: "Appointment Doesn't Exist!" });
         }
 
-        const updatedAppointment = await prisma.appointment.update({
-            where: { appointment_id: appointment_id },
-            data: {
-                ...(appointment_date && { appointment_date: new Date(appointment_date) }),
-                ...(appointment_time && { appointment_time: appointment_time }),
-                ...(appointment_type && { appointment_type: appointment_type }),
-                ...(reason !== undefined && { reason: reason }),
-                ...(status && { status: status }),
-                sync_status: "synced",
-            },
+        const { strategy, version, ...clientData } = req.body;
+        if (clientData.appointment_date) {
+            clientData.appointment_date = new Date(clientData.appointment_date);
+        }
+
+        const mvccResult = await updateWithMVCC('appointment', appointment_id, { version, ...clientData }, {
+            strategy,
+            userId: req.user?.user_id || req.user?.id
         });
+
+        if (!mvccResult.resolved) {
+            return res.status(409).json({
+                error: "Conflict detected requiring manual review",
+                details: mvccResult
+            });
+        }
 
         return res.status(200).json({
             message: "Appointment Updated Successfully",
-            data: updatedAppointment,
+            data: mvccResult.record,
+            strategyUsed: mvccResult.strategyUsed
         });
 
     } catch (error) {
@@ -230,6 +237,7 @@ const updateAppointment = async (req, res, next) => {
 const cancelAppointment = async (req, res, next) => {
     try {
         const { appointment_id } = req.params;
+        const { strategy, version } = req.body || {};
 
         if (!appointment_id) {
             return res.status(400).json({ error: "Missing Required Fields!" });
@@ -239,17 +247,25 @@ const cancelAppointment = async (req, res, next) => {
             return res.status(404).json({ error: "Appointment Doesn't Exist!" });
         }
 
-        const cancelledAppointment = await prisma.appointment.update({
-            where: { appointment_id: appointment_id },
-            data: {
-                status: "cancelled",
-                sync_status: "synced",
-            },
+        const mvccResult = await updateWithMVCC('appointment', appointment_id, {
+            version,
+            status: "cancelled"
+        }, {
+            strategy,
+            userId: req.user?.user_id || req.user?.id
         });
+
+        if (!mvccResult.resolved) {
+            return res.status(409).json({
+                error: "Conflict detected requiring manual review",
+                details: mvccResult
+            });
+        }
 
         return res.status(200).json({
             message: "Appointment Cancelled Successfully",
-            data: cancelledAppointment,
+            data: mvccResult.record,
+            strategyUsed: mvccResult.strategyUsed
         });
 
     } catch (error) {

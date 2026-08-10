@@ -1,6 +1,7 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
 const crypto = require('crypto');
+const { updateWithMVCC } = require('../services/conflicResolution');
 
 const generatePin = {
 
@@ -172,22 +173,23 @@ const updateReferral = async (req, res, next) => {
             return res.status(404).json({ error: "Destination Facility Doesn't Exist" });
         }
 
-        const updatedReferral = await prisma.online_Referral.update({
-            where: { referral_id: referral_id },
-            data: {
-                ...(pregnancy_id && { pregnancy_id: pregnancy_id }),
-                ...(from_facility_id && { from_facility_id: from_facility_id }),
-                ...(to_facility_id !== undefined && { to_facility_id: to_facility_id || null }),
-                ...(external_facility_name !== undefined && { external_facility_name: external_facility_name || null }),
-                ...(reason && { reason: reason }),
-                ...(status && { status: status }),
-                ...(is_completed !== undefined && { is_completed: is_completed }),
-            },
+        const { strategy, version, ...clientData } = req.body;
+        const mvccResult = await updateWithMVCC('online_Referral', referral_id, { version, ...clientData }, {
+            strategy,
+            userId: req.user?.user_id || req.user?.id
         });
+
+        if (!mvccResult.resolved) {
+            return res.status(409).json({
+                error: "Conflict detected requiring manual review",
+                details: mvccResult
+            });
+        }
 
         return res.status(200).json({
             message: "Referral Updated Successfully",
-            data: updatedReferral,
+            data: mvccResult.record,
+            strategyUsed: mvccResult.strategyUsed
         });
 
     } catch (error) {
@@ -198,7 +200,7 @@ const updateReferral = async (req, res, next) => {
 const respondToReferral = async (req, res, next) => {
     try {
         const { referral_id } = req.params;
-        const { status, response_notes, outcome, is_completed } = req.body;
+        const { status, response_notes, outcome, is_completed, strategy, version } = req.body;
 
         if (!referral_id || !status) {
             return res.status(400).json({ error: "Missing Required Fields!" });
@@ -208,20 +210,29 @@ const respondToReferral = async (req, res, next) => {
             return res.status(404).json({ error: "Referral Doesn't Exist!" });
         }
 
-        const updatedReferral = await prisma.online_Referral.update({
-            where: { referral_id: referral_id },
-            data: {
-                status: status,
-                ...(response_notes !== undefined && { response_notes: response_notes }),
-                ...(outcome !== undefined && { outcome: outcome }),
-                is_completed: is_completed !== undefined ? is_completed : (status === "completed" || status === "accepted"),
-                date_responded: new Date(),
-            },
+        const mvccResult = await updateWithMVCC('online_Referral', referral_id, {
+            version,
+            status: status,
+            ...(response_notes !== undefined && { response_notes: response_notes }),
+            ...(outcome !== undefined && { outcome: outcome }),
+            is_completed: is_completed !== undefined ? is_completed : (status === "completed" || status === "accepted"),
+            date_responded: new Date(),
+        }, {
+            strategy,
+            userId: req.user?.user_id || req.user?.id
         });
+
+        if (!mvccResult.resolved) {
+            return res.status(409).json({
+                error: "Conflict detected requiring manual review",
+                details: mvccResult
+            });
+        }
 
         return res.status(200).json({
             message: "Referral Feedback/Response Recorded Successfully",
-            data: updatedReferral,
+            data: mvccResult.record,
+            strategyUsed: mvccResult.strategyUsed
         });
 
     } catch (error) {

@@ -1,12 +1,10 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
-
+const { updateWithMVCC } = require('../services/conflicResolution');
 
 const registerLabScreening = async (req, res, next) => {
-
     try {
-
-        const  {pregnancy_id, visit_id, screening_type, result, date_of_screening, remarks} = req.body;
+        const {pregnancy_id, visit_id, screening_type, result, date_of_screening, remarks} = req.body;
 
         if(!pregnancy_id || !visit_id || !screening_type || !result || !date_of_screening) {
             return res.status(400).json({error : "Missing Required Fields"});
@@ -35,42 +33,38 @@ const registerLabScreening = async (req, res, next) => {
         res.status(200).json({
             message : "Lab Screening Successfully Registered!",
             data : labScreening
-        })
+        });
 
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const updateLabScreening = async (req, res, next) => {
-
     try {
-
         const {screening_id} = req.params;
+        const { strategy, version, ...clientData } = req.body;
 
         if(!(await validate.isLabScreeningExist(screening_id))) {
             return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
-        const {screening_type, result, date_of_screening, remarks} = req.body;
-
-        if (!screening_type || !result || !date_of_screening) {
-            return res.status(400).json({error : "Missing Required Fields"});
-        }
-
-        const updatedLabScreening = await prisma.lab_Screening.update({
-            where : {screening_id : screening_id},
-            data : {
-                screening_type : screening_type,
-                result : result,
-                date_of_screening : date_of_screening,
-                remarks : remarks
-            }
+        const mvccResult = await updateWithMVCC('lab_Screening', screening_id, { version, ...clientData }, {
+            strategy,
+            userId: req.user?.user_id || req.user?.id
         });
+
+        if (!mvccResult.resolved) {
+            return res.status(409).json({
+                error: "Conflict detected requiring manual review",
+                details: mvccResult
+            });
+        }
 
         return res.status(200).json({
             message : "Lab Screening Updated Successfully!",
-            data : updatedLabScreening
+            data : mvccResult.record,
+            strategyUsed: mvccResult.strategyUsed
         });
 
     } catch (error) {
@@ -79,9 +73,7 @@ const updateLabScreening = async (req, res, next) => {
 };
 
 const deleteLabScreening = async (req, res, next) => {
-
     try {
-
         const {screening_id} = req.params;
 
         if(!(await validate.isLabScreeningExist(screening_id))) {
@@ -102,12 +94,11 @@ const deleteLabScreening = async (req, res, next) => {
 };
 
 const getLabScreeningById = async (req, res, next) => {
-
     try {
-
         const {screening_id} = req.params;
 
-        if(!(await validate.isLabScreeningExist(screening_id))) {
+        const isScreeningExist = await validate.isLabScreeningExist(screening_id);
+        if(!isScreeningExist) {
             return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
@@ -117,14 +108,12 @@ const getLabScreeningById = async (req, res, next) => {
         });
 
     } catch (error) {
-        return next(error)
+        return next(error);
     }
 };
 
 const getLabScreeningByPregnancy = async (req, res, next) => {
-
     try {
-
         const {pregnancy_id} = req.params;
 
         if(!(await validate.isPregnancyExist(pregnancy_id))) {
@@ -153,9 +142,7 @@ const getLabScreeningByPregnancy = async (req, res, next) => {
 };
 
 const getLabScreeningByVisit = async (req, res, next) => {
-
     try {
-
         const {visit_id} = req.params;
 
         if(!(await validate.isPrenatalVisitExist(visit_id))) {
