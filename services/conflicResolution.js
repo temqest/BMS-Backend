@@ -9,127 +9,125 @@ const CONFLICT_STRATEGIES = {
 };
 
 function isConflict(serverRecord, clientRecord) {
-    if (!serverRecord) return false;
-    const serverVersion = serverRecord.version ?? 1;
-    const clientVersion = clientRecord.version ?? 1;
-    
-    return serverVersion !== clientVersion;
+    if (!serverRecord) {
+        return false;
+    }
+
+    const serverVersion = serverRecord.version || 1;
+    const clientVersion = clientRecord.version || 1;
+
+    if (serverVersion !== clientVersion) {
+        return true;
+    }
+
+    return false;
 }
 
-function mergeFieldLevel(serverRecord, clientRecord, ignoredFields = ['version', 'created_at', 'updated_at', 'sync_status']) {
-    const merged = { ...serverRecord };
+function mergeFieldLevel(serverRecord, clientRecord) {
+    const ignoredFields = ['version', 'created_at', 'updated_at', 'sync_status'];
+    const mergedRecord = Object.assign({}, serverRecord);
 
-    for (const key of Object.keys(clientRecord)) {
-        if (ignoredFields.includes(key)) continue;
-        
-        if (clientRecord[key] !== undefined && clientRecord[key] !== null) {
-            merged[key] = clientRecord[key];
+    for (const fieldName in clientRecord) {
+        if (ignoredFields.includes(fieldName)) {
+            continue;
+        }
+
+        const clientValue = clientRecord[fieldName];
+        if (clientValue !== undefined && clientValue !== null) {
+            mergedRecord[fieldName] = clientValue;
         }
     }
 
-    return merged;
+    return mergedRecord;
 }
 
-async function resolveConflict({
-    tableName,
-    recordId,
-    serverRecord,
-    clientRecord,
-    strategy = CONFLICT_STRATEGIES.FIELD_MERGE,
-    userId = null
-}) {
-    const serverVersion = serverRecord.version ?? 1;
+async function resolveConflict({ tableName, recordId, serverRecord, clientRecord, strategy, userId }) {
+    const chosenStrategy = strategy || CONFLICT_STRATEGIES.FIELD_MERGE;
+    const serverVersion = serverRecord.version || 1;
     const newVersion = serverVersion + 1;
 
-    let finalData = {};
-    let resolutionAction = '';
+    let dataToSave = {};
+    let actionLabel = '';
 
-    switch (strategy) {
-        case CONFLICT_STRATEGIES.SERVER_WINS:
-            resolutionAction = 'SERVER_WINS_PRESERVED_EXISTING';
-            
-            if (userId) {
-                await logConflictAudit({
-                    userId,
-                    tableName,
-                    actionType: 'CONFLICT_SERVER_WINS',
-                    previousState: JSON.stringify(serverRecord),
-                    newState: JSON.stringify(clientRecord)
-                });
-            }
+    if (chosenStrategy === CONFLICT_STRATEGIES.SERVER_WINS) {
+        if (userId) {
+            await logAuditTrail({
+                userId: userId,
+                tableName: tableName,
+                actionType: 'CONFLICT_SERVER_WINS',
+                previousState: serverRecord,
+                newState: clientRecord
+            });
+        }
 
-            return {
-                resolved: true,
-                strategyUsed: CONFLICT_STRATEGIES.SERVER_WINS,
-                record: serverRecord,
-                message: 'Server record preserved. Client must update local offline storage.'
-            };
+        return {
+            resolved: true,
+            strategyUsed: CONFLICT_STRATEGIES.SERVER_WINS,
+            record: serverRecord,
+            message: 'Server record preserved. Client must update local storage.'
+        };
+    }
+    else if (chosenStrategy === CONFLICT_STRATEGIES.CLIENT_WINS) {
+        dataToSave = Object.assign({}, clientRecord);
+        delete dataToSave.version;
+        
+        dataToSave.version = newVersion;
+        dataToSave.sync_status = 'synced';
+        dataToSave.updated_at = new Date();
 
-        case CONFLICT_STRATEGIES.CLIENT_WINS:
-            const { version: _cv, ...clientDataWithoutVersion } = clientRecord;
-            finalData = {
-                ...clientDataWithoutVersion,
-                version: newVersion,
-                sync_status: 'synced',
-                updated_at: new Date()
-            };
-            resolutionAction = 'CLIENT_WINS_OVERWRITTEN';
-            break;
+        actionLabel = 'CLIENT_WINS_OVERWRITTEN';
+    }
+    else if (chosenStrategy === CONFLICT_STRATEGIES.FIELD_MERGE) {
+        const mergedData = mergeFieldLevel(serverRecord, clientRecord);
+        delete mergedData.version;
+        delete mergedData.updated_at;
 
-        case CONFLICT_STRATEGIES.FIELD_MERGE:
-            const mergedFields = mergeFieldLevel(serverRecord, clientRecord);
-            delete mergedFields.version;
-            delete mergedFields.updated_at;
+        dataToSave = mergedData;
+        dataToSave.version = newVersion;
+        dataToSave.sync_status = 'synced';
+        dataToSave.updated_at = new Date();
 
-            finalData = {
-                ...mergedFields,
-                version: newVersion,
-                sync_status: 'synced',
-                updated_at: new Date()
-            };
-            resolutionAction = 'FIELD_LEVEL_MERGED';
-            break;
+        actionLabel = 'FIELD_LEVEL_MERGED';
+    }
+    else {
+        if (userId) {
+            await logAuditTrail({
+                userId: userId,
+                tableName: tableName,
+                actionType: 'CONFLICT_PENDING_MANUAL_REVIEW',
+                previousState: serverRecord,
+                newState: clientRecord
+            });
+        }
 
-        case CONFLICT_STRATEGIES.MANUAL_REVIEW:
-        default:
-            if (userId) {
-                await logConflictAudit({
-                    userId,
-                    tableName,
-                    actionType: 'CONFLICT_PENDING_MANUAL_REVIEW',
-                    previousState: JSON.stringify(serverRecord),
-                    newState: JSON.stringify(clientRecord)
-                });
-            }
-
-            return {
-                resolved: false,
-                strategyUsed: CONFLICT_STRATEGIES.MANUAL_REVIEW,
-                record: serverRecord,
-                conflictPayload: clientRecord,
-                message: 'Conflict flagged for manual resolution.'
-            };
+        return {
+            resolved: false,
+            strategyUsed: CONFLICT_STRATEGIES.MANUAL_REVIEW,
+            record: serverRecord,
+            conflictPayload: clientRecord,
+            message: 'Conflict flagged for manual resolution.'
+        };
     }
 
     const primaryKeyField = getPrimaryKeyField(tableName);
     const updatedRecord = await prisma[tableName].update({
         where: { [primaryKeyField]: recordId },
-        data: finalData
+        data: dataToSave
     });
 
     if (userId) {
-        await logConflictAudit({
-            userId,
-            tableName,
-            actionType: `CONFLICT_RESOLVED_${resolutionAction}`,
-            previousState: JSON.stringify(serverRecord),
-            newState: JSON.stringify(updatedRecord)
+        await logAuditTrail({
+            userId: userId,
+            tableName: tableName,
+            actionType: 'CONFLICT_RESOLVED_' + actionLabel,
+            previousState: serverRecord,
+            newState: updatedRecord
         });
     }
 
     return {
         resolved: true,
-        strategyUsed: strategy,
+        strategyUsed: chosenStrategy,
         record: updatedRecord,
         message: 'Conflict successfully resolved and merged.'
     };
@@ -143,33 +141,36 @@ async function updateWithMVCC(modelName, recordId, clientRecord, options = {}) {
     });
 
     if (!serverRecord) {
-        throw new Error(`Record not found in ${modelName} with key ${recordId}`);
+        throw new Error(`Record not found in ${modelName} with ID ${recordId}`);
     }
 
-    if (isConflict(serverRecord, clientRecord)) {
-        console.warn(`[MVCC CONFLICT] ${modelName}:${recordId} - Server Version: ${serverRecord.version ?? 1}, Client Version: ${clientRecord.version ?? 1}`);
-        
+    const conflictFound = isConflict(serverRecord, clientRecord);
+    if (conflictFound) {
+        console.warn(`[MVCC CONFLICT] ${modelName}:${recordId} (Server V${serverRecord.version || 1} vs Client V${clientRecord.version || 1})`);
+
         return await resolveConflict({
             tableName: modelName,
-            recordId,
-            serverRecord,
-            clientRecord,
+            recordId: recordId,
+            serverRecord: serverRecord,
+            clientRecord: clientRecord,
             strategy: options.strategy || CONFLICT_STRATEGIES.FIELD_MERGE,
             userId: options.userId || null
         });
     }
 
-    const newVersion = (serverRecord.version ?? 1) + 1;
-    const { version: _v, ...updateData } = clientRecord;
+    const currentVersion = serverRecord.version || 1;
+    const newVersion = currentVersion + 1;
+
+    const updatePayload = Object.assign({}, clientRecord);
+    delete updatePayload.version;
+
+    updatePayload.version = newVersion;
+    updatePayload.sync_status = 'synced';
+    updatePayload.updated_at = new Date();
 
     const updatedRecord = await prisma[modelName].update({
         where: { [primaryKeyField]: recordId },
-        data: {
-            ...updateData,
-            version: newVersion,
-            sync_status: 'synced',
-            updated_at: new Date()
-        }
+        data: updatePayload
     });
 
     return {
@@ -181,7 +182,7 @@ async function updateWithMVCC(modelName, recordId, clientRecord, options = {}) {
 }
 
 function getPrimaryKeyField(modelName) {
-    const pkMap = {
+    const keyMap = {
         facility: 'facility_id',
         user: 'user_id',
         mother: 'mother_id',
@@ -200,17 +201,7 @@ function getPrimaryKeyField(modelName) {
         in_App_Message: 'message_id'
     };
 
-    return pkMap[modelName] || `${modelName.toLowerCase()}_id`;
-}
-
-async function logConflictAudit({ userId, tableName, actionType, previousState, newState }) {
-    await logAuditTrail({
-        userId,
-        tableName,
-        actionType,
-        previousState,
-        newState
-    });
+    return keyMap[modelName] || `${modelName.toLowerCase()}_id`;
 }
 
 module.exports = {

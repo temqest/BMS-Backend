@@ -1,14 +1,18 @@
 const prisma = require('../util/db');
 
 async function logAuditTrail({ userId, tableName, actionType, previousState = null, newState = null }) {
+    
     try {
+
         if (!userId || !tableName || !actionType) {
             console.warn('[AUDIT LOG WARN]: Missing required fields for audit log (userId, tableName, or actionType)');
             return null;
         }
 
         const formatState = (state) => {
+
             if (!state) return null;
+
             return typeof state === 'object' ? JSON.stringify(state) : String(state);
         };
 
