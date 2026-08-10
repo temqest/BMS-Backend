@@ -1,5 +1,6 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
+const { logAuditTrail } = require('../services/auditService');
 
 const createAuditTrail = async (req, res, next) => {
     try {
@@ -13,14 +14,12 @@ const createAuditTrail = async (req, res, next) => {
             return res.status(404).json({ error: "User Doesn't Exist" });
         }
 
-        const audit = await prisma.audit_Revision_Log.create({
-            data: {
-                user_id: user_id,
-                table_name: table_name,
-                action_type: action_type,
-                previous_state: previous_state ? (typeof previous_state === 'object' ? JSON.stringify(previous_state) : previous_state) : null,
-                new_state: new_state ? (typeof new_state === 'object' ? JSON.stringify(new_state) : new_state) : null,
-            }
+        const audit = await logAuditTrail({
+            userId: user_id,
+            tableName: table_name,
+            actionType: action_type,
+            previousState: previous_state,
+            newState: new_state
         });
 
         return res.status(200).json({

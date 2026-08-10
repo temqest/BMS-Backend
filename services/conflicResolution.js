@@ -1,4 +1,5 @@
 const prisma = require('../util/db');
+const { logAuditTrail } = require('./auditService');
 
 const CONFLICT_STRATEGIES = {
     SERVER_WINS: 'SERVER_WINS',
@@ -203,21 +204,13 @@ function getPrimaryKeyField(modelName) {
 }
 
 async function logConflictAudit({ userId, tableName, actionType, previousState, newState }) {
-    try {
-        if (!userId) return;
-        await prisma.audit_Revision_Log.create({
-            data: {
-                user_id: userId,
-                table_name: tableName,
-                action_type: actionType,
-                previous_state: previousState,
-                new_state: newState,
-                sync_status: 'synced'
-            }
-        });
-    } catch (err) {
-        console.error('Failed to log conflict audit:', err);
-    }
+    await logAuditTrail({
+        userId,
+        tableName,
+        actionType,
+        previousState,
+        newState
+    });
 }
 
 module.exports = {
