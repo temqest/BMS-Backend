@@ -150,6 +150,16 @@ const isCDSSAlertExist = async (alert_id) => {
     }
 };
 
+const isAppointmentExist = async (appointment_id) => {
+    try {
+        const record = await prisma.appointment.findUnique({ where: { appointment_id } });
+        return record !== null;
+    } catch (error) {
+        console.error("Error in isAppointmentExist:", error);
+        return false;
+    }
+};
+
 module.exports = {
     isUserExist,
     isMotherExist,
@@ -166,4 +176,5 @@ module.exports = {
     isMessageExist,
     isOnlineReferralExist,
     isCDSSAlertExist,
+    isAppointmentExist,
 };

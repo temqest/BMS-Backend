@@ -20,6 +20,7 @@ model Facility {
   users               User[]
   onlineReferralsFrom Online_Referral[] @relation("FromFacility")
   onlineReferralsTo   Online_Referral[] @relation("ToFacility")
+  appointments        Appointment[]
 }
 
 //User schema
@@ -258,11 +259,16 @@ model postpartum_visit {
 model Appointment {
   appointment_id   String   @id @default(uuid())
   user_id          String
+  facility_id      String?
   appointment_date DateTime @default(now())
   appointment_time String
+  appointment_type String   @default("Prenatal Visit") // e.g. "Prenatal Visit", "Postpartum Checkup", "Immunization", "Consultation"
+  reason           String?
+  status           String   @default("scheduled")      // e.g. "scheduled", "completed", "cancelled", "missed"
   sync_status      String   @default("synced")
 
-  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  user     User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  facility Facility? @relation(fields: [facility_id], references: [facility_id])
 }
 
 //Notification Schema
