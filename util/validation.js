@@ -90,16 +90,6 @@ const isLabScreeningExist = async (screening_id) => {
     }
 };
 
-const isImmunizationRecordExist = async (immunization_id) => {
-    try {
-        const record = await prisma.immunization_Record.findUnique({ where: { immunization_id } });
-        return record !== null;
-    } catch (error) {
-        console.error("Error in isImmunizationRecordExist:", error);
-        return false;
-    }
-};
-
 const isSupplementRecordExist = async (supplement_id) => {
     try {
         const record = await prisma.supplementation_Record.findUnique({ where: { supplement_id } });
@@ -222,7 +212,6 @@ module.exports = {
     isNewbornExist,
     isPostpartumVisitExist,
     isLabScreeningExist,
-    isImmunizationRecordExist,
     isSupplementRecordExist,
     isNotificationExist,
     isMessageExist,

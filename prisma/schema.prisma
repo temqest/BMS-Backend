@@ -92,7 +92,6 @@ model Pregnancy {
   mother         Mother          @relation(fields: [mother_id], references: [mother_id], onDelete: Cascade)
   prenatalVisits PrenatalVisit[]
 
-  immunizationRecords    Immunization_Record[]
   supplementationRecords Supplementation_Record[]
   labScreenings          Lab_Screening[]
   cdssAlerts             CDSS_Alert[]
@@ -129,20 +128,6 @@ model PrenatalVisit {
   supplementationRecords Supplementation_Record[]
   labScreenings          Lab_Screening[]
   cdssAlerts             CDSS_Alert[]
-}
-
-//Immunization Record Schema
-model Immunization_Record {
-  immunization_id        String   @id @default(uuid())
-  pregnancy_id           String
-  vaccine_dose           String
-  date_administered      DateTime @default(now())
-  fully_immunized_mother Boolean  @default(false)
-  sync_status            String   @default("synced")
-  version                Int      @default(1)
-  updated_at             DateTime @default(now()) @updatedAt
-
-  pregnancy Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
 }
 
 //Supplementation Record Schema

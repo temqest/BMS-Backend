@@ -14,8 +14,6 @@ const pregnancyRouter = require('./router/pregnancyRouter');
 
 const prenatalVisitRouter = require('./router/prenatalVisitRouter')
 
-const immunizationRouter = require('./router/immunizationRouter')
-
 const supplementRouter = require('./router/supplementRouter')
 
 const labScreeningRouter = require('./router/labScreeningRouter');
@@ -54,8 +52,6 @@ app.use('/api/v1/mother', motherRouter);
 app.use('/api/v1/pregnancy', pregnancyRouter);
 
 app.use('/api/v1/prenatal-visit', prenatalVisitRouter);
-
-app.use('/api/v1/immunization', immunizationRouter)
 
 app.use('/api/v1/supplement', supplementRouter)
 

@@ -145,6 +145,7 @@ async function updateWithMVCC(modelName, recordId, clientRecord, options = {}) {
     }
 
     const conflictFound = isConflict(serverRecord, clientRecord);
+    
     if (conflictFound) {
         console.warn(`[MVCC CONFLICT] ${modelName}:${recordId} (Server V${serverRecord.version || 1} vs Client V${clientRecord.version || 1})`);
 
@@ -188,7 +189,6 @@ function getPrimaryKeyField(modelName) {
         mother: 'mother_id',
         pregnancy: 'pregnancy_id',
         prenatalVisit: 'visit_id',
-        immunization_Record: 'immunization_id',
         supplementation_Record: 'supplement_id',
         lab_Screening: 'screening_id',
         cDSS_Alert: 'alert_id',
