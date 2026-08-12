@@ -4,6 +4,8 @@ const app = express()
 const cors = require('cors');
 const PORT = process.env.PORT || 6700
 
+app.set('trust proxy', 1);
+
 const authRouter = require('./router/authRouter');
 
 const faciliityRouter = require('./router/facilityRouter');
@@ -36,12 +38,18 @@ const cdssRouter = require('./router/cdssRouter');
 
 const appointmentRouter = require('./router/appointmentRouter');
 
+const { apiLimiter } = require('./middleware/rateLimmiter');
+
+const sendRouter = require('./router/sendRouter');
+
 app.use(cors());
 app.use(express.json());
 
 app.get('/health', (req, res) => {
     res.send("Birth Monitoring System's Backend is working fine")
 })
+
+app.use('/api/v1', apiLimiter);
 
 app.use('/api/v1/auth', authRouter);
 
@@ -74,6 +82,8 @@ app.use('/api/v1/referral', referralRouter)
 app.use('/api/v1/cdss', cdssRouter)
 
 app.use('/api/v1/appointment', appointmentRouter)
+
+app.use('/api/v1/send', sendRouter)
 
 app.use((err, req, res, next) => {
     console.error("Unhandled Server Error", err);

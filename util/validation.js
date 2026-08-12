@@ -150,6 +150,26 @@ const isAppointmentExist = async (appointment_id) => {
     }
 };
 
+const isEmailExist = async (email) => {
+    try {
+        const record = await prisma.user.findFirst({where : {email : email}});
+        return record !== null;
+    } catch (error) {
+        console.error("Error in isEmailExist:", error);
+        return false;
+    }
+}
+
+const isPhoneExist = async (phone) => {
+    try {
+        const record = await prisma.user.findFirst({ where: { phone_number: phone } });
+        return record !== null;
+    } catch (error) {
+        console.error("Error in isPhoneExist:", error);
+        return false;
+    }
+}
+
 const validateClinicalVitals = (data) => {
     const errors = [];
     const {
@@ -219,4 +239,6 @@ module.exports = {
     isCDSSAlertExist,
     isAppointmentExist,
     validateClinicalVitals,
+    isEmailExist,
+    isPhoneExist
 };

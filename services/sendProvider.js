@@ -79,6 +79,7 @@ async function sendOTPviaSMS(identifier, code, type, purpose) {
     const SMS_API_KEY = process.env.SMS_API_TOKEN;
 
     try {
+
         const formattedPhone = String(identifier).replace(/[^0-9]/g, '');
 
         const response = await fetch('https://www.iprogsms.com/api/v1/sms_messages', {

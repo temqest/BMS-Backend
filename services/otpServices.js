@@ -22,6 +22,33 @@ const generateOTP = async (identifier, type, purpose, provider = "email") => {
             return await generateOTP(identifier, type, purpose, provider)
         }
 
+        const recentOTP = await prisma.otp.findFirst({
+            where: {
+                identifier: identifier,
+                is_used: false,
+                created_at: {
+                    gt: new Date(Date.now() - 60 * 1000)
+                }
+            }
+        });
+
+        if (recentOTP) {
+            throw new Error("Please wait 60 seconds before requesting another OTP.");
+        }
+
+        const hourlyCount = await prisma.otp.count({
+            where: {
+                identifier: identifier,
+                created_at: {
+                    gt: new Date(Date.now() - 60 * 60 * 1000)
+                }
+            }
+        });
+
+        if (hourlyCount >= 5) {
+            throw new Error("Maximum OTP limit reached for this hour. Please try again later.");
+        }
+
         const otpRecord = await prisma.otp.create({
             data : {
                 identifier : identifier,
