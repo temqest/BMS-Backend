@@ -4,14 +4,16 @@ const validate = require('../util/validation');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
+const checkOtp = require('../services/otpServices');
+
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-maternal-key-change-in-production'
 
 const register = async (req, res, next) => {
 
     try {
-        const { first_name, middle_name, last_name, role, phone_number, email, password, address, facility_id } = req.body;
+        const { first_name, middle_name, last_name, role, phone_number, email, password, address, facility_id, otp } = req.body;
 
-        if(!first_name || !last_name || !role || !phone_number || !facility_id || !password){
+        if(!first_name || !last_name || !role || !phone_number || !facility_id || !password || !otp){
             return res.status(400).json({ error: 'Missing required fields' })
         }
 
@@ -34,6 +36,16 @@ const register = async (req, res, next) => {
 
         if(existingUser) {
             return res.status(400).json({ error: 'Phone number or email is already registered'})
+        }
+
+        const purpose = 'registration'
+
+        const identifier = email ? email : phone_number;
+        
+        const isValidOtp = await checkOtp.verifyOTP(identifier, otp, purpose)
+
+        if(!isValidOtp) {
+            return res.status(400).json({error : "Invalid OTP"})
         }
 
         const salt = await bcrypt.genSalt(14);

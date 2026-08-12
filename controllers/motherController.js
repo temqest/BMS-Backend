@@ -5,6 +5,8 @@ const { updateWithMVCC } = require('../services/conflicResolution');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+const checkOtp = require('../services/otpServices')
+
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-maternal-key-change-in-production'
 
 const calculateAge = (birthDate) => {
@@ -120,10 +122,11 @@ const selfRegisterMother = async (req, res, next) => {
             family_serial_no, 
             birth_date, 
             civil_status, 
-            blood_type
+            blood_type,
+            otp
         } = req.body;
 
-        if(!first_name || !last_name || !phone_number || !address || !password || !birth_date || !civil_status) {
+        if(!first_name || !last_name || !phone_number || !address || !password || !birth_date || !civil_status || !otp) {
             return res.status(400).json({error : "Missing Required Fields"});
         }
 
@@ -138,6 +141,16 @@ const selfRegisterMother = async (req, res, next) => {
 
         if(isMotherExist) {
             return res.status(400).json({error : "Account with the same credentials already exist"});
+        }
+
+        const purpose = 'registration'
+
+        const identifier = email ? email : phone_number;
+
+        const isValidOtp = await checkOtp.verifyOTP(identifier, otp, purpose);
+
+        if(!isValidOtp) {
+            return res.status(400).json({error : "Invalid OTP"})
         }
 
         const salt = await bcrypt.genSalt(14);

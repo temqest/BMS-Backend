@@ -329,3 +329,19 @@ model Audit_Revision_Log {
 
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 }
+
+model Otp {
+  otp_id String @id @default(uuid())
+  identifier String
+  code String
+  type String @default("Verification")
+  provider String @default("email")
+  purpose String
+  attempts Int @default(0)
+  is_used Boolean @default(false)
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  @@index([identifier, type])
+}
+
