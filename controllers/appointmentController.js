@@ -25,6 +25,20 @@ const createAppointment = async (req, res, next) => {
             return res.status(404).json({ error: "Facility Doesn't Exist!" });
         }
 
+        if (new Date(appointment_date) < new Date()) {
+            return res.status(400).json({ error: "Appointment Date Cannot Be In The Past!" });
+        }
+
+        const isConflict = await prisma.appointment.findFirst({
+            where : {
+                appointment_date : new Date(appointment_date),
+            }
+        })
+
+        if (isConflict) {
+            return res.status(400).json({ error: "Invalid Appointment Date, There is already an appointment set for this date" })
+        }
+
         const newAppointment = await prisma.appointment.create({
             data: {
                 user_id: user_id,

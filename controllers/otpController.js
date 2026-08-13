@@ -1,22 +1,22 @@
 const otpService = require('../services/otpServices');
 
 const requestOTP = async (req, res, next) => {
-    
+
     try {
 
         const { identifier, type, purpose, provider } = req.body;
 
         if (!identifier || !type || !purpose || !provider) {
-            throw new Error("Missing required fields");
+            return res.status(400).json({ error: "Missing Required Fields" })
         }
 
-        const otpResponse = await otpService.generateOTP(identifier, type, purpose, provider);
+        const optResponse = await otpService.generateOTP(identifier, type, purpose, provider)
 
         return res.status(200).json({
             message: "OTP Sent Successfully",
-            data: otpResponse,
-        });
-    
+            data: optResponse,
+        })
+
     } catch (error) {
         return next(error);
     }
@@ -29,21 +29,15 @@ const validateOTP = async (req, res, next) => {
         const { identifier, code, purpose } = req.body;
 
         if (!identifier || !code || !purpose) {
-            throw new Error("Missing required fields");
+            return res.status(400).json({ error: "Missing Required Fields" })
         }
 
-        const isValid = await otpService.verifyOTP(identifier, code, purpose);
-
-        if (!isValid) {
-            return res.status(400).json({
-                message: "Invalid or expired OTP code"
-            });
-        }
+        const optResponse = await otpService.verifyOTP(identifier, code, purpose);
 
         return res.status(200).json({
             message: "OTP Verified Successfully",
-            data: true,
-        });
+            data: optResponse,
+        })
 
     } catch (error) {
         return next(error);
