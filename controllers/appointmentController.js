@@ -39,10 +39,14 @@ const createAppointment = async (req, res, next) => {
             return res.status(400).json({ error: "Invalid Appointment Date, There is already an appointment set for this date" })
         }
 
+        const targetFacilityId = req.user?.role === 'SystemAdmin'
+            ? (facility_id || null)
+            : (req.user?.facility_id || facility_id || null);
+
         const newAppointment = await prisma.appointment.create({
             data: {
                 user_id: user_id,
-                facility_id: facility_id ? facility_id : null,
+                facility_id: targetFacilityId,
                 appointment_date: new Date(appointment_date),
                 appointment_time: appointment_time,
                 appointment_type: appointment_type ? appointment_type : "Prenatal Visit",
@@ -64,7 +68,10 @@ const createAppointment = async (req, res, next) => {
 
 const getAllAppointments = async (req, res, next) => {
     try {
+        const whereClause = req.user?.role === 'SystemAdmin' ? {} : { facility_id: req.user?.facility_id };
+
         const appointments = await prisma.appointment.findMany({
+            where: whereClause,
             include: {
                 user: {
                     select: {
@@ -121,6 +128,10 @@ const getAppointmentById = async (req, res, next) => {
                 facility: true,
             },
         });
+
+        if (req.user?.role !== 'SystemAdmin' && appointment.facility_id && appointment.facility_id !== req.user?.facility_id) {
+            return res.status(403).json({ error: "Access Denied. You cannot access appointments for another facility." });
+        }
 
         return res.status(200).json({
             message: "Appointment Details Retrieved Successfully",

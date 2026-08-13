@@ -4,6 +4,8 @@ const validate = require('../util/validation');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
+const SYSTEM_ADMIN_BYPASS_CODE = process.env.BYPASSCODE
+
 const checkOtp = require('../services/otpServices');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-maternal-key-change-in-production'
@@ -11,20 +13,23 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-maternal-key-change-i
 const register = async (req, res, next) => {
 
     try {
-        const { first_name, middle_name, last_name, role, phone_number, email, password, address, facility_id, otp } = req.body;
+        const { first_name, middle_name, last_name, role, phone_number, email, password, address, facility_id, otp, bypassCode } = req.body;
 
-        if(!first_name || !last_name || !role || !phone_number || !facility_id || !password || !otp){
+        if(!first_name || !last_name || !role || !phone_number || !password || !otp){
             return res.status(400).json({ error: 'Missing required fields' })
         }
 
-        const facility = await prisma.facility.findUnique({
-            where: {facility_id: facility_id},
-        });
-
-        if(!facility) {
-            return res.status(404).json({ error: `Facility with ID ${facility_id} does not exist`})
+        const restrictedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Staff'];
+        if (restrictedRoles.includes(role)) {
+            if (role === "SystemAdmin" || role === "Admin") {
+                if (bypassCode !== SYSTEM_ADMIN_BYPASS_CODE) {
+                    return res.status(403).json({ error: "Privileged role registration requires a valid bypass authorization code." });
+                }
+            } else {
+                return res.status(403).json({ error: "Staff account creation must be performed by an authorized facility admin." });
+            }
         }
-
+    
         const existingUser = await prisma.user.findFirst({
             where: {
                 OR: [
@@ -72,6 +77,16 @@ const register = async (req, res, next) => {
             {expiresIn: "30d"}
         );
 
+        let facilityName = "";
+        if (facility_id) {
+            const facility = await prisma.facility.findUnique({
+                where: { facility_id }
+            });
+            if (facility) {
+                facilityName = facility.facility_name;
+            }
+        }
+
         res.status(201).json({
             message: "Account registered succesfully",
             token: token,
@@ -81,7 +96,7 @@ const register = async (req, res, next) => {
                 middle_name: user.middle_name || "",
                 last_name: user.last_name,
                 role: user.role,
-                facility_name: facility.facility_name,
+                facility_name: facilityName,
             },
         });
     } catch (error) {
@@ -134,7 +149,7 @@ const login = async (req, res, next) => {
                 middle_name : user.middle_name,
                 last_name : user.middle_name,
                 role: user.role,
-                facility_name : user.facility.facility_name,
+                facility_name : user.facility ? user.facility.facility_name : "",
             },
         });
     } catch (error) {
@@ -142,7 +157,94 @@ const login = async (req, res, next) => {
     }
 }
 
+const createStaff = async (req, res, next) => {
+    try {
+        const { first_name, middle_name, last_name, role, phone_number, email, password, address, facility_id } = req.body;
+
+        if (!first_name || !last_name || !role || !password) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        const allowedStaffRoles = ['Admin', 'Doctor', 'Nurse', 'Midwife', 'Staff'];
+        if (!allowedStaffRoles.includes(role)) {
+            return res.status(400).json({ error: 'Invalid staff role specified' });
+        }
+
+        if (role === "Admin" && req.user?.role !== "Admin") {
+            return res.status(403).json({ error: "Only Admin can create another Admin" });
+        }
+
+        if (phone_number || email) {
+            const existingUser = await prisma.user.findFirst({
+                where: {
+                    OR: [
+                        phone_number ? { phone_number } : undefined,
+                        email ? { email } : undefined,
+                    ].filter(Boolean)
+                }
+            });
+
+            if (existingUser) {
+                return res.status(400).json({ error: 'Phone number or email is already registered' });
+            }
+        }
+
+        let targetFacilityId = req.user?.facility_id || null;
+
+        if (req.user?.role === 'SystemAdmin') {
+            targetFacilityId = facility_id || req.user?.facility_id || null;
+        } else if (facility_id && facility_id !== req.user?.facility_id) {
+            return res.status(403).json({ error: "Access Denied. You cannot assign staff to a different facility." });
+        }
+
+        const salt = await bcrypt.genSalt(14);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        const staffUser = await prisma.user.create({
+            data: {
+                first_name,
+                middle_name,
+                last_name,
+                role,
+                phone_number,
+                email,
+                password: hashedPassword,
+                address: address || '',
+                facility_id: targetFacilityId,
+                sync_status: 'synced',
+            },
+        });
+
+        let facilityName = "";
+        if (targetFacilityId) {
+            const facility = await prisma.facility.findUnique({
+                where: { facility_id: targetFacilityId }
+            });
+            if (facility) {
+                facilityName = facility.facility_name;
+            }
+        }
+
+        return res.status(201).json({
+            message: "Staff account created successfully",
+            user: {
+                user_id: staffUser.user_id,
+                first_name: staffUser.first_name,
+                middle_name: staffUser.middle_name || "",
+                last_name: staffUser.last_name,
+                role: staffUser.role,
+                email: staffUser.email,
+                phone_number: staffUser.phone_number,
+                facility_name: facilityName,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     register,
     login,
+    createStaff,
 };

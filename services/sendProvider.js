@@ -8,7 +8,7 @@ async function sendOTPviaEmail(identifier, code, type, purpose) {
     try {
 
         const {data, error} = await resend.emails.send({
-            from: "Birth Monitoring System <mail.pkov.online>",
+            from: "Birth Monitoring System <noreply@mail.pkov.online>",
             to: [identifier],
             subject: `Your OTP Code for ${purpose.toUpperCase()}`,
             html: `

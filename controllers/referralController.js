@@ -51,6 +51,10 @@ const createReferral = async (req, res, next) => {
             return res.status(404).json({ error: "Pregnancy Record Doesn't Exist" });
         }
 
+        if (req.user?.role !== 'SystemAdmin' && from_facility_id !== req.user?.facility_id) {
+            return res.status(403).json({ error: "Access Denied. Referrals must originate from your facility." });
+        }
+
         if (!(await validate.isFacilityExist(from_facility_id))) {
             return res.status(404).json({ error: "Origin Facility Doesn't Exist" });
         }
@@ -86,7 +90,15 @@ const createReferral = async (req, res, next) => {
 
 const getAllReferrals = async (req, res, next) => {
     try {
+        const facilityFilter = req.user?.role === 'SystemAdmin' ? {} : {
+            OR: [
+                { from_facility_id: req.user?.facility_id },
+                { to_facility_id: req.user?.facility_id },
+            ]
+        };
+
         const referrals = await prisma.online_Referral.findMany({
+            where: facilityFilter,
             include: {
                 pregnancy: {
                     include: {

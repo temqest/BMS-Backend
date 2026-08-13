@@ -281,12 +281,21 @@ const softDeleteMother = async (req, res, next) => {
             return res.status(400).json({error : "Missing Mother ID"});
         }
 
-        if(!(await validate.isMotherExist(mother_id))) {
+        const motherRecord = await prisma.mother.findUnique({
+            where: { mother_id },
+            include: { user: true }
+        });
+
+        if(!motherRecord) {
             return res.status(404).json({error: "Mother not found!"});
         }
 
-        const softDeletedResult = await prisma.user.update({
-            where : {user_id : isMotherExist.user_id},
+        if (req.user?.role !== 'SystemAdmin' && motherRecord.user?.facility_id && motherRecord.user.facility_id !== req.user?.facility_id) {
+            return res.status(403).json({error: "Access Denied. Mother belongs to another facility"});
+        }
+
+        await prisma.user.update({
+            where : {user_id : motherRecord.user_id},
             data : {
                 is_active : false
             }
@@ -311,8 +320,17 @@ const hardDeleteMother = async (req, res, next) => {
             return res.status(400).json({error : "Missing Mother ID"});
         }
 
-        if(!(await validate.isMotherExist(mother_id))) {
+        const motherRecord = await prisma.mother.findUnique({
+            where: { mother_id },
+            include: { user: true }
+        });
+
+        if(!motherRecord) {
             return res.status(404).json({error: "Mother not found!"});
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && motherRecord.user?.facility_id && motherRecord.user.facility_id !== req.user?.facility_id) {
+            return res.status(403).json({error: "Access Denied. Mother belongs to another facility"});
         }
 
         const entireMother = await prisma.$transaction(async (prismaClient) => {
@@ -325,7 +343,7 @@ const hardDeleteMother = async (req, res, next) => {
             });
 
             const deletedUser = await prismaClient.user.delete({
-                where : {user_id : isMotherExist.user_id}
+                where : {user_id : motherRecord.user_id}
             });
 
             return { deletedUser, deletedMother}
@@ -343,11 +361,14 @@ const hardDeleteMother = async (req, res, next) => {
 
 const getAllActiveMother = async (req, res, next) => {
     try {
+        const facilityFilter = req.user?.role === 'SystemAdmin' ? {} : { facility_id: req.user?.facility_id };
+
         const allActiveMothers = await prisma.mother.findMany({
             where: {
                 user: {
                     role: "Mother",
                     is_active: true,
+                    ...facilityFilter,
                 }
             },
             include: {
@@ -385,8 +406,12 @@ const searchMotherByID = async (req, res, next) => {
             }
         });
 
-        if(!__searchMotherResult) {
+        if(!searchMotherResult) {
             return res.status(404).json({error : "Mother not found"});
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && searchMotherResult.user?.facility_id && searchMotherResult.user.facility_id !== req.user?.facility_id) {
+            return res.status(403).json({error : "Access Denied. Mother belongs to another facility"});
         }
 
         res.status(200).json({
@@ -401,10 +426,13 @@ const searchMotherByID = async (req, res, next) => {
 
 const getAllMother = async (req, res, next) => {
     try {
+        const facilityFilter = req.user?.role === 'SystemAdmin' ? {} : { facility_id: req.user?.facility_id };
+
         const allMothers = await prisma.mother.findMany({
             where: {
                 user: {
-                    role: "Mother"
+                    role: "Mother",
+                    ...facilityFilter,
                 }
             },
             include : {

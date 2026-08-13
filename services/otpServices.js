@@ -82,7 +82,7 @@ const verifyOTP = async (identifier, code, purpose) => {
         const isValid = await prisma.otp.findFirst({
             where : {
                 identifier : identifier,
-                code : code,
+                code : String(code),
                 is_used : false,
                 purpose : purpose,
                 expires_at : {
