@@ -161,11 +161,53 @@ const getSupplementRecordByHealthWorker = async (req, res, next) => {
     }
 };
 
+const getSupplementRecordByMother = async (req, res, next) => {
+    try {
+        const { mother_id } = req.params;
+
+        if (!(await validate.isMotherExist(mother_id))) {
+            return res.status(404).json({ error: "Mother doesn't exist" });
+        }
+
+        const pregnancies = await prisma.pregnancy.findMany({
+            where: { mother_id: mother_id },
+            select: { pregnancy_id: true }
+        });
+
+        if (!pregnancies || pregnancies.length === 0) {
+            return res.status(200).json({
+                message: "No pregnancies found",
+                data: []
+            });
+        }
+
+        const pregnancyIds = pregnancies.map(p => p.pregnancy_id);
+
+        const supplement_records = await prisma.supplementation_Record.findMany({
+            where: {
+                pregnancy_id: { in: pregnancyIds }
+            },
+            orderBy: {
+                date_given: 'desc'
+            }
+        });
+
+        return res.status(200).json({
+            message: "Supplement Records Found!",
+            data: supplement_records
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
 module.exports = {
     registerSupplementRecord,
     updateSupplementRecord,
     deleteSupplementRecord,
     getSupplementRecordByID,
     getSupplementRecordByPregnancy,
-    getSupplementRecordByHealthWorker
+    getSupplementRecordByHealthWorker,
+    getSupplementRecordByMother
 };

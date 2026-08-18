@@ -6,7 +6,8 @@ const {
     deleteLabScreening, 
     getLabScreeningById, 
     getLabScreeningByPregnancy, 
-    getLabScreeningByVisit
+    getLabScreeningByVisit,
+    getLabScreeningByMother
 } = require('../controllers/labScreeningController');
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
@@ -23,5 +24,7 @@ router.get('/get/:screening_id', verifyToken, checkUserRole(allowedRoles), getLa
 router.get('/get/pregnancy/:pregnancy_id', verifyToken, checkUserRole(allowedRoles), getLabScreeningByPregnancy);
 
 router.get('/get/visit/:visit_id', verifyToken, checkUserRole(allowedRoles), getLabScreeningByVisit);
+
+router.get('/get/mother/:mother_id', verifyToken, checkUserRole(allowedRoles), getLabScreeningByMother);
 
 module.exports = router;

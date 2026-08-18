@@ -163,11 +163,64 @@ const getLabScreeningByVisit = async (req, res, next) => {
     }
 };
 
+const getLabScreeningByMother = async (req, res, next) => {
+
+    try {
+
+        const {mother_id} = req.params;
+
+        const isMotherExist = await validate.isMotherExistExist(mother_id)
+
+        if(!isMotherExist) {
+            return res.status(404).json({error : "Mother Doesn't Exist"})
+        }
+
+        const pregnancies = await prisma.pregnancy.findMany({
+            where : {
+                mother_id : mother_id, 
+                select : {pregnancy_id : true}
+            }
+        })
+
+        if(!pregnancies || pregnancies.length === 0) {
+            return res.status(200).json({error : "No Pregnancies Found", 
+                data: []
+            });
+        }
+
+        
+        const pregnancyIds = pregnancies.map(p => p.pregnancy_id);
+
+        const labScreening = await prisma.lab_Screening.findMany({
+            where : {
+                pregnancy_id : {in : pregnancyIds}
+            }, orderBy : {
+                date_of_screening : "desc"
+            }
+        });
+
+        if(labScreening.length === 0) {
+            return res.status(404).json({error : "No Lab Screenings Found", 
+                data : []
+            })
+        }
+
+        return res.status(200).json({
+            message : "Lab Screenings Successfully Retrieved",
+            data : response
+        })
+
+    } catch (error) {
+        return next(error)
+    }
+}
+
 module.exports = {
     registerLabScreening,
     updateLabScreening,
     deleteLabScreening,
     getLabScreeningById,
     getLabScreeningByPregnancy,
-    getLabScreeningByVisit
+    getLabScreeningByVisit,
+    getLabScreeningByMother
 };
