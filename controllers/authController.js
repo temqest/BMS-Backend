@@ -96,7 +96,7 @@ const register = async (req, res, next) => {
                 middle_name: user.middle_name || "",
                 last_name: user.last_name,
                 role: user.role,
-                facility_name: facilityName,
+                facility_id: user.facility_id,
             },
         });
     } catch (error) {
@@ -149,7 +149,7 @@ const login = async (req, res, next) => {
                 middle_name : user.middle_name,
                 last_name : user.middle_name,
                 role: user.role,
-                facility_name : user.facility ? user.facility.facility_name : "",
+                facility_id : user.facility ? user.facility.facility_id : null,
             },
         });
     } catch (error) {

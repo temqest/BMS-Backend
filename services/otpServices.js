@@ -60,11 +60,11 @@ const generateOTP = async (identifier, type, purpose, provider = "email") => {
             }
         })
 
-        if(provider === "email") {
+        if (provider === "email" || provider === "nodemailer") {
             await send.sendOTPviaEmail(identifier, code, type, purpose)
         }
 
-        if(provider === "sms") {
+        if (provider === "sms" || provider === "twilio") {
             await send.sendOTPviaSMS(identifier, code, type, purpose)
         }
         
