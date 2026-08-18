@@ -217,38 +217,64 @@ const selfRegisterMother = async (req, res, next) => {
 }
 
 const updateMother = async (req, res, next) => {
-
     try {
+        const { mother_id } = req.params;
 
-        const {mother_id} = req.params;
+        if (!mother_id) {
+            return res.status(400).json({ error: "Mother ID is required" });
+        }
+
+        const motherRecord = await prisma.mother.findUnique({
+            where: { mother_id },
+            include: { user: true }
+        });
+
+        if (!motherRecord) {
+            return res.status(404).json({ error: "Mother not found" });
+        }
+
         const {
-            first_name, 
-            middle_name, 
-            last_name, 
-            address, 
-            phone_number, 
-            email, 
-            birth_date, 
-            civil_status, 
+            first_name,
+            middle_name,
+            last_name,
+            address,
+            phone_number,
+            email,
+            birth_date,
+            civil_status,
             blood_type,
-            is_active,
+            family_serial_no,
+            strategy,
+            version
         } = req.body;
 
-        if(!mother_id) {
-            return res.status(400).json({error : "Mother ID is required"});
+        // 1. Update User fields if provided
+        const userUpdateData = {};
+        if (first_name !== undefined) userUpdateData.first_name = first_name;
+        if (middle_name !== undefined) userUpdateData.middle_name = middle_name;
+        if (last_name !== undefined) userUpdateData.last_name = last_name;
+        if (address !== undefined) userUpdateData.address = address;
+        if (phone_number !== undefined) userUpdateData.phone_number = phone_number;
+        if (email !== undefined) userUpdateData.email = email;
+
+        if (Object.keys(userUpdateData).length > 0 && motherRecord.user_id) {
+            await prisma.user.update({
+                where: { user_id: motherRecord.user_id },
+                data: userUpdateData
+            });
         }
 
-        if(!(await validate.isMotherExist(mother_id))) {
-            return res.status(403).json({error : "Mother not found"});
+        // 2. Prepare Mother fields
+        const motherUpdateData = {};
+        if (birth_date) {
+            motherUpdateData.birth_date = new Date(birth_date);
+            motherUpdateData.age = calculateAge(motherUpdateData.birth_date);
         }
+        if (civil_status !== undefined) motherUpdateData.civil_status = civil_status;
+        if (blood_type !== undefined) motherUpdateData.blood_type = blood_type;
+        if (family_serial_no !== undefined) motherUpdateData.family_serial_no = family_serial_no;
 
-        const { strategy, version, ...clientData } = req.body;
-        if (clientData.birth_date) {
-            clientData.birth_date = new Date(clientData.birth_date);
-            clientData.age = calculateAge(clientData.birth_date);
-        }
-
-        const mvccResult = await updateWithMVCC('mother', mother_id, { version, ...clientData }, {
+        const mvccResult = await updateWithMVCC('mother', mother_id, { version, ...motherUpdateData }, {
             strategy,
             userId: req.user?.user_id || req.user?.id
         });
@@ -260,12 +286,16 @@ const updateMother = async (req, res, next) => {
             });
         }
 
-        return res.status(200).json({
-            message: "Mother updated successfully",
-            result: mvccResult.record,
-            strategyUsed: mvccResult.strategyUsed
+        const updatedMotherWithUser = await prisma.mother.findUnique({
+            where: { mother_id },
+            include: { user: true }
         });
 
+        return res.status(200).json({
+            message: "Mother updated successfully",
+            result: updatedMotherWithUser,
+            strategyUsed: mvccResult.strategyUsed
+        });
 
     } catch (error) {
         return next(error);
