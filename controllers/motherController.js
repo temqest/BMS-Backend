@@ -249,6 +249,7 @@ const updateMother = async (req, res, next) => {
         } = req.body;
 
         // 1. Update User fields if provided
+        const { profile_url } = req.body;
         const userUpdateData = {};
         if (first_name !== undefined) userUpdateData.first_name = first_name;
         if (middle_name !== undefined) userUpdateData.middle_name = middle_name;
@@ -256,6 +257,7 @@ const updateMother = async (req, res, next) => {
         if (address !== undefined) userUpdateData.address = address;
         if (phone_number !== undefined) userUpdateData.phone_number = phone_number;
         if (email !== undefined) userUpdateData.email = email;
+        if (profile_url !== undefined) userUpdateData.profile_url = profile_url;
 
         if (Object.keys(userUpdateData).length > 0 && motherRecord.user_id) {
             await prisma.user.update({
@@ -403,6 +405,14 @@ const getAllActiveMother = async (req, res, next) => {
             },
             include: {
                 user: true,
+                pregnancies: {
+                    orderBy: { created_at: "desc" },
+                    include: {
+                        prenatalVisits: {
+                            orderBy: { visit_date: "desc" }
+                        }
+                    }
+                }
             },
         });
 
@@ -467,6 +477,14 @@ const getAllMother = async (req, res, next) => {
             },
             include : {
                 user : true,
+                pregnancies: {
+                    orderBy: { created_at: "desc" },
+                    include: {
+                        prenatalVisits: {
+                            orderBy: { visit_date: "desc" }
+                        }
+                    }
+                }
             },
         });
 

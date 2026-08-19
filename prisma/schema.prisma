@@ -9,15 +9,16 @@ datasource db {
 
 //Facility schema
 model Facility {
-  facility_id    String   @id @default(uuid())
-  facility_name  String
-  address        String
-  contact_number String
-  email          String
-  type           String
-  created_at     DateTime @default(now())
-  updated_at     DateTime @default(now()) @updatedAt
-  version        Int      @default(1)
+  facility_id          String   @id @default(uuid())
+  facility_name        String
+  address              String
+  contact_number       String
+  email                String
+  type                 String
+  facility_profile_url String?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @default(now()) @updatedAt
+  version              Int      @default(1)
 
   users               User[]
   onlineReferralsFrom Online_Referral[] @relation("FromFacility")
@@ -37,6 +38,7 @@ model User {
   email        String?
   address      String
   password     String?
+  profile_url  String?
   is_active    Boolean  @default(true)
   sync_status  String?  @default("synced")
   version      Int      @default(1)
@@ -154,6 +156,7 @@ model Lab_Screening {
   visit_id          String
   screening_type    String
   result            String
+  file_url          String?
   date_of_screening DateTime @default(now())
   remarks           String?
   sync_status       String   @default("synced")

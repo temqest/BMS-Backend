@@ -20,9 +20,10 @@ const staffRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife'];
 const allUserRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
 const motherOnly = ['Mother'];
 
-router.get('/all', verifyToken, checkUserRole(sysAdminOnly), getAllMother);
-router.get('/active', verifyToken, checkUserRole(sysAdminOnly), getAllActiveMother);
+router.get('/all', verifyToken, checkUserRole(staffRoles), getAllMother);
+router.get('/active', verifyToken, checkUserRole(staffRoles), getAllActiveMother);
 router.get('/active/:facility_id', verifyToken, checkUserRole(staffRoles), getAllActiveMotherByFacility);
+router.get('/get/:mother_id', verifyToken, checkUserRole(staffRoles), searchMotherByID);
 router.get('/search/:mother_id', verifyToken, checkUserRole(staffRoles), searchMotherByID);
 
 router.post('/register', verifyToken, checkUserRole(staffRoles), registerMother);

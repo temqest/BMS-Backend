@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const {
+    uploadLabFile,
     registerLabScreening, 
     updateLabScreening, 
     deleteLabScreening, 
@@ -10,8 +11,11 @@ const {
     getLabScreeningByMother
 } = require('../controllers/labScreeningController');
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
+const { upload } = require('../util/storage');
 
 const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
+
+router.post('/upload', verifyToken, checkUserRole(allowedRoles), upload.single('file'), uploadLabFile);
 
 router.post('/register', verifyToken, checkUserRole(allowedRoles), registerLabScreening);
 

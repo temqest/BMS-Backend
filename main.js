@@ -42,8 +42,11 @@ const { apiLimiter } = require('./middleware/rateLimmiter');
 
 const sendRouter = require('./router/sendRouter');
 
+const path = require('path');
+
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
 app.get('/health', (req, res) => {
     res.send("Birth Monitoring System's Backend is working fine")

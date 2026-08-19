@@ -2,9 +2,58 @@ const prisma = require('../util/db');
 const validate = require('../util/validation');
 const { updateWithMVCC } = require('../services/conflicResolution');
 
+const path = require('path');
+const fs = require('fs');
+
+const uploadLabFile = async (req, res, next) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        const file = req.file;
+        const fileExt = file.originalname.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+
+        try {
+            const { supabase } = require('../util/storage');
+            const filePath = `lab-documents/${fileName}`;
+            const { data, error } = await supabase.storage
+                .from('lab-files')
+                .upload(filePath, file.buffer, {
+                    contentType: file.mimetype,
+                    upsert: true,
+                });
+
+            if (!error && data) {
+                const { data: publicUrlData } = supabase.storage.from('lab-files').getPublicUrl(filePath);
+                return res.status(200).json({ file_url: publicUrlData.publicUrl });
+            }
+        } catch (supabaseErr) {
+            console.warn("Supabase storage upload skipped/failed:", supabaseErr.message);
+        }
+
+        const uploadsDir = path.join(__dirname, '../public/uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        const localFilePath = path.join(uploadsDir, fileName);
+        fs.writeFileSync(localFilePath, file.buffer);
+
+        const baseUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 6700}`;
+        const file_url = `${baseUrl}/uploads/${fileName}`;
+
+        return res.status(200).json({ file_url });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
 const registerLabScreening = async (req, res, next) => {
     try {
-        const {pregnancy_id, visit_id, screening_type, result, date_of_screening, remarks} = req.body;
+        const {pregnancy_id, visit_id, screening_type, result, file_url, date_of_screening, remarks} = req.body;
 
         if(!pregnancy_id || !visit_id || !screening_type || !result || !date_of_screening) {
             return res.status(400).json({error : "Missing Required Fields"});
@@ -24,6 +73,7 @@ const registerLabScreening = async (req, res, next) => {
                 visit_id : visit_id,
                 screening_type : screening_type,
                 result : result,
+                file_url : file_url,
                 date_of_screening : date_of_screening,
                 remarks : remarks,
                 sync_status : "synced"
@@ -169,7 +219,7 @@ const getLabScreeningByMother = async (req, res, next) => {
 
         const {mother_id} = req.params;
 
-        const isMotherExist = await validate.isMotherExistExist(mother_id)
+        const isMotherExist = await validate.isMotherExist(mother_id)
 
         if(!isMotherExist) {
             return res.status(404).json({error : "Mother Doesn't Exist"})
@@ -177,9 +227,9 @@ const getLabScreeningByMother = async (req, res, next) => {
 
         const pregnancies = await prisma.pregnancy.findMany({
             where : {
-                mother_id : mother_id, 
-                select : {pregnancy_id : true}
-            }
+                mother_id : mother_id
+            },
+            select : {pregnancy_id : true}
         })
 
         if(!pregnancies || pregnancies.length === 0) {
@@ -200,14 +250,15 @@ const getLabScreeningByMother = async (req, res, next) => {
         });
 
         if(labScreening.length === 0) {
-            return res.status(404).json({error : "No Lab Screenings Found", 
+            return res.status(200).json({
+                message : "No Lab Screenings Found", 
                 data : []
             })
         }
 
         return res.status(200).json({
             message : "Lab Screenings Successfully Retrieved",
-            data : response
+            data : labScreening
         })
 
     } catch (error) {
@@ -216,6 +267,7 @@ const getLabScreeningByMother = async (req, res, next) => {
 }
 
 module.exports = {
+    uploadLabFile,
     registerLabScreening,
     updateLabScreening,
     deleteLabScreening,
