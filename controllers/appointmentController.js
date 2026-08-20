@@ -68,7 +68,14 @@ const createAppointment = async (req, res, next) => {
 
 const getAllAppointments = async (req, res, next) => {
     try {
-        const whereClause = req.user?.role === 'SystemAdmin' ? {} : { facility_id: req.user?.facility_id };
+        const whereClause = req.user?.role === 'SystemAdmin' 
+            ? {} 
+            : {
+                OR: [
+                    { facility_id: req.user?.facility_id },
+                    { user: { facility_id: req.user?.facility_id } }
+                ]
+              };
 
         const appointments = await prisma.appointment.findMany({
             where: whereClause,
@@ -186,7 +193,12 @@ const getAppointmentsByFacility = async (req, res, next) => {
         }
 
         const appointments = await prisma.appointment.findMany({
-            where: { facility_id: facility_id },
+            where: {
+                OR: [
+                    { facility_id: facility_id },
+                    { user: { facility_id: facility_id } }
+                ]
+            },
             include: {
                 user: {
                     select: {
