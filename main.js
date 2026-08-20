@@ -41,6 +41,7 @@ const appointmentRouter = require('./router/appointmentRouter');
 const { apiLimiter } = require('./middleware/rateLimmiter');
 
 const sendRouter = require('./router/sendRouter');
+const ocrRouter = require('./router/ocrRouter');
 
 const path = require('path');
 
@@ -87,6 +88,8 @@ app.use('/api/v1/cdss', cdssRouter)
 app.use('/api/v1/appointment', appointmentRouter)
 
 app.use('/api/v1/send', sendRouter)
+
+app.use('/api/v1/ocr', ocrRouter)
 
 app.use((err, req, res, next) => {
     console.error("Unhandled Server Error", err);
