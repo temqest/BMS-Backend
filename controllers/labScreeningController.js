@@ -5,6 +5,33 @@ const { updateWithMVCC } = require('../services/conflicResolution');
 const path = require('path');
 const fs = require('fs');
 
+function saveBase64ToFile(fileUrl) {
+    if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.startsWith('data:')) {
+        return fileUrl;
+    }
+    try {
+        const matches = fileUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+            const mimeType = matches[1];
+            const base64Data = matches[2];
+            const buffer = Buffer.from(base64Data, 'base64');
+            const ext = mimeType.split('/')[1] || 'jpg';
+            const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
+            const uploadsDir = path.join(__dirname, '../public/uploads');
+            if (!fs.existsSync(uploadsDir)) {
+                fs.mkdirSync(uploadsDir, { recursive: true });
+            }
+            const localFilePath = path.join(uploadsDir, fileName);
+            fs.writeFileSync(localFilePath, buffer);
+            const baseUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 6700}`;
+            return `${baseUrl}/uploads/${fileName}`;
+        }
+    } catch (err) {
+        console.warn("Failed to convert base64 file_url to file on server:", err);
+    }
+    return fileUrl;
+}
+
 const uploadLabFile = async (req, res, next) => {
     try {
         if (!req.file) {
@@ -112,13 +139,15 @@ const registerLabScreening = async (req, res, next) => {
             }
         }
 
+        const finalFileUrl = saveBase64ToFile(file_url);
+
         const labScreening = await prisma.lab_Screening.create({
             data : {
                 pregnancy_id : targetPregnancyId,
                 visit_id : targetVisitId,
                 screening_type : screening_type,
                 result : result,
-                file_url : file_url,
+                file_url : finalFileUrl,
                 date_of_screening : date_of_screening,
                 remarks : remarks,
                 sync_status : "synced"
@@ -142,6 +171,10 @@ const updateLabScreening = async (req, res, next) => {
 
         if(!(await validate.isLabScreeningExist(screening_id))) {
             return res.status(404).json({error: "Lab Screening Not Found!"});
+        }
+
+        if (clientData.file_url) {
+            clientData.file_url = saveBase64ToFile(clientData.file_url);
         }
 
         const mvccResult = await updateWithMVCC('lab_Screening', screening_id, { version, ...clientData }, {
