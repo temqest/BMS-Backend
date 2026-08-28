@@ -46,26 +46,53 @@ const registerPrenatalVisit = async (req, res, next) => {
             return res.status(400).json({ error: "Invalid Medical Data", details: vitalsValidationErrors });
         }
 
-        const pregnancy = await prisma.pregnancy.findUnique({
+        let targetPregnancyId = pregnancy_id;
+        let pregnancy = await prisma.pregnancy.findUnique({
             where : {pregnancy_id : pregnancy_id}
         });
+
+        if (!pregnancy && req.body.mother_id) {
+            const motherRecord = await prisma.mother.findFirst({
+                where: { OR: [{ mother_id: req.body.mother_id }, { user_id: req.body.mother_id }] }
+            });
+            if (motherRecord) {
+                pregnancy = await prisma.pregnancy.findFirst({
+                    where: { mother_id: motherRecord.mother_id, pregnancy_status: "Active" },
+                    orderBy: { date_of_registration: "desc" }
+                }) || await prisma.pregnancy.findFirst({
+                    where: { mother_id: motherRecord.mother_id },
+                    orderBy: { date_of_registration: "desc" }
+                });
+            }
+        }
 
         if(!pregnancy) {
             return res.status(404).json({error: "Pregnancy Not Found!"});
         }
+        targetPregnancyId = pregnancy.pregnancy_id;
 
-        const health_worker = await prisma.user.findUnique({
-            where : { user_id : health_worker_id}
-        });
+        let healthWorkerIdToUse = health_worker_id;
+        let health_worker = health_worker_id
+            ? await prisma.user.findUnique({ where: { user_id: health_worker_id } })
+            : null;
 
-        if(!health_worker) {
-            return res.status(404).json({error: "Health Worker Not Found!"});
+        if (!health_worker) {
+            const fallbackUser = req.user?.user_id
+                ? await prisma.user.findUnique({ where: { user_id: req.user.user_id } })
+                : await prisma.user.findFirst({ where: { is_active: true } });
+
+            if (fallbackUser) {
+                health_worker = fallbackUser;
+                healthWorkerIdToUse = fallbackUser.user_id;
+            } else {
+                return res.status(404).json({ error: "Health Worker Not Found!" });
+            }
         }
 
         const newPrenatalVisit = await prisma.prenatalVisit.create({
-            data : {
-                pregnancy_id : pregnancy_id,
-                health_worker_id : health_worker_id,
+            data: {
+                pregnancy_id: targetPregnancyId,
+                health_worker_id: healthWorkerIdToUse,
                 trimester : trimester,
                 visit_number : visit_number,
                 age_of_gestation_weeks : age_of_gestation_weeks,
@@ -331,14 +358,23 @@ const getAllPrenatalVisitsByMother = async (req, res, next) => {
             return res.status(400).json("Missing Mother ID")
         }
 
-        if(!(await validate.isMotherExist(mother_id))) {
-            return res.status(404).json({error: "Mother Not Found!"})
+        const motherRecord = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            }
+        });
+
+        if (!motherRecord) {
+            return res.status(404).json({ error: "Mother Not Found!" });
         }
 
         const visits = await prisma.prenatalVisit.findMany({
-            where : {
-                pregnancy : {
-                    mother_id : mother_id
+            where: {
+                pregnancy: {
+                    mother_id: motherRecord.mother_id
                 }
             },
             include : {

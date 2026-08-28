@@ -18,8 +18,19 @@ const registerPregnancy = async (req, res, next) => {
             pregnancy_status
         } = req.body;
 
-        if(!motherId || !gravida || !parity || !age_group || !lmp_date || !pregnancy_status){
+        let targetMotherId = motherId || req.body.mother_id;
+        if (!targetMotherId || !gravida || !parity || !age_group || !lmp_date || !pregnancy_status){
             return res.status(400).json({ error: "Missing Required Fields"});
+        }
+
+        const motherRecord = await prisma.mother.findFirst({
+            where: { OR: [{ mother_id: targetMotherId }, { user_id: targetMotherId }] }
+        });
+
+        if (motherRecord) {
+            targetMotherId = motherRecord.mother_id;
+        } else {
+            return res.status(404).json({ error: "Mother Not Found!" });
         }
 
         const today = new Date();
@@ -29,9 +40,24 @@ const registerPregnancy = async (req, res, next) => {
             return res.status(400).json({error: "LMP Date Cannot Be In The Future"});
         }
 
+        // Check if identical active pregnancy already registered
+        const existingPreg = await prisma.pregnancy.findFirst({
+            where: {
+                mother_id: targetMotherId,
+                lmp_date: Lmp_Date,
+            }
+        });
+
+        if (existingPreg) {
+            return res.status(200).json({
+                message: "Pregnancy already registered",
+                pregnancy: existingPreg,
+            });
+        }
+
         const pregnancy = await prisma.pregnancy.create({
             data : {
-                mother_id: motherId,
+                mother_id: targetMotherId,
                 date_of_registration: today,
                 lmp_date: Lmp_Date,
                 gravida: Number(gravida),
@@ -169,8 +195,13 @@ const getAllPreganciesByMother = async (req, res, next) => {
             return res.status(400).json({error : "Missing Mother ID!"});
         }
 
-        const mother = await prisma.mother.findUnique({
-            where : {mother_id : mother_id}
+        const mother = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            }
         });
 
         if(!mother) {
@@ -178,7 +209,7 @@ const getAllPreganciesByMother = async (req, res, next) => {
         }
 
         const pregnancy = await prisma.pregnancy.findMany({
-            where : {mother_id : mother_id},
+            where : {mother_id : mother.mother_id},
             orderBy : {date_of_registration : "desc"}
         });
 

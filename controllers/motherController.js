@@ -62,7 +62,15 @@ const registerMother = async (req, res, next) => {
         });
 
         if(existingMother) {
-            return res.status(400).json({error : "User already exist"});
+            const fullMother = await prisma.mother.findUnique({
+                where: { user_id: existingMother.user_id }
+            });
+            return res.status(200).json({
+                message: "User already exist",
+                already_exists: true,
+                user: existingMother,
+                mother: fullMother || existingMother
+            });
         }
 
         const result = await prisma.$transaction(async(prismaClient) => {
@@ -224,8 +232,13 @@ const updateMother = async (req, res, next) => {
             return res.status(400).json({ error: "Mother ID is required" });
         }
 
-        const motherRecord = await prisma.mother.findUnique({
-            where: { mother_id },
+        const motherRecord = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            },
             include: { user: true }
         });
 
@@ -434,8 +447,13 @@ const searchMotherByID = async (req, res, next) => {
             return res.status(400).json({error : "Missing Mother ID"});
         }
 
-        const searchMotherResult = await prisma.mother.findUnique({
-            where : {mother_id : mother_id},
+        const searchMotherResult = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            },
             include : {
                 user: true,
                 pregnancies: {

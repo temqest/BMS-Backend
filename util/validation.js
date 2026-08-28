@@ -12,7 +12,14 @@ const isUserExist = async (user_id) => {
 
 const isMotherExist = async (mother_id) => {
     try {
-        const record = await prisma.mother.findUnique({ where: { mother_id } });
+        const record = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            }
+        });
         return record !== null;
     } catch (error) {
         console.error("Error in isMotherExist:", error);

@@ -16,7 +16,7 @@ const otpLimiter = rateLimit({
 const apiLimiter = rateLimit({
 
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: 2000,
     message : {
         status : 429,
         error: "Too many request, please slow down."

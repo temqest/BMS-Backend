@@ -125,7 +125,16 @@ const login = async (req, res, next) => {
         });
 
         if (!user) {
-            return res.status(401).json({error: "Athentication Failed. User not found!"});
+            return res.status(401).json({error: "Authentication Failed. User not found!"});
+        }
+
+        if (!user.password) {
+            return res.status(400).json({
+                error: "PASSWORD_NOT_SET",
+                message: "Account exists but password is not set yet. Please verify OTP to set up your password.",
+                requiresPasswordSetup: true,
+                identifier: user.email || user.phone_number || identifier
+            });
         }
 
         const isPasswordMatch = await bcrypt.compare(password, user.password);
@@ -147,7 +156,7 @@ const login = async (req, res, next) => {
                 user_id : user.user_id,
                 first_name : user.first_name,
                 middle_name : user.middle_name,
-                last_name : user.middle_name,
+                last_name : user.last_name,
                 role: user.role,
                 facility_id : user.facility ? user.facility.facility_id : null,
             },
@@ -156,6 +165,69 @@ const login = async (req, res, next) => {
         next(error);
     }
 }
+
+const setupPassword = async (req, res, next) => {
+    try {
+        const { identifier, otp, newPassword } = req.body;
+
+        if (!identifier || !otp || !newPassword) {
+            return res.status(400).json({ error: "Missing required fields" });
+        }
+
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { phone_number: identifier },
+                    { email: identifier },
+                ],
+                is_active: true
+            },
+            include: { facility: true }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: "User account not found" });
+        }
+
+        const purpose = 'registration';
+        const isValidOtp = await checkOtp.verifyOTP(identifier, otp, purpose);
+
+        if (!isValidOtp) {
+            return res.status(400).json({ error: "Invalid OTP code" });
+        }
+
+        const salt = await bcrypt.genSalt(14);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        const updatedUser = await prisma.user.update({
+            where: { user_id: user.user_id },
+            data: {
+                password: hashedPassword
+            }
+        });
+
+        const token = jwt.sign(
+            { user_id: updatedUser.user_id, role: updatedUser.role, facility_id: updatedUser.facility_id },
+            JWT_SECRET,
+            { expiresIn: "30d" }
+        );
+
+        return res.status(200).json({
+            message: "Password set successfully. Account activated.",
+            token: token,
+            user: {
+                user_id: updatedUser.user_id,
+                first_name: updatedUser.first_name,
+                middle_name: updatedUser.middle_name || "",
+                last_name: updatedUser.last_name,
+                role: updatedUser.role,
+                facility_id: user.facility ? user.facility.facility_id : null,
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
 const createStaff = async (req, res, next) => {
     try {
@@ -246,5 +318,6 @@ const createStaff = async (req, res, next) => {
 module.exports = {
     register,
     login,
+    setupPassword,
     createStaff,
 };

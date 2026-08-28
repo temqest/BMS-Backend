@@ -10,17 +10,66 @@ const registerSupplementRecord = async (req, res, next) => {
             return res.status(400).json({error : "Missing Required Fields"});
         }
 
-        if(!(await validate.isPregnancyExist(pregnancy_id))) {
-            return res.status(404).json({error: "Pregnancy ID doesn't Exist"});
+        let targetPregnancyId = pregnancy_id;
+        let pregnancy = await prisma.pregnancy.findUnique({
+            where: { pregnancy_id: pregnancy_id }
+        });
+
+        if (!pregnancy && req.body.mother_id) {
+            const motherRecord = await prisma.mother.findFirst({
+                where: { OR: [{ mother_id: req.body.mother_id }, { user_id: req.body.mother_id }] }
+            });
+            if (motherRecord) {
+                pregnancy = await prisma.pregnancy.findFirst({
+                    where: { mother_id: motherRecord.mother_id },
+                    orderBy: { date_of_registration: "desc" }
+                });
+            }
+        }
+
+        if (!pregnancy) {
+            return res.status(404).json({ error: "Pregnancy ID doesn't Exist" });
+        }
+        targetPregnancyId = pregnancy.pregnancy_id;
+
+        let targetVisitId = visit_id;
+        let visitExists = visit_id ? await prisma.prenatalVisit.findUnique({ where: { visit_id: visit_id } }) : null;
+
+        if (!visitExists) {
+            const latestVisit = await prisma.prenatalVisit.findFirst({
+                where: { pregnancy_id: targetPregnancyId },
+                orderBy: { visit_date: "desc" }
+            });
+            if (latestVisit) {
+                targetVisitId = latestVisit.visit_id;
+            } else {
+                const defaultHealthWorker = req.user?.user_id || (await prisma.user.findFirst({ where: { is_active: true } }))?.user_id || "system";
+                const createdVisit = await prisma.prenatalVisit.create({
+                    data: {
+                        pregnancy_id: targetPregnancyId,
+                        health_worker_id: defaultHealthWorker,
+                        trimester: 1,
+                        visit_number: 1,
+                        age_of_gestation_weeks: 12,
+                        weight_kg: 50,
+                        temperature_celsius: 36.5,
+                        pulse_rate_bpm: 75,
+                        bp_systolic: 120,
+                        bp_diastolic: 80,
+                        sync_status: "synced",
+                    }
+                });
+                targetVisitId = createdVisit.visit_id;
+            }
         }
 
         const newSupplementRecord = await prisma.supplementation_Record.create({
             data : {
-                pregnancy_id : pregnancy_id,
+                pregnancy_id : targetPregnancyId,
                 supplement_type : supplement_type,
                 date_given : date_given,
                 tablets_given_count : tablets_given_count,
-                visit_id : visit_id
+                visit_id : targetVisitId
             }
         });
 
@@ -165,12 +214,21 @@ const getSupplementRecordByMother = async (req, res, next) => {
     try {
         const { mother_id } = req.params;
 
-        if (!(await validate.isMotherExist(mother_id))) {
+        const motherRecord = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            }
+        });
+
+        if (!motherRecord) {
             return res.status(404).json({ error: "Mother doesn't exist" });
         }
 
         const pregnancies = await prisma.pregnancy.findMany({
-            where: { mother_id: mother_id },
+            where: { mother_id: motherRecord.mother_id },
             select: { pregnancy_id: true }
         });
 

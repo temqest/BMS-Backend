@@ -13,11 +13,23 @@ const createAppointment = async (req, res, next) => {
             reason,
         } = req.body;
 
-        if (!user_id || !appointment_date || !appointment_time) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+        let targetUserId = user_id;
+        let userRecord = await prisma.user.findUnique({ where: { user_id } });
+
+        if (!userRecord) {
+            const motherRecord = await prisma.mother.findFirst({
+                where: { OR: [{ mother_id: user_id }, { user_id: user_id }] }
+            });
+            if (motherRecord && motherRecord.user_id) {
+                targetUserId = motherRecord.user_id;
+                userRecord = await prisma.user.findUnique({ where: { user_id: motherRecord.user_id } });
+            } else if (req.user?.user_id) {
+                targetUserId = req.user.user_id;
+                userRecord = await prisma.user.findUnique({ where: { user_id: req.user.user_id } });
+            }
         }
 
-        if (!(await validate.isUserExist(user_id))) {
+        if (!userRecord) {
             return res.status(404).json({ error: "User Doesn't Exist!" });
         }
 
@@ -25,18 +37,19 @@ const createAppointment = async (req, res, next) => {
             return res.status(404).json({ error: "Facility Doesn't Exist!" });
         }
 
-        if (new Date(appointment_date) < new Date()) {
-            return res.status(400).json({ error: "Appointment Date Cannot Be In The Past!" });
-        }
-
         const isConflict = await prisma.appointment.findFirst({
             where : {
+                user_id: targetUserId,
                 appointment_date : new Date(appointment_date),
+                appointment_time : appointment_time,
             }
-        })
+        });
 
         if (isConflict) {
-            return res.status(400).json({ error: "Invalid Appointment Date, There is already an appointment set for this date" })
+            return res.status(200).json({
+                message: "Appointment already scheduled for this user at this date/time",
+                data: isConflict,
+            });
         }
 
         const targetFacilityId = req.user?.role === 'SystemAdmin'
@@ -45,7 +58,7 @@ const createAppointment = async (req, res, next) => {
 
         const newAppointment = await prisma.appointment.create({
             data: {
-                user_id: user_id,
+                user_id: targetUserId,
                 facility_id: targetFacilityId,
                 appointment_date: new Date(appointment_date),
                 appointment_time: appointment_time,
