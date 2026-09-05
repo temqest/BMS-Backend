@@ -11,7 +11,8 @@ const {
     softDeleteMother,
     hardDeleteMother,
     getProfile,
-    updateMyProfile
+    updateMyProfile,
+    assignFacilityByCode
 } = require("../controllers/motherController");
 const { verifyToken, checkUserRole } = require("../middleware/authMiddleware");
 
@@ -28,6 +29,7 @@ router.get('/search/:mother_id', verifyToken, checkUserRole(staffRoles), searchM
 
 router.post('/register', verifyToken, checkUserRole(staffRoles), registerMother);
 router.post('/self-register', selfRegisterMother);
+router.post('/assign-facility', verifyToken, checkUserRole(staffRoles), assignFacilityByCode);
 
 router.put('/update/:mother_id', verifyToken, checkUserRole(staffRoles), updateMother);
 router.put('/deactivate/:mother_id', verifyToken, checkUserRole(staffRoles), softDeleteMother);

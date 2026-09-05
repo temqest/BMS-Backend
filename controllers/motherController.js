@@ -563,7 +563,11 @@ const getProfile = async (req, res, next) => {
         const myProfile = await prisma.mother.findUnique({
             where : {user_id : my_user_id},
             include : {
-                user : true,
+                user : {
+                    include: {
+                        facility: true
+                    }
+                },
                 pregnancies : {
                     orderBy: { date_of_registration: "desc" },
                     include: {
@@ -652,6 +656,75 @@ const updateMyProfile = async (req, res, next) => {
     }
 }
 
+const assignFacilityByCode = async (req, res, next) => {
+    try {
+        const staff_facility_id = req.user?.facility_id;
+        const { mother_code, mother_id, user_id } = req.body;
+        const rawCode = (mother_code || mother_id || user_id || "").trim();
+
+        if (!staff_facility_id) {
+            return res.status(400).json({ error: "Staff user is not assigned to any health facility" });
+        }
+
+        if (!rawCode) {
+            return res.status(400).json({ error: "Mother code or ID is required" });
+        }
+
+        let cleanId = rawCode;
+        if (rawCode.startsWith("{") && rawCode.endsWith("}")) {
+            try {
+                const parsed = JSON.parse(rawCode);
+                cleanId = parsed.mother_id || parsed.user_id || parsed.code || rawCode;
+            } catch (e) {}
+        }
+
+        if (cleanId.toUpperCase().startsWith("MTH-")) {
+            cleanId = cleanId.substring(4);
+        }
+
+        const motherRecord = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: cleanId },
+                    { user_id: cleanId },
+                    { family_serial_no: cleanId },
+                    { mother_id: { endsWith: cleanId } },
+                    { user_id: { endsWith: cleanId } }
+                ]
+            },
+            include: { user: true }
+        });
+
+        if (!motherRecord || !motherRecord.user) {
+            return res.status(404).json({ error: "No mother found matching the provided code" });
+        }
+
+        const targetUserId = motherRecord.user.user_id;
+
+        const updatedUser = await prisma.user.update({
+            where: { user_id: targetUserId },
+            data: {
+                facility_id: staff_facility_id,
+                sync_status: "synced"
+            },
+            include: { facility: true }
+        });
+
+        const fullMother = await prisma.mother.findUnique({
+            where: { mother_id: motherRecord.mother_id },
+            include: { user: { include: { facility: true } } }
+        });
+
+        return res.status(200).json({
+            message: "Mother successfully assigned to facility",
+            user: updatedUser,
+            mother: fullMother
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+}
 
 module.exports = {
     registerMother,
@@ -664,5 +737,6 @@ module.exports = {
     searchMotherByID,
     getAllActiveMotherByFacility,
     updateMyProfile,
-    getProfile
+    getProfile,
+    assignFacilityByCode
 }
