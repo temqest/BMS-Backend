@@ -564,7 +564,23 @@ const getProfile = async (req, res, next) => {
             where : {user_id : my_user_id},
             include : {
                 user : true,
-                pregnancies : true
+                pregnancies : {
+                    orderBy: { date_of_registration: "desc" },
+                    include: {
+                        prenatalVisits: {
+                            orderBy: { visit_date: "desc" }
+                        },
+                        deliveryOutcomes: {
+                            orderBy: { delivery_date: "desc" },
+                            include: {
+                                newbornRecords: true,
+                                postpartumVisits: {
+                                    orderBy: { visit_date: "desc" }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         });
 
