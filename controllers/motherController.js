@@ -579,50 +579,61 @@ const getProfile = async (req, res, next) => {
 }
 
 const updateMyProfile = async (req, res, next) => {
-
     try {
+        const my_user_id = req.user?.user_id;
 
-        const my_user_id = req.user.user_id;
+        if (!my_user_id) {
+            return res.status(401).json({ error: "Unauthorized user" });
+        }
 
-        const {first_name, middle_name, last_name, address, phone_number, email, birth_date, civil_status, blood_type} = req.body;
+        const { first_name, middle_name, last_name, address, phone_number, email, birth_date, civil_status, blood_type } = req.body;
 
         const updatedProfile = await prisma.$transaction(async (prismaClient) => {
+            const userData = {};
+            if (first_name !== undefined) userData.first_name = first_name;
+            if (middle_name !== undefined) userData.middle_name = middle_name;
+            if (last_name !== undefined) userData.last_name = last_name;
+            if (address !== undefined) userData.address = address;
+            if (phone_number !== undefined) userData.phone_number = phone_number;
+            if (email !== undefined) userData.email = email;
 
             const user = await prismaClient.user.update({
-                where : {user_id : my_user_id},
-                data : {
-                    first_name : first_name,
-                    middle_name : middle_name,
-                    last_name : last_name,
-                    address : address,
-                    phone_number : phone_number,
-                    email : email,
-                }
-            })
+                where: { user_id: my_user_id },
+                data: userData
+            });
 
-            const mother = await prismaClient.mother.update({
-                where : {user_id : my_user_id},
-                data : {
-                    birth_date : birth_date ? new Date(birth_date) : undefined,
-                    age : birth_date ? calculateAge(birth_date) : undefined,
-                    civil_status : civil_status,
-                    blood_type : blood_type
-                }
-            })
+            let mother = await prismaClient.mother.findUnique({
+                where: { user_id: my_user_id }
+            });
 
-            return {user, mother};
+            if (mother) {
+                const motherData = {};
+                if (birth_date) {
+                    motherData.birth_date = new Date(birth_date);
+                    motherData.age = calculateAge(motherData.birth_date);
+                }
+                if (civil_status !== undefined) motherData.civil_status = civil_status;
+                if (blood_type !== undefined) motherData.blood_type = blood_type;
+
+                if (Object.keys(motherData).length > 0) {
+                    mother = await prismaClient.mother.update({
+                        where: { user_id: my_user_id },
+                        data: motherData
+                    });
+                }
+            }
+
+            return { user, mother };
         });
 
         return res.status(200).json({
-            message : "Profile updated successfully",
-            result : updatedProfile
-        })
+            message: "Profile updated successfully",
+            result: updatedProfile
+        });
 
     } catch (error) {
         return next(error);
     }
-
-    
 }
 
 

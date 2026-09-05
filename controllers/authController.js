@@ -113,15 +113,17 @@ const login = async (req, res, next) => {
             return res.status(400).json({error: "Identifier (phone/email) and password are missing"})
         }
 
+        const cleanIdentifier = identifier.trim();
+
         const user  = await prisma.user.findFirst({
             where: {
                 OR: [
-                    {phone_number : identifier},
-                    {email : identifier},
+                    { phone_number: cleanIdentifier },
+                    { email: { equals: cleanIdentifier, mode: 'insensitive' } },
                 ],
-                is_active : true
+                is_active: true
             },
-            include: {facility : true},
+            include: { facility: true },
         });
 
         if (!user) {
@@ -133,7 +135,7 @@ const login = async (req, res, next) => {
                 error: "PASSWORD_NOT_SET",
                 message: "Account exists but password is not set yet. Please verify OTP to set up your password.",
                 requiresPasswordSetup: true,
-                identifier: user.email || user.phone_number || identifier
+                identifier: user.email || user.phone_number || cleanIdentifier
             });
         }
 
@@ -174,11 +176,13 @@ const setupPassword = async (req, res, next) => {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
+        const cleanIdentifier = identifier.trim();
+
         const user = await prisma.user.findFirst({
             where: {
                 OR: [
-                    { phone_number: identifier },
-                    { email: identifier },
+                    { phone_number: cleanIdentifier },
+                    { email: { equals: cleanIdentifier, mode: 'insensitive' } },
                 ],
                 is_active: true
             },
@@ -315,9 +319,58 @@ const createStaff = async (req, res, next) => {
     }
 };
 
+const changePassword = async (req, res, next) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const user_id = req.user?.user_id;
+
+        if (!user_id) {
+            return res.status(401).json({ error: "Unauthorized access" });
+        }
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ error: "Current password and new password are required" });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: "New password must be at least 6 characters long" });
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { user_id }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: "User account not found" });
+        }
+
+        if (user.password) {
+            const isMatch = await bcrypt.compare(currentPassword, user.password);
+            if (!isMatch) {
+                return res.status(401).json({ error: "Incorrect current password" });
+            }
+        }
+
+        const salt = await bcrypt.genSalt(14);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await prisma.user.update({
+            where: { user_id },
+            data: { password: hashedPassword }
+        });
+
+        return res.status(200).json({
+            message: "Password updated successfully!"
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     register,
     login,
     setupPassword,
     createStaff,
+    changePassword,
 };
