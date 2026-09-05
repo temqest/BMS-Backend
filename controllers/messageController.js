@@ -14,20 +14,33 @@ const createMessage = async (req, res, next) => {
             return res.status(400).json({ error: "Message content is required" });
         }
 
+        const senderUser = await prisma.user.findUnique({
+            where: { user_id: sender_id }
+        });
+
+        if (!senderUser) {
+            return res.status(404).json({ error: "Sender Doesn't Exist" });
+        }
+
         message_type = message_type || "text";
         message_date = message_date ? new Date(message_date) : new Date();
 
         if (!receiver_id) {
+            if (!senderUser.facility_id) {
+                return res.status(400).json({ error: "NOT_AFFILIATED", message: "You are not affiliated with any healthcare facility." });
+            }
+
             const staffUser = await prisma.user.findFirst({
                 where: {
-                    role: { in: ['HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Admin', 'SystemAdmin'] },
+                    facility_id: senderUser.facility_id,
+                    role: { in: ['HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Staff', 'Admin'] },
                     is_active: true,
                 }
             });
             if (staffUser) {
                 receiver_id = staffUser.user_id;
             } else {
-                return res.status(400).json({ error: "No recipient user found" });
+                return res.status(400).json({ error: "NOT_AFFILIATED", message: "No active healthcare staff found for your facility." });
             }
         }
         
@@ -177,6 +190,14 @@ const getAllMessageForUser = async (req, res, next) => {
             return res.status(400).json({ error: "Missing User_ID!" });
         }
 
+        const currentUser = await prisma.user.findUnique({
+            where: { user_id }
+        });
+
+        if (!currentUser) {
+            return res.status(404).json({ error: "User Doesn't Exist!" });
+        }
+
         const allMessages = await prisma.in_App_Message.findMany({
             where: {
                 OR: [
@@ -205,20 +226,29 @@ const getAllMessageForUser = async (req, res, next) => {
             }
         }
 
-        if (!contactUser && req.user) {
+        // Exclude SystemAdmin if previously selected
+        if (contactUser && contactUser.role === 'SystemAdmin') {
+            contactUser = null;
+        }
+
+        if (!contactUser && currentUser.facility_id) {
             contactUser = await prisma.user.findFirst({
                 where: {
-                    role: { in: ['HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Admin', 'SystemAdmin'] },
+                    facility_id: currentUser.facility_id,
+                    role: { in: ['HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Staff', 'Admin'] },
                     is_active: true,
                 },
                 select: { user_id: true, first_name: true, last_name: true, role: true, profile_url: true }
             });
         }
 
+        const hasFacility = Boolean(currentUser.facility_id && (contactUser || currentUser.facility_id));
+
         return res.status(200).json({
             message: "Messages Successfully Retrieved",
             data: allMessages,
-            contact: contactUser
+            contact: contactUser,
+            hasFacility: hasFacility
         });
 
     } catch (error) {
