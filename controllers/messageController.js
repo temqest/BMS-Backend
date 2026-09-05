@@ -3,10 +3,32 @@ const validate = require('../util/validation');
 
 const createMessage = async (req, res, next) => {
     try {
-        const { sender_id, receiver_id, message_type, message_content, message_date } = req.body;
+        const sender_id = req.user?.user_id || req.body.sender_id;
+        let { receiver_id, message_type, message_content, message_date } = req.body;
 
-        if (!sender_id || !receiver_id || !message_type || !message_content || !message_date) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+        if (!sender_id) {
+            return res.status(401).json({ error: "Unauthorized access" });
+        }
+
+        if (!message_content) {
+            return res.status(400).json({ error: "Message content is required" });
+        }
+
+        message_type = message_type || "text";
+        message_date = message_date ? new Date(message_date) : new Date();
+
+        if (!receiver_id) {
+            const staffUser = await prisma.user.findFirst({
+                where: {
+                    role: { in: ['HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Admin', 'SystemAdmin'] },
+                    is_active: true,
+                }
+            });
+            if (staffUser) {
+                receiver_id = staffUser.user_id;
+            } else {
+                return res.status(400).json({ error: "No recipient user found" });
+            }
         }
         
         if (!(await validate.isUserExist(sender_id))) {
@@ -23,7 +45,7 @@ const createMessage = async (req, res, next) => {
                 receiver_id: receiver_id,
                 message_type: message_type,
                 message_content: message_content,
-                message_date: new Date(message_date),
+                message_date: message_date,
             }
         });
 
@@ -149,14 +171,10 @@ const markAllAsRead = async (req, res, next) => {
 
 const getAllMessageForUser = async (req, res, next) => {
     try {
-        const user_id = req.params.user_id || req.body.user_id;
+        const user_id = req.params.user_id || req.query.user_id || req.user?.user_id || req.body.user_id;
 
         if (!user_id) {
             return res.status(400).json({ error: "Missing User_ID!" });
-        }
-
-        if (!(await validate.isUserExist(user_id))) {
-            return res.status(404).json({ error: "User Doesn't Exist!" });
         }
 
         const allMessages = await prisma.in_App_Message.findMany({
@@ -166,14 +184,41 @@ const getAllMessageForUser = async (req, res, next) => {
                     { receiver_id: user_id },
                 ]
             },
+            include: {
+                sender: { select: { user_id: true, first_name: true, last_name: true, role: true } },
+                receiver: { select: { user_id: true, first_name: true, last_name: true, role: true } },
+            },
             orderBy: {
                 message_date: 'asc'
             }
         });
 
+        let contactUser = null;
+        if (allMessages.length > 0) {
+            const otherMsg = allMessages.find(m => m.sender_id !== user_id) || allMessages.find(m => m.receiver_id !== user_id);
+            if (otherMsg) {
+                const otherId = otherMsg.sender_id === user_id ? otherMsg.receiver_id : otherMsg.sender_id;
+                contactUser = await prisma.user.findUnique({
+                    where: { user_id: otherId },
+                    select: { user_id: true, first_name: true, last_name: true, role: true, profile_url: true }
+                });
+            }
+        }
+
+        if (!contactUser && req.user) {
+            contactUser = await prisma.user.findFirst({
+                where: {
+                    role: { in: ['HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Admin', 'SystemAdmin'] },
+                    is_active: true,
+                },
+                select: { user_id: true, first_name: true, last_name: true, role: true, profile_url: true }
+            });
+        }
+
         return res.status(200).json({
             message: "Messages Successfully Retrieved",
-            data: allMessages
+            data: allMessages,
+            contact: contactUser
         });
 
     } catch (error) {
