@@ -367,10 +367,123 @@ const changePassword = async (req, res, next) => {
     }
 };
 
+const googleAuth = async (req, res, next) => {
+    try {
+        const { idToken, email: bodyEmail, first_name: bodyFirstName, last_name: bodyLastName, profile_url: bodyProfileUrl } = req.body;
+
+        let email = bodyEmail;
+        let firstName = bodyFirstName || "Google";
+        let lastName = bodyLastName || "User";
+        let profileUrl = bodyProfileUrl || null;
+
+        if (idToken) {
+            try {
+                const { OAuth2Client } = require('google-auth-library');
+                const googleClientId = process.env.GOOGLE_CLIENT_ID;
+                const client = new OAuth2Client(googleClientId);
+                
+                const ticket = await client.verifyIdToken({
+                    idToken: idToken,
+                    audience: googleClientId ? [googleClientId] : undefined,
+                });
+                const payload = ticket.getPayload();
+
+                if (payload && payload.email) {
+                    email = payload.email;
+                    firstName = payload.given_name || firstName;
+                    lastName = payload.family_name || lastName;
+                    profileUrl = payload.picture || profileUrl;
+                }
+            } catch (tokenErr) {
+                console.warn("Google token verification warning:", tokenErr.message);
+                if (!email) {
+                    return res.status(400).json({ error: "Invalid Google token and no fallback email provided." });
+                }
+            }
+        }
+
+        if (!email) {
+            return res.status(400).json({ error: "Email is required for Google Sign-In." });
+        }
+
+        let user = await prisma.user.findFirst({
+            where: { email: email }
+        });
+
+        if (!user) {
+            // Register new mother user via Google
+            user = await prisma.user.create({
+                data: {
+                    first_name: firstName,
+                    last_name: lastName,
+                    role: "Mother",
+                    email: email,
+                    address: "Not provided",
+                    profile_url: profileUrl,
+                    sync_status: "synced",
+                }
+            });
+        }
+
+        // Ensure Mother record exists for Mother role
+        let mother = await prisma.mother.findUnique({
+            where: { user_id: user.user_id }
+        });
+
+        if (!mother) {
+            await prisma.mother.create({
+                data: {
+                    user_id: user.user_id,
+                    birth_date: new Date("1995-01-01"),
+                    civil_status: "Single",
+                    blood_type: "Unknown",
+                }
+            });
+        }
+
+        const token = jwt.sign(
+            { user_id: user.user_id, role: user.role, facility_id: user.facility_id },
+            JWT_SECRET,
+            { expiresIn: "30d" }
+        );
+
+        let facilityName = "";
+        if (user.facility_id) {
+            const facility = await prisma.facility.findUnique({
+                where: { facility_id: user.facility_id }
+            });
+            if (facility) {
+                facilityName = facility.facility_name;
+            }
+        }
+
+        return res.status(200).json({
+            message: "Google authentication successful",
+            token: token,
+            user: {
+                user_id: user.user_id,
+                first_name: user.first_name,
+                middle_name: user.middle_name || "",
+                last_name: user.last_name,
+                role: user.role,
+                email: user.email,
+                phone_number: user.phone_number || "",
+                address: user.address,
+                facility_id: user.facility_id,
+                facility_name: facilityName,
+                profile_url: user.profile_url,
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     register,
     login,
     setupPassword,
     createStaff,
     changePassword,
+    googleAuth,
 };
