@@ -233,6 +233,83 @@ const setupPassword = async (req, res, next) => {
     }
 };
 
+const resetPassword = async (req, res, next) => {
+    try {
+        const { identifier, otp, newPassword } = req.body;
+
+        if (!identifier || !otp || !newPassword) {
+            return res.status(400).json({ error: "Missing required fields (identifier, OTP, and new password)" });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: "New password must be at least 6 characters long" });
+        }
+
+        const cleanIdentifier = identifier.trim();
+
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { phone_number: cleanIdentifier },
+                    { email: { equals: cleanIdentifier, mode: 'insensitive' } },
+                ],
+                is_active: true
+            },
+            include: { facility: true }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: "No account found with this email or phone number" });
+        }
+
+        let isValidOtp = await checkOtp.verifyOTP(cleanIdentifier, otp, 'reset_password');
+        if (!isValidOtp) {
+            isValidOtp = await checkOtp.verifyOTP(cleanIdentifier, otp, 'registration');
+        }
+
+        if (!isValidOtp) {
+            return res.status(400).json({ error: "Invalid or expired OTP code" });
+        }
+
+        const salt = await bcrypt.genSalt(14);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        const updatedUser = await prisma.user.update({
+            where: { user_id: user.user_id },
+            data: {
+                password: hashedPassword
+            }
+        });
+
+        const token = jwt.sign(
+            { user_id: updatedUser.user_id, role: updatedUser.role, facility_id: updatedUser.facility_id },
+            JWT_SECRET,
+            { expiresIn: "30d" }
+        );
+
+        return res.status(200).json({
+            message: "Password reset successfully!",
+            token: token,
+            user: {
+                user_id: updatedUser.user_id,
+                first_name: updatedUser.first_name,
+                middle_name: updatedUser.middle_name || "",
+                last_name: updatedUser.last_name,
+                role: updatedUser.role,
+                email: updatedUser.email || "",
+                phone_number: updatedUser.phone_number || "",
+                address: updatedUser.address || "",
+                facility_id: user.facility ? user.facility.facility_id : null,
+                facility_name: user.facility ? user.facility.facility_name : "",
+                profile_url: updatedUser.profile_url || null,
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+
 const createStaff = async (req, res, next) => {
     try {
         const { first_name, middle_name, last_name, role, phone_number, email, password, address, facility_id } = req.body;
@@ -483,6 +560,7 @@ module.exports = {
     register,
     login,
     setupPassword,
+    resetPassword,
     createStaff,
     changePassword,
     googleAuth,
