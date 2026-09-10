@@ -483,39 +483,47 @@ const googleAuth = async (req, res, next) => {
             return res.status(400).json({ error: "Email is required for Google Sign-In." });
         }
 
+        const cleanEmail = email.trim().toLowerCase();
+
         let user = await prisma.user.findFirst({
-            where: { email: email }
+            where: {
+                email: { equals: cleanEmail, mode: 'insensitive' }
+            },
+            include: { facility: true }
         });
 
         if (!user) {
-            // Register new mother user via Google
-            user = await prisma.user.create({
-                data: {
-                    first_name: firstName,
-                    last_name: lastName,
-                    role: "Mother",
-                    email: email,
-                    address: "Not provided",
-                    profile_url: profileUrl,
-                    sync_status: "synced",
-                }
+            return res.status(404).json({
+                error: "ACCOUNT_NOT_FOUND",
+                message: "No account found matching this Google email. Please register your facility or contact your administrator."
             });
         }
 
-        // Ensure Mother record exists for Mother role
-        let mother = await prisma.mother.findUnique({
-            where: { user_id: user.user_id }
-        });
-
-        if (!mother) {
-            await prisma.mother.create({
-                data: {
-                    user_id: user.user_id,
-                    birth_date: new Date("1995-01-01"),
-                    civil_status: "Single",
-                    blood_type: "Unknown",
-                }
+        // Update profile picture if available and not set
+        if (profileUrl && !user.profile_url) {
+            user = await prisma.user.update({
+                where: { user_id: user.user_id },
+                data: { profile_url: profileUrl },
+                include: { facility: true }
             });
+        }
+
+        // Only ensure Mother record if role is Mother
+        if (user.role === "Mother") {
+            let mother = await prisma.mother.findUnique({
+                where: { user_id: user.user_id }
+            });
+
+            if (!mother) {
+                await prisma.mother.create({
+                    data: {
+                        user_id: user.user_id,
+                        birth_date: new Date("1995-01-01"),
+                        civil_status: "Single",
+                        blood_type: "Unknown",
+                    }
+                });
+            }
         }
 
         const token = jwt.sign(
@@ -524,8 +532,8 @@ const googleAuth = async (req, res, next) => {
             { expiresIn: "30d" }
         );
 
-        let facilityName = "";
-        if (user.facility_id) {
+        let facilityName = user.facility ? user.facility.facility_name : "";
+        if (!facilityName && user.facility_id) {
             const facility = await prisma.facility.findUnique({
                 where: { facility_id: user.facility_id }
             });
