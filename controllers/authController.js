@@ -22,7 +22,7 @@ const register = async (req, res, next) => {
         const restrictedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Staff'];
         if (restrictedRoles.includes(role)) {
             if (role === "SystemAdmin" || role === "Admin") {
-                if (bypassCode !== SYSTEM_ADMIN_BYPASS_CODE) {
+                if (!SYSTEM_ADMIN_BYPASS_CODE || bypassCode !== SYSTEM_ADMIN_BYPASS_CODE) {
                     return res.status(403).json({ error: "Privileged role registration requires a valid bypass authorization code." });
                 }
             } else {

@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-maternal-key-change-in-production';
+const getJwtSecret = () => process.env.JWT_SECRET || 'super-secret-maternal-key-change-in-production';
 
 const verifyToken = (req, res, next) => {
 
@@ -13,7 +13,7 @@ const verifyToken = (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     try {
-        const decoded = jwt.verify(token, JWT_SECRET)
+        const decoded = jwt.verify(token, getJwtSecret())
 
         req.user = decoded;
 

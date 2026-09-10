@@ -67,7 +67,7 @@ async function sendEmail(identifier, message, subject = "Notification from Birth
 }
 
 async function sendOTPviaSMS(identifier, code, type, purpose) {
-    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || "AIzaSyBnxHtzPQ_SCiOb574Kma_vuh5_9FZRk14";
+    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
     const SMS_API_KEY = process.env.SMS_API_TOKEN;
 
     let formattedPhone = String(identifier).replace(/[^0-9+]/g, '');
@@ -121,7 +121,7 @@ async function sendOTPviaSMS(identifier, code, type, purpose) {
 }
 
 async function sendSMS(identifier, message, purpose) {
-    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || "AIzaSyBnxHtzPQ_SCiOb574Kma_vuh5_9FZRk14";
+    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
     const SMS_API_KEY = process.env.SMS_API_TOKEN;
 
     let formattedPhone = String(identifier).replace(/[^0-9+]/g, '');
