@@ -40,7 +40,6 @@ const registerPregnancy = async (req, res, next) => {
             return res.status(400).json({error: "LMP Date Cannot Be In The Future"});
         }
 
-        // Check if identical active pregnancy already registered
         const existingPreg = await prisma.pregnancy.findFirst({
             where: {
                 mother_id: targetMotherId,

@@ -261,7 +261,6 @@ const updateMother = async (req, res, next) => {
             version
         } = req.body;
 
-        // 1. Update User fields if provided
         const { profile_url } = req.body;
         const userUpdateData = {};
         if (first_name !== undefined) userUpdateData.first_name = first_name;
@@ -279,7 +278,6 @@ const updateMother = async (req, res, next) => {
             });
         }
 
-        // 2. Prepare Mother fields
         const motherUpdateData = {};
         if (birth_date) {
             motherUpdateData.birth_date = new Date(birth_date);

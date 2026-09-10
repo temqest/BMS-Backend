@@ -1,13 +1,10 @@
-
 const { Resend } = require('resend');
 
 async function sendOTPviaEmail(identifier, code, type, purpose) {
-
     const resend = new Resend(process.env.RESEND_API_KEY);
     
     try {
-
-        const {data, error} = await resend.emails.send({
+        const { data, error } = await resend.emails.send({
             from: "Birth Monitoring System <noreply@mail.pkov.online>",
             to: [identifier],
             subject: `Your OTP Code for ${purpose.toUpperCase()}`,
@@ -28,15 +25,12 @@ async function sendOTPviaEmail(identifier, code, type, purpose) {
         }
 
         return data;
-        
     } catch (error) {
         throw error;
     }
-
 }
 
 async function sendEmail(identifier, message, subject = "Notification from Birth Monitoring System", options = {}) {
-
     const resend = new Resend(process.env.RESEND_API_KEY);
     
     try {
@@ -67,29 +61,47 @@ async function sendEmail(identifier, message, subject = "Notification from Birth
         }
 
         return data;
-
     } catch (error) {
         throw error;
     }
-
 }
 
 async function sendOTPviaSMS(identifier, code, type, purpose) {
-
+    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || "AIzaSyBnxHtzPQ_SCiOb574Kma_vuh5_9FZRk14";
     const SMS_API_KEY = process.env.SMS_API_TOKEN;
 
+    let formattedPhone = String(identifier).replace(/[^0-9+]/g, '');
+    if (formattedPhone.startsWith('0')) {
+        formattedPhone = '+63' + formattedPhone.slice(1);
+    } else if (formattedPhone.startsWith('63')) {
+        formattedPhone = '+' + formattedPhone;
+    } else if (!formattedPhone.startsWith('+')) {
+        formattedPhone = '+' + formattedPhone;
+    }
+
     try {
+        const fbResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=${FIREBASE_API_KEY}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ phoneNumber: formattedPhone })
+        });
 
-        const formattedPhone = String(identifier).replace(/[^0-9]/g, '');
+        const fbData = await fbResponse.json();
 
+        if (fbResponse.ok && fbData.sessionInfo) {
+            console.log(`[Firebase SMS] Sent successfully to ${formattedPhone}`);
+            return fbData;
+        }
+
+        console.log("[Firebase SMS Notice]:", fbData.error?.message || fbData);
+
+        const cleanPhone = formattedPhone.replace(/[^0-9]/g, '');
         const response = await fetch('https://www.iprogsms.com/api/v1/sms_messages', {
             method: "POST",
-            headers: {
-                "content-type": "application/json"
-            },
+            headers: { "content-type": "application/json" },
             body: JSON.stringify({
                 api_token: SMS_API_KEY,
-                phone_number: formattedPhone,
+                phone_number: cleanPhone,
                 message: `Your verification code for ${purpose} is ${code}. Valid for 10 minutes. Do not share this code.`
             })
         });
@@ -98,36 +110,56 @@ async function sendOTPviaSMS(identifier, code, type, purpose) {
 
         if (!response.ok || data.status !== 200) {
             console.error("SMS Provider Error: ", data);
-            throw new Error(data.message || "Failed to send SMS OTP");
+            const msg = Array.isArray(data.message) ? data.message.join(' ') : (data.message || fbData.error?.message || "Failed to send SMS OTP");
+            throw new Error(msg);
         }
 
         return data;
-
     } catch (error) {
         throw error;
     }
-    
 }
 
 async function sendSMS(identifier, message, purpose) {
-
+    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || "AIzaSyBnxHtzPQ_SCiOb574Kma_vuh5_9FZRk14";
     const SMS_API_KEY = process.env.SMS_API_TOKEN;
 
-    try {
-        const formattedPhone = String(identifier).replace(/[^0-9]/g, '');
+    let formattedPhone = String(identifier).replace(/[^0-9+]/g, '');
+    if (formattedPhone.startsWith('0')) {
+        formattedPhone = '+63' + formattedPhone.slice(1);
+    } else if (formattedPhone.startsWith('63')) {
+        formattedPhone = '+' + formattedPhone;
+    } else if (!formattedPhone.startsWith('+')) {
+        formattedPhone = '+' + formattedPhone;
+    }
 
+    try {
+        const fbResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=${FIREBASE_API_KEY}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ phoneNumber: formattedPhone })
+        });
+
+        const fbData = await fbResponse.json();
+
+        if (fbResponse.ok && fbData.sessionInfo) {
+            console.log(`[Firebase SMS] Message sent successfully to ${formattedPhone}`);
+            return fbData;
+        }
+
+        console.log("[Firebase SMS Notice]:", fbData.error?.message || fbData);
+
+        const cleanPhone = formattedPhone.replace(/[^0-9]/g, '');
         const formattedMessage = purpose 
             ? `[BMS - ${purpose.toUpperCase()}]: ${message}`
             : `[Birth Monitoring System]: ${message}`;
 
         const response = await fetch('https://www.iprogsms.com/api/v1/sms_messages', {
             method: "POST",
-            headers: {
-                "content-type": "application/json"
-            }, 
+            headers: { "content-type": "application/json" }, 
             body: JSON.stringify({
                 api_token: SMS_API_KEY,
-                phone_number: formattedPhone,
+                phone_number: cleanPhone,
                 message: formattedMessage
             })
         });
@@ -136,15 +168,14 @@ async function sendSMS(identifier, message, purpose) {
 
         if (!response.ok || data.status !== 200) {
             console.error("SMS Provider Error: ", data);
-            throw new Error(data.message || "Failed to send SMS");
+            const msg = Array.isArray(data.message) ? data.message.join(' ') : (data.message || fbData.error?.message || "Failed to send SMS");
+            throw new Error(msg);
         }
 
         return data;
-
     } catch (error) {
         throw error;
     }
-
 }
 
 module.exports = {
@@ -152,4 +183,4 @@ module.exports = {
     sendOTPviaEmail,
     sendOTPviaSMS,
     sendSMS
-}
+};

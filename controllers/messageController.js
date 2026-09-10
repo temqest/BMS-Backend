@@ -226,7 +226,6 @@ const getAllMessageForUser = async (req, res, next) => {
             }
         }
 
-        // Exclude SystemAdmin if previously selected
         if (contactUser && contactUser.role === 'SystemAdmin') {
             contactUser = null;
         }

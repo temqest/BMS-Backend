@@ -499,7 +499,6 @@ const googleAuth = async (req, res, next) => {
             });
         }
 
-        // Update profile picture if available and not set
         if (profileUrl && !user.profile_url) {
             user = await prisma.user.update({
                 where: { user_id: user.user_id },
@@ -508,7 +507,6 @@ const googleAuth = async (req, res, next) => {
             });
         }
 
-        // Only ensure Mother record if role is Mother
         if (user.role === "Mother") {
             let mother = await prisma.mother.findUnique({
                 where: { user_id: user.user_id }
