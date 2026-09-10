@@ -1,12 +1,25 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
-const { registerFacility, searchFacility, updateFacility, deleteFacility, viewAllFacility, getFacilityById } = require('../controllers/facilityController');
+const {
+    registerFacility,
+    publicRegisterFacility,
+    getPublicFacilities,
+    searchFacility,
+    updateFacility,
+    deleteFacility,
+    viewAllFacility,
+    getFacilityById
+} = require('../controllers/facilityController');
 
 const sysAdminOnly = ['SystemAdmin'];
 const adminRoles = ['SystemAdmin', 'Admin'];
 
 router.post('/register', verifyToken, checkUserRole(sysAdminOnly), registerFacility);
+
+router.post('/public-register', publicRegisterFacility);
+
+router.get('/public-list', getPublicFacilities);
 
 router.get('/search', searchFacility);
 
