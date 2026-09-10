@@ -22,5 +22,9 @@ router.post(
     createStaff
 );
 
+const { getStaffByFacility } = require('../controllers/userController');
+
+router.get('/staff', verifyToken, getStaffByFacility);
+
 module.exports = router;
 
