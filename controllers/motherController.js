@@ -7,7 +7,10 @@ const jwt = require('jsonwebtoken');
 
 const checkOtp = require('../services/otpServices')
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-maternal-key-change-in-production'
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.warn("Warning: JWT_SECRET environment variable is missing.");
+}
 
 const calculateAge = (birthDate) => {
     const today = new Date();

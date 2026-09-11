@@ -67,7 +67,6 @@ async function sendEmail(identifier, message, subject = "Notification from Birth
 }
 
 async function sendOTPviaSMS(identifier, code, type, purpose) {
-    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
     const SMS_API_KEY = process.env.SMS_API_TOKEN;
 
     let formattedPhone = String(identifier).replace(/[^0-9+]/g, '');
@@ -80,22 +79,9 @@ async function sendOTPviaSMS(identifier, code, type, purpose) {
     }
 
     try {
-        const fbResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=${FIREBASE_API_KEY}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ phoneNumber: formattedPhone })
-        });
-
-        const fbData = await fbResponse.json();
-
-        if (fbResponse.ok && fbData.sessionInfo) {
-            console.log(`[Firebase SMS] Sent successfully to ${formattedPhone}`);
-            return fbData;
-        }
-
-        console.log("[Firebase SMS Notice]:", fbData.error?.message || fbData);
-
         const cleanPhone = formattedPhone.replace(/[^0-9]/g, '');
+        console.log(`[Backend SMS] Sending iProgSMS OTP code to ${cleanPhone}...`);
+
         const response = await fetch('https://www.iprogsms.com/api/v1/sms_messages', {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -108,20 +94,21 @@ async function sendOTPviaSMS(identifier, code, type, purpose) {
 
         const data = await response.json();
 
-        if (!response.ok || data.status !== 200) {
-            console.error("SMS Provider Error: ", data);
-            const msg = Array.isArray(data.message) ? data.message.join(' ') : (data.message || fbData.error?.message || "Failed to send SMS OTP");
+        if (!response.ok || (data.status && data.status !== 200)) {
+            console.error("[Backend iProgSMS Error]:", data);
+            const msg = Array.isArray(data.message) ? data.message.join(' ') : (data.message || data.error || "Failed to send SMS via iProgSMS");
             throw new Error(msg);
         }
 
+        console.log(`[Backend SMS] Sent successfully to ${cleanPhone}:`, data);
         return data;
     } catch (error) {
+        console.error("[Backend SMS Error]:", error.message);
         throw error;
     }
 }
 
 async function sendSMS(identifier, message, purpose) {
-    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
     const SMS_API_KEY = process.env.SMS_API_TOKEN;
 
     let formattedPhone = String(identifier).replace(/[^0-9+]/g, '');
@@ -134,25 +121,12 @@ async function sendSMS(identifier, message, purpose) {
     }
 
     try {
-        const fbResponse = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendVerificationCode?key=${FIREBASE_API_KEY}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ phoneNumber: formattedPhone })
-        });
-
-        const fbData = await fbResponse.json();
-
-        if (fbResponse.ok && fbData.sessionInfo) {
-            console.log(`[Firebase SMS] Message sent successfully to ${formattedPhone}`);
-            return fbData;
-        }
-
-        console.log("[Firebase SMS Notice]:", fbData.error?.message || fbData);
-
         const cleanPhone = formattedPhone.replace(/[^0-9]/g, '');
         const formattedMessage = purpose 
             ? `[BMS - ${purpose.toUpperCase()}]: ${message}`
             : `[Birth Monitoring System]: ${message}`;
+
+        console.log(`[Backend SMS] Sending message to ${cleanPhone}...`);
 
         const response = await fetch('https://www.iprogsms.com/api/v1/sms_messages', {
             method: "POST",
@@ -166,14 +140,16 @@ async function sendSMS(identifier, message, purpose) {
 
         const data = await response.json();
 
-        if (!response.ok || data.status !== 200) {
-            console.error("SMS Provider Error: ", data);
-            const msg = Array.isArray(data.message) ? data.message.join(' ') : (data.message || fbData.error?.message || "Failed to send SMS");
+        if (!response.ok || (data.status && data.status !== 200)) {
+            console.error("[Backend iProgSMS Error]:", data);
+            const msg = Array.isArray(data.message) ? data.message.join(' ') : (data.message || data.error || "Failed to send SMS via iProgSMS");
             throw new Error(msg);
         }
 
+        console.log(`[Backend SMS] Message sent successfully to ${cleanPhone}:`, data);
         return data;
     } catch (error) {
+        console.error("[Backend SMS Error]:", error.message);
         throw error;
     }
 }

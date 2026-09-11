@@ -1,6 +1,12 @@
 const jwt = require('jsonwebtoken');
 
-const getJwtSecret = () => process.env.JWT_SECRET || 'super-secret-maternal-key-change-in-production';
+const getJwtSecret = () => {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+        console.warn("Warning: JWT_SECRET environment variable is missing.");
+    }
+    return secret;
+};
 
 const verifyToken = (req, res, next) => {
 
