@@ -5,9 +5,11 @@ const {
     getStaffByFacility,
     getStaffById,
     updateStaffRole,
-    deactivateStaff
+    deactivateStaff,
+    updateUserProfile
 } = require('../controllers/userController');
 
+router.put('/profile', verifyToken, updateUserProfile);
 router.get('/facility', verifyToken, getStaffByFacility);
 router.get('/:id', verifyToken, getStaffById);
 router.put('/:id/role', verifyToken, updateStaffRole);

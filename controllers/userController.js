@@ -4,7 +4,11 @@ const getStaffByFacility = async (req, res, next) => {
     try {
         const facility_id = req.query.facility_id || req.user?.facility_id;
         
-        let whereCondition = {};
+        let whereCondition = {
+            role: {
+                notIn: ['Mother', 'MOTHER']
+            }
+        };
         if (facility_id) {
             whereCondition.facility_id = facility_id;
         }
@@ -188,9 +192,64 @@ const deactivateStaff = async (req, res, next) => {
     }
 };
 
+const updateUserProfile = async (req, res, next) => {
+    try {
+        const user_id = req.user?.user_id;
+
+        if (!user_id) {
+            return res.status(401).json({ error: "Unauthorized access" });
+        }
+
+        const { first_name, middle_name, last_name, phone_number, email, address, profile_url } = req.body;
+
+        const updateData = {};
+        if (first_name !== undefined) updateData.first_name = first_name;
+        if (middle_name !== undefined) updateData.middle_name = middle_name;
+        if (last_name !== undefined) updateData.last_name = last_name;
+        if (phone_number !== undefined) updateData.phone_number = phone_number;
+        if (email !== undefined) updateData.email = email;
+        if (address !== undefined) updateData.address = address;
+        if (profile_url !== undefined) updateData.profile_url = profile_url;
+
+        const updatedUser = await prisma.user.update({
+            where: { user_id },
+            data: updateData,
+            select: {
+                user_id: true,
+                facility_id: true,
+                first_name: true,
+                middle_name: true,
+                last_name: true,
+                role: true,
+                phone_number: true,
+                email: true,
+                address: true,
+                profile_url: true,
+                is_active: true,
+                updated_at: true,
+                facility: {
+                    select: {
+                        facility_id: true,
+                        facility_name: true,
+                        type: true
+                    }
+                }
+            }
+        });
+
+        return res.status(200).json({
+            message: "Profile updated successfully",
+            result: updatedUser
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 module.exports = {
     getStaffByFacility,
     getStaffById,
     updateStaffRole,
-    deactivateStaff
+    deactivateStaff,
+    updateUserProfile
 };
