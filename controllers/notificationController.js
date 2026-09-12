@@ -1,5 +1,5 @@
 const prisma = require('../util/db');
-const { isUserExist, isNotificationExist } = require('../util/validation');
+const validate = require('../util/validation');
 
 const sendNotificationToUser = async (req, res, next) => {
 
