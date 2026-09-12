@@ -107,9 +107,14 @@ const getHighRiskProfilesByFacility = async (req, res, next) => {
     try {
         const facility_id = req.params.facility_id || req.user?.facility_id;
 
-        const alerts = await prisma.cDSS_Alert.findMany({
+        // Fetch high-risk alerts (severity HIGH / CRITICAL)
+        const highRiskAlerts = await prisma.cDSS_Alert.findMany({
             where: {
                 is_resolved: false,
+                OR: [
+                    { severity: { in: ['HIGH', 'High', 'High Risk', 'CRITICAL', 'CRITICAL_RISK'] } },
+                    { alert_type: 'CRITICAL_RISK' }
+                ],
                 ...(facility_id ? {
                     pregnancy: {
                         mother: {
@@ -131,10 +136,42 @@ const getHighRiskProfilesByFacility = async (req, res, next) => {
             }
         });
 
+        // Also fetch visits explicitly assessed as HIGH risk
+        const highRiskVisits = await prisma.prenatalVisit.findMany({
+            where: {
+                risk_level_assessed: { in: ['HIGH', 'High', 'High Risk'] },
+                ...(facility_id ? {
+                    pregnancy: {
+                        mother: {
+                            user: {
+                                facility_id: facility_id
+                            }
+                        }
+                    }
+                } : {})
+            },
+            select: { pregnancy_id: true }
+        });
+
+        // Deduplicate unique high risk mother/pregnancy profiles
+        const highRiskMotherIds = new Set();
+        highRiskAlerts.forEach(alert => {
+            if (alert.pregnancy?.mother_id) {
+                highRiskMotherIds.add(alert.pregnancy.mother_id);
+            } else if (alert.pregnancy_id) {
+                highRiskMotherIds.add(alert.pregnancy_id);
+            }
+        });
+        highRiskVisits.forEach(visit => {
+            if (visit.pregnancy_id) {
+                highRiskMotherIds.add(visit.pregnancy_id);
+            }
+        });
+
         return res.status(200).json({
             message: "High risk profiles retrieved successfully",
-            count: alerts.length,
-            data: alerts
+            count: highRiskMotherIds.size,
+            data: highRiskAlerts
         });
 
     } catch (error) {
