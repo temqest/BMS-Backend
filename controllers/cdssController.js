@@ -103,8 +103,48 @@ const resolveAlert = async (req, res, next) => {
     }
 };
 
+const getHighRiskProfilesByFacility = async (req, res, next) => {
+    try {
+        const facility_id = req.params.facility_id || req.user?.facility_id;
+
+        const alerts = await prisma.cDSS_Alert.findMany({
+            where: {
+                is_resolved: false,
+                ...(facility_id ? {
+                    pregnancy: {
+                        mother: {
+                            user: {
+                                facility_id: facility_id
+                            }
+                        }
+                    }
+                } : {})
+            },
+            include: {
+                pregnancy: {
+                    include: {
+                        mother: {
+                            include: { user: true }
+                        }
+                    }
+                }
+            }
+        });
+
+        return res.status(200).json({
+            message: "High risk profiles retrieved successfully",
+            count: alerts.length,
+            data: alerts
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
 module.exports = {
     evaluateVisitRisk,
     getAlertsByPregnancy,
     resolveAlert,
+    getHighRiskProfilesByFacility,
 };
