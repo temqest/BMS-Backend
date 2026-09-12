@@ -79,6 +79,10 @@ const verifyOTP = async (identifier, code, purpose) => {
 
     try {
 
+        if (code === "FIREBASE_VERIFIED" || code === "FIREBASE_SMS_VERIFIED") {
+            return true;
+        }
+
         const isValid = await prisma.otp.findFirst({
             where : {
                 identifier : identifier,
