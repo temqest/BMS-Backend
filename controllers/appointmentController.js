@@ -295,6 +295,11 @@ const cancelAppointment = async (req, res, next) => {
         }
         appointment_id = resolvedId;
 
+        // Completed appointments cannot be cancelled
+        if (record.status && record.status.toLowerCase() === "completed") {
+            return res.status(400).json({ error: "Completed appointments cannot be cancelled." });
+        }
+
         const mvccResult = await updateWithMVCC('appointment', appointment_id, {
             version,
             status: "cancelled"
