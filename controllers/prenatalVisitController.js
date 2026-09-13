@@ -3,6 +3,7 @@ const validate = require('../util/validation');
 const { evaluate_clinical_vitals } = require('../services/cdssRiskServices');
 const { updateWithMVCC } = require('../services/conflicResolution');
 const { logAuditTrail } = require('../services/auditService');
+const { resolveEntityId } = require('../middleware/idResolver');
 
 const registerPrenatalVisit = async (req, res, next) => {
     
@@ -131,34 +132,18 @@ const registerPrenatalVisit = async (req, res, next) => {
 };
 
 const updatePrenatalVisit = async (req, res, next) => {
-
     try {
-        
-        const {visit_id} = req.params;
-
-        const {
-            trimester,
-            visit_number,
-            age_of_gestation_weeks,
-            weight_kg,
-            temperature_celsius,
-            pulse_rate_bpm,
-            bp_diastolic,
-            bp_systolic,
-            fundic_height_cm,
-            fetal_heart_tone_bpm,
-            chief_complaint,
-            danger_signs_observed,
-            risk_level_assessed,
-        } = req.body;
+        let {visit_id} = req.params;
 
         if(!visit_id) {
-            return res.status(400).json({error: "Missing Visit ID"})
+            return res.status(400).json({error: "Missing Visit ID"});
         }
 
-        if(!(await validate.isPrenatalVisitExist(visit_id))) {
+        const { resolvedId, record: existing } = await resolveEntityId('prenatalVisit', visit_id, req.body);
+        if(!resolvedId || !existing) {
             return res.status(404).json({error: "Prenatal Visit not found"});
         }
+        visit_id = resolvedId;
 
         const vitalsValidationErrors = validate.validateClinicalVitals(req.body);
         if (vitalsValidationErrors.length > 0) {
@@ -188,26 +173,24 @@ const updatePrenatalVisit = async (req, res, next) => {
             cdssAssessment: cdssAssessment,
         });
 
-        
     } catch (error) {
         return next(error);
     }
 };
 
 const deletePrenatalVisit = async (req, res, next) => {
-
     try {
-
-        const {visit_id} = req.params;
+        let {visit_id} = req.params;
 
         if(!visit_id) {
             return res.status(400).json({error : "Missing Visit ID"});
         }
 
-        const existingVisit = await validate.isPrenatalVisitExist(visit_id);
-        if(!existingVisit) {
-            return res.status(404).json({error: "Prenatal Visit not found!"});
+        const { resolvedId, record: existingVisit } = await resolveEntityId('prenatalVisit', visit_id, req.query || req.body);
+        if(!resolvedId || !existingVisit) {
+            return res.status(200).json({ message: "Prenatal Visit Already Deleted" });
         }
+        visit_id = resolvedId;
 
         await prisma.prenatalVisit.delete({
             where : {visit_id : visit_id}

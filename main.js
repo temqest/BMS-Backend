@@ -1,4 +1,5 @@
 require('dotenv').config();
+// Environment loaded
 const express = require('express')
 const app = express()
 const cors = require('cors');

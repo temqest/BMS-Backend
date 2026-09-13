@@ -41,6 +41,20 @@ function mergeFieldLevel(serverRecord, clientRecord) {
     return mergedRecord;
 }
 
+function sanitizePrismaUpdatePayload(payload) {
+    const cleanPayload = Object.assign({}, payload);
+    const nonScalarFields = [
+        'motherId', 'mother_Id', 'targetId', 'temp_id', 'id', 'user', 'mother', 
+        'pregnancies', 'prenatalVisits', 'supplementationRecords', 'labScreenings', 
+        'cdssAlerts', 'onlineReferrals', 'deliveryOutcomes', 'postpartumVisits', 
+        'newbornRecords', 'patient', 'visitor', 'visit', 'pregnancy'
+    ];
+    for (const field of nonScalarFields) {
+        delete cleanPayload[field];
+    }
+    return cleanPayload;
+}
+
 async function resolveConflict({ tableName, recordId, serverRecord, clientRecord, strategy, userId }) {
     const chosenStrategy = strategy || CONFLICT_STRATEGIES.FIELD_MERGE;
     const serverVersion = serverRecord.version || 1;
@@ -112,7 +126,7 @@ async function resolveConflict({ tableName, recordId, serverRecord, clientRecord
     const primaryKeyField = getPrimaryKeyField(tableName);
     const updatedRecord = await prisma[tableName].update({
         where: { [primaryKeyField]: recordId },
-        data: dataToSave
+        data: sanitizePrismaUpdatePayload(dataToSave)
     });
 
     if (userId) {
@@ -136,9 +150,36 @@ async function resolveConflict({ tableName, recordId, serverRecord, clientRecord
 async function updateWithMVCC(modelName, recordId, clientRecord, options = {}) {
     const primaryKeyField = getPrimaryKeyField(modelName);
 
-    const serverRecord = await prisma[modelName].findUnique({
-        where: { [primaryKeyField]: recordId }
-    });
+    let serverRecord = null;
+    try {
+        serverRecord = await prisma[modelName].findUnique({
+            where: { [primaryKeyField]: recordId }
+        });
+    } catch {
+        serverRecord = null;
+    }
+
+    if (!serverRecord && typeof recordId === 'string' && recordId.startsWith('temp-')) {
+        const motherId = clientRecord.mother_id || clientRecord.motherId || clientRecord.user_id;
+        if (motherId) {
+            try {
+                serverRecord = await prisma[modelName].findFirst({
+                    where: {
+                        OR: [
+                            { mother_id: motherId },
+                            { mother: { OR: [{ mother_id: motherId }, { user_id: motherId }] } }
+                        ]
+                    },
+                    orderBy: { updated_at: 'desc' }
+                });
+                if (serverRecord) {
+                    recordId = serverRecord[primaryKeyField];
+                }
+            } catch (fallbackErr) {
+                console.warn(`[MVCC Temp ID Resolution] Fallback lookup failed for ${modelName}:${recordId}`, fallbackErr.message);
+            }
+        }
+    }
 
     if (!serverRecord) {
         throw new Error(`Record not found in ${modelName} with ID ${recordId}`);
@@ -171,7 +212,7 @@ async function updateWithMVCC(modelName, recordId, clientRecord, options = {}) {
 
     const updatedRecord = await prisma[modelName].update({
         where: { [primaryKeyField]: recordId },
-        data: updatePayload
+        data: sanitizePrismaUpdatePayload(updatePayload)
     });
 
     return {

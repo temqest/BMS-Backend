@@ -1,6 +1,7 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
 const { updateWithMVCC } = require('../services/conflicResolution');
+const { resolveEntityId } = require('../middleware/idResolver');
 
 const createAppointment = async (req, res, next) => {
     try {
@@ -239,22 +240,17 @@ const getAppointmentsByFacility = async (req, res, next) => {
 
 const updateAppointment = async (req, res, next) => {
     try {
-        const { appointment_id } = req.params;
-        const {
-            appointment_date,
-            appointment_time,
-            appointment_type,
-            reason,
-            status,
-        } = req.body;
+        let { appointment_id } = req.params;
 
         if (!appointment_id) {
             return res.status(400).json({ error: "Missing Required Fields!" });
         }
 
-        if (!(await validate.isAppointmentExist(appointment_id))) {
+        const { resolvedId, record } = await resolveEntityId('appointment', appointment_id, req.body);
+        if (!resolvedId || !record) {
             return res.status(404).json({ error: "Appointment Doesn't Exist!" });
         }
+        appointment_id = resolvedId;
 
         const { strategy, version, ...clientData } = req.body;
         if (clientData.appointment_date) {
@@ -286,16 +282,18 @@ const updateAppointment = async (req, res, next) => {
 
 const cancelAppointment = async (req, res, next) => {
     try {
-        const { appointment_id } = req.params;
+        let { appointment_id } = req.params;
         const { strategy, version } = req.body || {};
 
         if (!appointment_id) {
             return res.status(400).json({ error: "Missing Required Fields!" });
         }
 
-        if (!(await validate.isAppointmentExist(appointment_id))) {
+        const { resolvedId, record } = await resolveEntityId('appointment', appointment_id, req.body || {});
+        if (!resolvedId || !record) {
             return res.status(404).json({ error: "Appointment Doesn't Exist!" });
         }
+        appointment_id = resolvedId;
 
         const mvccResult = await updateWithMVCC('appointment', appointment_id, {
             version,
@@ -325,15 +323,17 @@ const cancelAppointment = async (req, res, next) => {
 
 const deleteAppointment = async (req, res, next) => {
     try {
-        const { appointment_id } = req.params;
+        let { appointment_id } = req.params;
 
         if (!appointment_id) {
             return res.status(400).json({ error: "Missing Required Fields!" });
         }
 
-        if (!(await validate.isAppointmentExist(appointment_id))) {
-            return res.status(404).json({ error: "Appointment Doesn't Exist!" });
+        const { resolvedId, record } = await resolveEntityId('appointment', appointment_id, req.query || req.body);
+        if (!resolvedId || !record) {
+            return res.status(200).json({ message: "Appointment Already Deleted" });
         }
+        appointment_id = resolvedId;
 
         await prisma.appointment.delete({
             where: { appointment_id: appointment_id },

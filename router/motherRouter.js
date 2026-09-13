@@ -12,7 +12,8 @@ const {
     hardDeleteMother,
     getProfile,
     updateMyProfile,
-    assignFacilityByCode
+    assignFacilityByCode,
+    getCompositeMotherProfile
 } = require("../controllers/motherController");
 const { verifyToken, checkUserRole } = require("../middleware/authMiddleware");
 
@@ -24,6 +25,7 @@ const motherOnly = ['Mother'];
 router.get('/all', verifyToken, checkUserRole(staffRoles), getAllMother);
 router.get('/active', verifyToken, checkUserRole(staffRoles), getAllActiveMother);
 router.get('/active/:facility_id', verifyToken, checkUserRole(staffRoles), getAllActiveMotherByFacility);
+router.get('/composite/:mother_id', verifyToken, checkUserRole(staffRoles), getCompositeMotherProfile);
 router.get('/get/:mother_id', verifyToken, checkUserRole(staffRoles), searchMotherByID);
 router.get('/search/:mother_id', verifyToken, checkUserRole(staffRoles), searchMotherByID);
 
@@ -33,6 +35,7 @@ router.post('/assign-facility', verifyToken, checkUserRole(staffRoles), assignFa
 
 router.put('/update/:mother_id', verifyToken, checkUserRole(staffRoles), updateMother);
 router.put('/deactivate/:mother_id', verifyToken, checkUserRole(staffRoles), softDeleteMother);
+router.delete('/delete/soft/:mother_id', verifyToken, checkUserRole(staffRoles), softDeleteMother);
 router.delete('/delete/:mother_id', verifyToken, checkUserRole(sysAdminOnly), hardDeleteMother);
 
 router.get('/profile', verifyToken, checkUserRole(allUserRoles), getProfile);

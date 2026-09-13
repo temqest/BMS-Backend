@@ -327,8 +327,13 @@ const softDeleteMother = async (req, res, next) => {
             return res.status(400).json({error : "Missing Mother ID"});
         }
 
-        const motherRecord = await prisma.mother.findUnique({
-            where: { mother_id },
+        const motherRecord = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            },
             include: { user: true }
         });
 
@@ -340,12 +345,16 @@ const softDeleteMother = async (req, res, next) => {
             return res.status(403).json({error: "Access Denied. Mother belongs to another facility"});
         }
 
-        await prisma.user.update({
-            where : {user_id : motherRecord.user_id},
-            data : {
-                is_active : false
-            }
-        });
+        await prisma.$transaction([
+            prisma.user.update({
+                where: { user_id: motherRecord.user_id },
+                data: { is_active: false }
+            }),
+            prisma.mother.update({
+                where: { mother_id: motherRecord.mother_id },
+                data: { sync_status: "deactivated" }
+            })
+        ]);
 
         return res.status(200).json({
             message : "Mother deleted successfully"
@@ -482,6 +491,102 @@ const searchMotherByID = async (req, res, next) => {
         return next(error);
     }
 }
+
+const getCompositeMotherProfile = async (req, res, next) => {
+    try {
+        const { mother_id } = req.params;
+
+        if (!mother_id) {
+            return res.status(400).json({ error: "Missing Mother ID" });
+        }
+
+        const motherProfile = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            },
+            include: {
+                user: {
+                    include: {
+                        appointments: {
+                            orderBy: { appointment_date: 'desc' },
+                            include: {
+                                facility: true
+                            }
+                        }
+                    }
+                },
+                pregnancies: {
+                    orderBy: { date_of_registration: 'desc' },
+                    include: {
+                        prenatalVisits: {
+                            orderBy: { visit_date: 'desc' },
+                            include: {
+                                healthWorker: {
+                                    select: {
+                                        user_id: true,
+                                        first_name: true,
+                                        last_name: true,
+                                        role: true
+                                    }
+                                }
+                            }
+                        },
+                        supplementationRecords: {
+                            orderBy: { date_given: 'desc' }
+                        },
+                        labScreenings: {
+                            orderBy: { date_of_screening: 'desc' }
+                        },
+                        cdssAlerts: {
+                            orderBy: { updated_at: 'desc' }
+                        },
+                        onlineReferrals: {
+                            orderBy: { date_referred: 'desc' }
+                        },
+                        deliveryOutcomes: {
+                            include: {
+                                newbornRecords: true,
+                                postpartumVisits: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        if (!motherProfile) {
+            return res.status(404).json({ error: "Mother not found" });
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && motherProfile.user?.facility_id && motherProfile.user.facility_id !== req.user?.facility_id) {
+            return res.status(403).json({ error: "Access Denied. Mother belongs to another facility" });
+        }
+
+        const canonicalMotherId = motherProfile.mother_id;
+        const allPregnancies = motherProfile.pregnancies || [];
+        const allVisits = allPregnancies.flatMap(p => (p.prenatalVisits || []).map(v => ({ ...v, mother_id: canonicalMotherId })));
+        const allLabs = allPregnancies.flatMap(p => (p.labScreenings || []).map(l => ({ ...l, mother_id: canonicalMotherId })));
+        const allSupplements = allPregnancies.flatMap(p => (p.supplementationRecords || []).map(s => ({ ...s, mother_id: canonicalMotherId })));
+        const allAppointments = (motherProfile.user?.appointments || []).map(a => ({ ...a, mother_id: canonicalMotherId }));
+
+        return res.status(200).json({
+            message: "Composite mother profile retrieved",
+            result: {
+                ...motherProfile,
+                pregnancies: allPregnancies,
+                prenatalVisits: allVisits,
+                labRecords: allLabs,
+                supplements: allSupplements,
+                appointments: allAppointments,
+            }
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
 
 const getAllMother = async (req, res, next) => {
     try {
@@ -739,5 +844,6 @@ module.exports = {
     getAllActiveMotherByFacility,
     updateMyProfile,
     getProfile,
-    assignFacilityByCode
+    assignFacilityByCode,
+    getCompositeMotherProfile
 }

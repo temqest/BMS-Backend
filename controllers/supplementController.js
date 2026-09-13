@@ -1,6 +1,7 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
 const { updateWithMVCC } = require('../services/conflicResolution');
+const { resolveEntityId } = require('../middleware/idResolver');
 
 const registerSupplementRecord = async (req, res, next) => {
     try {
@@ -43,23 +44,9 @@ const registerSupplementRecord = async (req, res, next) => {
             if (latestVisit) {
                 targetVisitId = latestVisit.visit_id;
             } else {
-                const defaultHealthWorker = req.user?.user_id || (await prisma.user.findFirst({ where: { is_active: true } }))?.user_id || "system";
-                const createdVisit = await prisma.prenatalVisit.create({
-                    data: {
-                        pregnancy_id: targetPregnancyId,
-                        health_worker_id: defaultHealthWorker,
-                        trimester: 1,
-                        visit_number: 1,
-                        age_of_gestation_weeks: 12,
-                        weight_kg: 50,
-                        temperature_celsius: 36.5,
-                        pulse_rate_bpm: 75,
-                        bp_systolic: 120,
-                        bp_diastolic: 80,
-                        sync_status: "synced",
-                    }
+                return res.status(400).json({ 
+                    error: "A valid prenatal visit must be recorded before registering supplements for this pregnancy." 
                 });
-                targetVisitId = createdVisit.visit_id;
             }
         }
 
@@ -86,15 +73,17 @@ const registerSupplementRecord = async (req, res, next) => {
 const updateSupplementRecord = async (req, res, next) => {
     try {
         const { supplement_id, strategy, version, ...clientData } = req.body;
-        const targetId = supplement_id || req.params.supplement_id;
+        let targetId = supplement_id || req.params.supplement_id;
 
         if (!targetId) {
             return res.status(400).json({error : "Missing Required Fields"});
         }
 
-        if(!(await validate.isSupplementRecordExist(targetId))) {
+        const { resolvedId, record } = await resolveEntityId('supplementation_Record', targetId, req.body);
+        if (!resolvedId || !record) {
             return res.status(404).json({error: "Supplement Record doesn't Exist"});
         }
+        targetId = resolvedId;
 
         const mvccResult = await updateWithMVCC('supplementation_Record', targetId, { version, ...clientData }, {
             strategy,
@@ -121,11 +110,13 @@ const updateSupplementRecord = async (req, res, next) => {
 
 const deleteSupplementRecord = async (req, res, next) => {
     try {
-        const {supplement_id} = req.params;
+        let {supplement_id} = req.params;
 
-        if(!(await validate.isSupplementRecordExist(supplement_id))) {
-            return res.status(404).json({error: "Supplement Record Not Found!"});
+        const { resolvedId, record } = await resolveEntityId('supplementation_Record', supplement_id, req.query || req.body);
+        if (!resolvedId || !record) {
+            return res.status(200).json({ message: "Supplement Record Already Deleted" });
         }
+        supplement_id = resolvedId;
 
         await prisma.supplementation_Record.delete({
             where : {supplement_id : supplement_id}

@@ -119,23 +119,9 @@ const registerLabScreening = async (req, res, next) => {
             if (latestVisit) {
                 targetVisitId = latestVisit.visit_id;
             } else {
-                const defaultHealthWorker = req.user?.user_id || (await prisma.user.findFirst({ where: { is_active: true } }))?.user_id || "system";
-                const createdVisit = await prisma.prenatalVisit.create({
-                    data: {
-                        pregnancy_id: targetPregnancyId,
-                        health_worker_id: defaultHealthWorker,
-                        trimester: 1,
-                        visit_number: 1,
-                        age_of_gestation_weeks: 12,
-                        weight_kg: 50,
-                        temperature_celsius: 36.5,
-                        pulse_rate_bpm: 75,
-                        bp_systolic: 120,
-                        bp_diastolic: 80,
-                        sync_status: "synced",
-                    }
+                return res.status(400).json({ 
+                    error: "A valid prenatal visit must be recorded before registering lab screenings for this pregnancy." 
                 });
-                targetVisitId = createdVisit.visit_id;
             }
         }
 
@@ -166,12 +152,14 @@ const registerLabScreening = async (req, res, next) => {
 
 const updateLabScreening = async (req, res, next) => {
     try {
-        const {screening_id} = req.params;
+        let {screening_id} = req.params;
         const { strategy, version, ...clientData } = req.body;
 
-        if(!(await validate.isLabScreeningExist(screening_id))) {
+        const { resolvedId, record } = await resolveEntityId('lab_Screening', screening_id, req.body);
+        if (!resolvedId || !record) {
             return res.status(404).json({error: "Lab Screening Not Found!"});
         }
+        screening_id = resolvedId;
 
         if (clientData.file_url) {
             clientData.file_url = saveBase64ToFile(clientData.file_url);
@@ -202,11 +190,13 @@ const updateLabScreening = async (req, res, next) => {
 
 const deleteLabScreening = async (req, res, next) => {
     try {
-        const {screening_id} = req.params;
+        let {screening_id} = req.params;
 
-        if(!(await validate.isLabScreeningExist(screening_id))) {
-            return res.status(404).json({error: "Lab Screening Not Found!"});
+        const { resolvedId, record } = await resolveEntityId('lab_Screening', screening_id, req.query || req.body);
+        if (!resolvedId || !record) {
+            return res.status(200).json({ message: "Lab Screening Already Deleted" });
         }
+        screening_id = resolvedId;
 
         await prisma.lab_Screening.delete({
             where : {screening_id : screening_id}

@@ -2,6 +2,7 @@ const prisma = require('../util/db');
 const validate = require('../util/validation');
 const { updateWithMVCC } = require('../services/conflicResolution');
 const { logAuditTrail } = require('../services/auditService');
+const { resolveEntityId } = require('../middleware/idResolver');
 
 const registerPregnancy = async (req, res, next) => {
     try {
@@ -89,10 +90,15 @@ const registerPregnancy = async (req, res, next) => {
 };
 
 const updatePregnancy = async (req, res, next) => {
-    const {pregnancy_id} = req.params;
+    let {pregnancy_id} = req.params;
     const { strategy, version, ...clientData } = req.body;
 
     try {
+        const { resolvedId, record } = await resolveEntityId('pregnancy', pregnancy_id, req.body);
+        if (resolvedId && record) {
+            pregnancy_id = resolvedId;
+        }
+
         const mvccResult = await updateWithMVCC('pregnancy', pregnancy_id, { version, ...clientData }, {
             strategy,
             userId: req.user?.user_id || req.user?.id
@@ -116,25 +122,46 @@ const updatePregnancy = async (req, res, next) => {
 };
 
 const deletePregnancy = async (req, res, next) => {
-    const {pregnancy_id} = req.params;
+    let { pregnancy_id } = req.params;
 
     try {
-        const existing = await prisma.pregnancy.findUnique({ where: { pregnancy_id } });
-
-        const pregnancy = await prisma.pregnancy.delete({
-            where : {pregnancy_id: pregnancy_id},
+        const { resolvedId, record: existing } = await resolveEntityId('pregnancy', pregnancy_id, {
+            ...(req.query || {}),
+            ...(req.body || {})
         });
 
-        if (existing) {
-            await logAuditTrail({
-                userId: req.user?.user_id || req.user?.id || 'system',
-                tableName: 'pregnancy',
-                actionType: 'DELETE',
-                previousState: existing
+        if (!resolvedId || !existing) {
+            return res.status(200).json({
+                message: "Pregnancy already deleted or not found",
+                pregnancy_id
             });
         }
+        pregnancy_id = resolvedId;
 
-        res.status(200).json({
+        // Cascade delete child records first to avoid foreign key constraint errors
+        try {
+            await prisma.prenatalVisit.deleteMany({ where: { pregnancy_id } });
+            await prisma.supplementation_Record.deleteMany({ where: { pregnancy_id } });
+            await prisma.lab_Screening.deleteMany({ where: { pregnancy_id } });
+            await prisma.cDSS_Alert.deleteMany({ where: { pregnancy_id } });
+            await prisma.online_Referral.deleteMany({ where: { pregnancy_id } });
+            await prisma.delivery_Outcome.deleteMany({ where: { pregnancy_id } });
+        } catch (cascadeErr) {
+            console.warn("[deletePregnancy] Child record cleanup warning:", cascadeErr.message);
+        }
+
+        const pregnancy = await prisma.pregnancy.delete({
+            where: { pregnancy_id: pregnancy_id },
+        });
+
+        await logAuditTrail({
+            userId: req.user?.user_id || req.user?.id || 'system',
+            tableName: 'pregnancy',
+            actionType: 'DELETE',
+            previousState: existing
+        });
+
+        return res.status(200).json({
             message: "Pregnancy deleted successfully",
             pregnancy: pregnancy,
         });
