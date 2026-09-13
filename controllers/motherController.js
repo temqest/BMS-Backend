@@ -290,7 +290,9 @@ const updateMother = async (req, res, next) => {
         if (blood_type !== undefined) motherUpdateData.blood_type = blood_type;
         if (family_serial_no !== undefined) motherUpdateData.family_serial_no = family_serial_no;
 
-        const mvccResult = await updateWithMVCC('mother', mother_id, { version, ...motherUpdateData }, {
+        const targetMotherId = motherRecord.mother_id;
+
+        const mvccResult = await updateWithMVCC('mother', targetMotherId, { version, ...motherUpdateData }, {
             strategy,
             userId: req.user?.user_id || req.user?.id
         });
@@ -303,7 +305,7 @@ const updateMother = async (req, res, next) => {
         }
 
         const updatedMotherWithUser = await prisma.mother.findUnique({
-            where: { mother_id },
+            where: { mother_id: targetMotherId },
             include: { user: true }
         });
 

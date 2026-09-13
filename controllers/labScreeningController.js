@@ -1,6 +1,7 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
 const { updateWithMVCC } = require('../services/conflicResolution');
+const { resolveEntityId } = require('../middleware/idResolver');
 
 const path = require('path');
 const fs = require('fs');
@@ -44,17 +45,19 @@ const uploadLabFile = async (req, res, next) => {
 
         try {
             const { supabase } = require('../util/storage');
-            const filePath = `lab-documents/${fileName}`;
-            const { data, error } = await supabase.storage
-                .from('lab-files')
-                .upload(filePath, file.buffer, {
-                    contentType: file.mimetype,
-                    upsert: true,
-                });
+            if (supabase && supabase.storage) {
+                const filePath = `lab-documents/${fileName}`;
+                const { data, error } = await supabase.storage
+                    .from('lab-files')
+                    .upload(filePath, file.buffer, {
+                        contentType: file.mimetype,
+                        upsert: true,
+                    });
 
-            if (!error && data) {
-                const { data: publicUrlData } = supabase.storage.from('lab-files').getPublicUrl(filePath);
-                return res.status(200).json({ file_url: publicUrlData.publicUrl });
+                if (!error && data) {
+                    const { data: publicUrlData } = supabase.storage.from('lab-files').getPublicUrl(filePath);
+                    return res.status(200).json({ file_url: publicUrlData.publicUrl });
+                }
             }
         } catch (supabaseErr) {
             console.warn("Supabase storage upload skipped/failed:", supabaseErr.message);

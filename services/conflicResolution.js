@@ -41,16 +41,39 @@ function mergeFieldLevel(serverRecord, clientRecord) {
     return mergedRecord;
 }
 
-function sanitizePrismaUpdatePayload(payload) {
-    const cleanPayload = Object.assign({}, payload);
-    const nonScalarFields = [
-        'motherId', 'mother_Id', 'targetId', 'temp_id', 'id', 'user', 'mother', 
-        'pregnancies', 'prenatalVisits', 'supplementationRecords', 'labScreenings', 
-        'cdssAlerts', 'onlineReferrals', 'deliveryOutcomes', 'postpartumVisits', 
-        'newbornRecords', 'patient', 'visitor', 'visit', 'pregnancy'
-    ];
-    for (const field of nonScalarFields) {
-        delete cleanPayload[field];
+const { Prisma } = require('@prisma/client');
+
+function getModelScalarFields(modelName) {
+    if (!modelName) return null;
+    const targetKey = (modelName + 'ScalarFieldEnum').toLowerCase();
+    for (const key of Object.keys(Prisma)) {
+        if (key.toLowerCase() === targetKey) {
+            return new Set(Object.keys(Prisma[key]));
+        }
+    }
+    return null;
+}
+
+function sanitizePrismaUpdatePayload(payload, modelName = null) {
+    const cleanPayload = {};
+    const validScalars = getModelScalarFields(modelName);
+
+    for (const [key, value] of Object.entries(payload)) {
+        if (validScalars) {
+            if (!validScalars.has(key)) continue;
+        } else {
+            const nonScalarFields = [
+                'motherId', 'mother_Id', 'targetId', 'temp_id', 'id', 'user', 'mother', 
+                'pregnancies', 'prenatalVisits', 'supplementationRecords', 'labScreenings', 
+                'cdssAlerts', 'onlineReferrals', 'deliveryOutcomes', 'postpartumVisits', 
+                'newbornRecords', 'patient', 'visitor', 'visit', 'pregnancy', 'healthWorker'
+            ];
+            if (nonScalarFields.includes(key)) continue;
+            if (typeof value === 'object' && value !== null && !(value instanceof Date)) {
+                continue;
+            }
+        }
+        cleanPayload[key] = value;
     }
     return cleanPayload;
 }
@@ -126,7 +149,7 @@ async function resolveConflict({ tableName, recordId, serverRecord, clientRecord
     const primaryKeyField = getPrimaryKeyField(tableName);
     const updatedRecord = await prisma[tableName].update({
         where: { [primaryKeyField]: recordId },
-        data: sanitizePrismaUpdatePayload(dataToSave)
+        data: sanitizePrismaUpdatePayload(dataToSave, tableName)
     });
 
     if (userId) {
@@ -212,7 +235,7 @@ async function updateWithMVCC(modelName, recordId, clientRecord, options = {}) {
 
     const updatedRecord = await prisma[modelName].update({
         where: { [primaryKeyField]: recordId },
-        data: sanitizePrismaUpdatePayload(updatePayload)
+        data: sanitizePrismaUpdatePayload(updatePayload, modelName)
     });
 
     return {
