@@ -7,6 +7,7 @@ const createAppointment = async (req, res, next) => {
     try {
         const {
             user_id,
+            mother_id,
             facility_id,
             appointment_date,
             appointment_time,
@@ -15,23 +16,37 @@ const createAppointment = async (req, res, next) => {
         } = req.body;
 
         let targetUserId = user_id;
-        let userRecord = await prisma.user.findUnique({ where: { user_id } });
+        let userRecord = null;
+
+        if (user_id) {
+            userRecord = await prisma.user.findUnique({ where: { user_id } });
+        }
 
         if (!userRecord) {
+            const lookupId = user_id || mother_id;
+            if (lookupId) {
+                const motherRecord = await prisma.mother.findFirst({
+                    where: { OR: [{ mother_id: lookupId }, { user_id: lookupId }] }
+                });
+                if (motherRecord && motherRecord.user_id) {
+                    targetUserId = motherRecord.user_id;
+                    userRecord = await prisma.user.findUnique({ where: { user_id: motherRecord.user_id } });
+                }
+            }
+        }
+
+        if (!userRecord && mother_id && mother_id !== user_id) {
             const motherRecord = await prisma.mother.findFirst({
-                where: { OR: [{ mother_id: user_id }, { user_id: user_id }] }
+                where: { OR: [{ mother_id: mother_id }, { user_id: mother_id }] }
             });
             if (motherRecord && motherRecord.user_id) {
                 targetUserId = motherRecord.user_id;
                 userRecord = await prisma.user.findUnique({ where: { user_id: motherRecord.user_id } });
-            } else if (req.user?.user_id) {
-                targetUserId = req.user.user_id;
-                userRecord = await prisma.user.findUnique({ where: { user_id: req.user.user_id } });
             }
         }
 
         if (!userRecord) {
-            return res.status(404).json({ error: "User Doesn't Exist!" });
+            return res.status(404).json({ error: "Patient user record not found. Please ensure the mother is registered." });
         }
 
         if (facility_id && !(await validate.isFacilityExist(facility_id))) {

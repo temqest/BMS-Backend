@@ -50,6 +50,23 @@ const registerSupplementRecord = async (req, res, next) => {
             }
         }
 
+        const existingRecord = await prisma.supplementation_Record.findFirst({
+            where: {
+                pregnancy_id: targetPregnancyId,
+                visit_id: targetVisitId,
+                supplement_type: supplement_type,
+                date_given: new Date(date_given),
+            }
+        });
+
+        if (existingRecord) {
+            return res.status(200).json({
+                message: "Supplement Record already exists",
+                supplement_record: existingRecord,
+                data: existingRecord,
+            });
+        }
+
         const newSupplementRecord = await prisma.supplementation_Record.create({
             data : {
                 pregnancy_id : targetPregnancyId,
@@ -62,7 +79,8 @@ const registerSupplementRecord = async (req, res, next) => {
 
         return res.status(200).json({
             message : "Supplement Record Successfully Created",
-            supplement_record : newSupplementRecord
+            supplement_record : newSupplementRecord,
+            data : newSupplementRecord,
         });
 
     } catch (error) {

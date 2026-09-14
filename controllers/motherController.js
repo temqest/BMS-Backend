@@ -4,12 +4,41 @@ const { updateWithMVCC } = require('../services/conflicResolution');
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const path = require('path');
+const fs = require('fs');
 
 const checkOtp = require('../services/otpServices')
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   console.warn("Warning: JWT_SECRET environment variable is missing.");
+}
+
+function saveBase64ToFile(fileUrl) {
+    if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.startsWith('data:')) {
+        return fileUrl;
+    }
+    try {
+        const matches = fileUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+            const mimeType = matches[1];
+            const base64Data = matches[2];
+            const buffer = Buffer.from(base64Data, 'base64');
+            const ext = mimeType.split('/')[1] || 'jpg';
+            const fileName = `avatar_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
+            const uploadsDir = path.join(__dirname, '../public/uploads');
+            if (!fs.existsSync(uploadsDir)) {
+                fs.mkdirSync(uploadsDir, { recursive: true });
+            }
+            const localFilePath = path.join(uploadsDir, fileName);
+            fs.writeFileSync(localFilePath, buffer);
+            const baseUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 6700}`;
+            return `${baseUrl}/uploads/${fileName}`;
+        }
+    } catch (err) {
+        console.warn("Failed to convert base64 profile_url to file on server:", err);
+    }
+    return fileUrl;
 }
 
 const calculateAge = (birthDate) => {
@@ -264,7 +293,8 @@ const updateMother = async (req, res, next) => {
             version
         } = req.body;
 
-        const { profile_url } = req.body;
+        const rawProfileUrl = req.body.profile_url || req.body.photo_url;
+        const profile_url = rawProfileUrl ? saveBase64ToFile(rawProfileUrl) : undefined;
         const userUpdateData = {};
         if (first_name !== undefined) userUpdateData.first_name = first_name;
         if (middle_name !== undefined) userUpdateData.middle_name = middle_name;

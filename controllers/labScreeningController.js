@@ -130,6 +130,22 @@ const registerLabScreening = async (req, res, next) => {
 
         const finalFileUrl = saveBase64ToFile(file_url);
 
+        const existingRecord = await prisma.lab_Screening.findFirst({
+            where: {
+                pregnancy_id: targetPregnancyId,
+                visit_id: targetVisitId,
+                screening_type: screening_type,
+                date_of_screening: new Date(date_of_screening),
+            }
+        });
+
+        if (existingRecord) {
+            return res.status(200).json({
+                message: "Lab Screening already registered",
+                data: existingRecord
+            });
+        }
+
         const labScreening = await prisma.lab_Screening.create({
             data : {
                 pregnancy_id : targetPregnancyId,
