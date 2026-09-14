@@ -206,8 +206,8 @@ const getAllMessageForUser = async (req, res, next) => {
                 ]
             },
             include: {
-                sender: { select: { user_id: true, first_name: true, last_name: true, role: true } },
-                receiver: { select: { user_id: true, first_name: true, last_name: true, role: true } },
+                sender: { select: { user_id: true, first_name: true, last_name: true, role: true, profile_url: true } },
+                receiver: { select: { user_id: true, first_name: true, last_name: true, role: true, profile_url: true } },
             },
             orderBy: {
                 message_date: 'asc'

@@ -9,12 +9,18 @@ const {
     getReferralByFacility,
     getAllReferralByPregnancy,
     deleteReferral,
+    getPublicReferral,
+    respondPublicReferral,
 } = require('../controllers/referralController');
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
 const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife'];
 const externalRoles = ['External-Hospital'];
 const allRolesWithExternal = [...allowedRoles, ...externalRoles];
+
+// Public Referral Link endpoints (No Auth Required, PIN checked if enabled)
+router.get('/public/:identifier', getPublicReferral);
+router.post('/public/:identifier/respond', respondPublicReferral);
 
 router.post('/register', verifyToken, checkUserRole(allowedRoles), createReferral);
 
