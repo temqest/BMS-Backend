@@ -18,8 +18,8 @@ const {
 const { verifyToken, checkUserRole } = require("../middleware/authMiddleware");
 
 const sysAdminOnly = ['SystemAdmin'];
-const staffRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife'];
-const allUserRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
+const staffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff'];
+const allUserRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff', 'Mother'];
 const motherOnly = ['Mother'];
 
 router.get('/all', verifyToken, checkUserRole(staffRoles), getAllMother);

@@ -18,7 +18,7 @@ router.post('/change-password', verifyToken, changePassword);
 router.post(
     '/create-staff',
     verifyToken,
-    checkUserRole(['SystemAdmin', 'Doctor', 'Nurse', 'Midwife', 'Staff']),
+    checkUserRole(['SystemAdmin', 'Admin', 'Doctor', 'Nurse', 'Midwife', 'HealthWorker', 'Staff']),
     createStaff
 );
 

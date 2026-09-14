@@ -3,7 +3,7 @@ const router = express.Router();
 const messageController = require('../controllers/messageController');
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
+const allowedRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff', 'Mother'];
 
 router.post('/create', verifyToken, checkUserRole(allowedRoles), messageController.createMessage);
 

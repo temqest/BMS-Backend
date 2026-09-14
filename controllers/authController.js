@@ -321,7 +321,7 @@ const createStaff = async (req, res, next) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        const allowedStaffRoles = ['Admin', 'Doctor', 'Nurse', 'Midwife', 'Staff'];
+        const allowedStaffRoles = ['Admin', 'Doctor', 'Nurse', 'Midwife', 'HealthWorker', 'Staff'];
         if (!allowedStaffRoles.includes(role)) {
             return res.status(400).json({ error: 'Invalid staff role specified' });
         }

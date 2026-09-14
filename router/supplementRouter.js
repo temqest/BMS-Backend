@@ -3,7 +3,7 @@ const router = express.Router();
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 const { registerSupplementRecord, updateSupplementRecord, deleteSupplementRecord, getSupplementRecordByID, getSupplementRecordByPregnancy, getSupplementRecordByHealthWorker, getSupplementRecordByMother } = require('../controllers/supplementController');
 
-const staffRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife'];
+const staffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff'];
 const allUserRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
 
 router.post('/register', verifyToken, checkUserRole(staffRoles), registerSupplementRecord);
