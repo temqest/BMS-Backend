@@ -4,16 +4,30 @@ const { logAuditTrail } = require('../services/auditService');
 
 const getStaffByFacility = async (req, res, next) => {
     try {
-        const facility_id = req.query.facility_id || req.user?.facility_id;
+        let facility_id = req.query.facility_id || req.user?.facility_id;
+
+        if (!facility_id && req.user?.user_id) {
+            const dbUser = await prisma.user.findUnique({
+                where: { user_id: req.user.user_id },
+                select: { facility_id: true }
+            });
+            facility_id = dbUser?.facility_id;
+        }
+
+        if (!facility_id) {
+            return res.status(200).json({
+                message: "No facility associated with user",
+                result: []
+            });
+        }
         
-        let whereCondition = {
+        const whereCondition = {
+            facility_id: facility_id,
+            is_active: true,
             role: {
                 notIn: ['Mother', 'MOTHER']
             }
         };
-        if (facility_id) {
-            whereCondition.facility_id = facility_id;
-        }
 
         const staff = await prisma.user.findMany({
             where: whereCondition,

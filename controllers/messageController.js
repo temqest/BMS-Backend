@@ -1,5 +1,8 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
+const fs = require('fs');
+const path = require('path');
+const { supabase } = require('../util/storage');
 
 const createMessage = async (req, res, next) => {
     try {
@@ -169,6 +172,9 @@ const markAllAsRead = async (req, res, next) => {
             whereClause.receiver_id = receiver_id;
         } else if (sender_id) {
             whereClause.sender_id = sender_id;
+            if (current_user_id) {
+                whereClause.receiver_id = current_user_id;
+            }
         } else if (receiver_id) {
             whereClause.receiver_id = receiver_id;
         } else if (current_user_id) {
@@ -210,25 +216,8 @@ const getAllMessageForUser = async (req, res, next) => {
         let whereClause;
         if (currentUser.role === 'SystemAdmin') {
             whereClause = {};
-        } else if (currentUser.role !== 'Mother' && currentUser.facility_id) {
-            // For healthcare facility staff, include messages involving any staff member in this facility
-            // so the entire facility care team has access to patient conversations
-            const facilityStaff = await prisma.user.findMany({
-                where: {
-                    facility_id: currentUser.facility_id,
-                    role: { notIn: ['Mother', 'MOTHER'] }
-                },
-                select: { user_id: true }
-            });
-            const staffUserIds = Array.from(new Set([user_id, ...facilityStaff.map(s => s.user_id)]));
-
-            whereClause = {
-                OR: [
-                    { sender_id: { in: staffUserIds } },
-                    { receiver_id: { in: staffUserIds } },
-                ]
-            };
         } else {
+            // Personalized 1-to-1 messaging: each user (staff or mother) only sees messages they sent or received
             whereClause = {
                 OR: [
                     { sender_id: user_id },
@@ -299,21 +288,8 @@ const getUnreadCount = async (req, res, next) => {
             return res.status(404).json({ error: "User Doesn't Exist" });
         }
 
-        let whereClause = { receiver_id: user_id, is_read: false };
-        if (currentUser.role !== 'Mother' && currentUser.facility_id) {
-            const facilityStaff = await prisma.user.findMany({
-                where: {
-                    facility_id: currentUser.facility_id,
-                    role: { notIn: ['Mother', 'MOTHER'] }
-                },
-                select: { user_id: true }
-            });
-            const staffUserIds = Array.from(new Set([user_id, ...facilityStaff.map(s => s.user_id)]));
-            whereClause = {
-                receiver_id: { in: staffUserIds },
-                is_read: false
-            };
-        }
+        // 1-to-1 unread count: strictly messages sent to this specific user that are unread
+        const whereClause = { receiver_id: user_id, is_read: false };
 
         const count = await prisma.in_App_Message.count({
             where: whereClause
@@ -329,6 +305,71 @@ const getUnreadCount = async (req, res, next) => {
     }
 };
 
+const uploadAttachment = async (req, res, next) => {
+    try {
+        const file = req.file;
+        if (!file) {
+            return res.status(400).json({ error: "No file uploaded" });
+        }
+
+        const fileExt = path.extname(file.originalname) || '';
+        const fileName = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${fileExt}`;
+        const isImage = (file.mimetype && file.mimetype.startsWith('image/')) || /\.(jpg|jpeg|png|webp|gif)$/i.test(file.originalname);
+        const fileType = isImage ? 'image' : 'file';
+
+        // 1. Try Supabase Storage if available
+        if (supabase) {
+            try {
+                const filePath = `messages/${fileName}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('documents')
+                    .upload(filePath, file.buffer, {
+                        contentType: file.mimetype || 'application/octet-stream',
+                        upsert: false
+                    });
+
+                if (!uploadError) {
+                    const { data: publicUrlData } = supabase.storage
+                        .from('documents')
+                        .getPublicUrl(filePath);
+
+                    if (publicUrlData && publicUrlData.publicUrl) {
+                        return res.status(200).json({
+                            fileUrl: publicUrlData.publicUrl,
+                            fileName: file.originalname,
+                            fileType: fileType,
+                            fileSize: `${(file.size / 1024).toFixed(1)} KB`
+                        });
+                    }
+                }
+            } catch (supErr) {
+                console.warn("Supabase storage upload skipped/failed:", supErr.message);
+            }
+        }
+
+        // 2. Fallback to local uploads directory
+        const uploadsDir = path.join(__dirname, '../public/uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        const localFilePath = path.join(uploadsDir, fileName);
+        fs.writeFileSync(localFilePath, file.buffer);
+
+        const baseUrl = process.env.BASE_URL || `http://${req.headers.host}`;
+        const file_url = `${baseUrl}/uploads/${fileName}`;
+
+        return res.status(200).json({
+            fileUrl: file_url,
+            fileName: file.originalname,
+            fileType: fileType,
+            fileSize: `${(file.size / 1024).toFixed(1)} KB`
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 module.exports = {
     createMessage,
     updateMessage,
@@ -336,5 +377,6 @@ module.exports = {
     getAllMessageForUser,
     markAllAsRead,
     markMessageAsRead,
-    getUnreadCount
+    getUnreadCount,
+    uploadAttachment
 };

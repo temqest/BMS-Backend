@@ -809,26 +809,45 @@ const assignFacilityByCode = async (req, res, next) => {
         }
 
         let cleanId = rawCode;
-        if (rawCode.startsWith("{") && rawCode.endsWith("}")) {
+        if (cleanId.includes("{") && cleanId.includes("}")) {
             try {
-                const parsed = JSON.parse(rawCode);
-                cleanId = parsed.mother_id || parsed.user_id || parsed.code || rawCode;
+                const start = cleanId.indexOf("{");
+                const end = cleanId.lastIndexOf("}");
+                const parsed = JSON.parse(cleanId.substring(start, end + 1));
+                cleanId = (parsed.mother_id || parsed.user_id || parsed.motherCode || parsed.code || parsed.id || cleanId).trim();
             } catch (e) {}
         }
 
         if (cleanId.toUpperCase().startsWith("MTH-")) {
-            cleanId = cleanId.substring(4);
+            cleanId = cleanId.substring(4).trim();
+        }
+
+        if (!cleanId) {
+            return res.status(400).json({ error: "Invalid mother code or ID provided" });
+        }
+
+        const lowerCleanId = cleanId.toLowerCase();
+        const orConditions = [
+            { mother_id: { equals: cleanId, mode: 'insensitive' } },
+            { user_id: { equals: cleanId, mode: 'insensitive' } },
+            { family_serial_no: { equals: cleanId, mode: 'insensitive' } },
+            { user: { phone_number: cleanId } },
+            { user: { email: { equals: cleanId, mode: 'insensitive' } } }
+        ];
+
+        // If at least 4 characters, allow prefix and suffix matching for short codes
+        if (cleanId.length >= 4) {
+            orConditions.push(
+                { mother_id: { startsWith: lowerCleanId, mode: 'insensitive' } },
+                { user_id: { startsWith: lowerCleanId, mode: 'insensitive' } },
+                { mother_id: { endsWith: lowerCleanId, mode: 'insensitive' } },
+                { user_id: { endsWith: lowerCleanId, mode: 'insensitive' } }
+            );
         }
 
         const motherRecord = await prisma.mother.findFirst({
             where: {
-                OR: [
-                    { mother_id: cleanId },
-                    { user_id: cleanId },
-                    { family_serial_no: cleanId },
-                    { mother_id: { endsWith: cleanId } },
-                    { user_id: { endsWith: cleanId } }
-                ]
+                OR: orConditions
             },
             include: { user: true }
         });
