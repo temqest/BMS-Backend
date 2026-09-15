@@ -18,7 +18,11 @@ const requestOTP = async (req, res, next) => {
         })
 
     } catch (error) {
-        return next(error);
+        console.error("[OTP Request Error]:", error.message);
+        return res.status(400).json({
+            error: "FailedToSendOTP",
+            message: error.message || "Failed to send verification code. Please try again.",
+        });
     }
 }
 
@@ -33,6 +37,10 @@ const validateOTP = async (req, res, next) => {
         }
 
         const optResponse = await otpService.verifyOTP(identifier, code, purpose);
+
+        if (!optResponse) {
+            return res.status(400).json({ error: "Invalid or expired OTP code" });
+        }
 
         return res.status(200).json({
             message: "OTP Verified Successfully",

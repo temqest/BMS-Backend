@@ -59,19 +59,35 @@ const register = async (req, res, next) => {
         const salt = await bcrypt.genSalt(14);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        const user = await prisma.user.create({
-            data: {
-                first_name,
-                middle_name,
-                last_name,
-                role,
-                phone_number,
-                email,
-                password: hashedPassword,
-                address,
-                facility_id,
-                sync_status: 'synced',
-            },
+        const user = await prisma.$transaction(async (tx) => {
+            const newUser = await tx.user.create({
+                data: {
+                    first_name,
+                    middle_name: middle_name || undefined,
+                    last_name,
+                    role,
+                    phone_number,
+                    email: email || undefined,
+                    password: hashedPassword,
+                    address: (address && address.trim()) ? address.trim() : "Not specified",
+                    facility_id: facility_id || undefined,
+                    sync_status: 'synced',
+                },
+            });
+
+            if (role === "Mother") {
+                await tx.mother.create({
+                    data: {
+                        user_id: newUser.user_id,
+                        birth_date: new Date("1995-01-01"),
+                        civil_status: "Single",
+                        blood_type: "Unknown",
+                        sync_status: "synced",
+                    }
+                });
+            }
+
+            return newUser;
         });
 
         const token = jwt.sign(
@@ -449,7 +465,7 @@ const changePassword = async (req, res, next) => {
 
 const googleAuth = async (req, res, next) => {
     try {
-        const { idToken, email: bodyEmail, first_name: bodyFirstName, last_name: bodyLastName, profile_url: bodyProfileUrl } = req.body;
+        const { idToken, email: bodyEmail, first_name: bodyFirstName, last_name: bodyLastName, profile_url: bodyProfileUrl, role: requestedRole, is_signup, auto_register, address: bodyAddress } = req.body;
 
         let email = bodyEmail;
         let firstName = bodyFirstName || "Google";
@@ -462,9 +478,10 @@ const googleAuth = async (req, res, next) => {
                 const googleClientId = process.env.GOOGLE_CLIENT_ID;
                 const client = new OAuth2Client(googleClientId);
                 
+                const validAudiences = [process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_ANDROID_CLIENT_ID].filter(Boolean);
                 const ticket = await client.verifyIdToken({
                     idToken: idToken,
-                    audience: googleClientId ? [googleClientId] : undefined,
+                    audience: validAudiences.length > 0 ? validAudiences : undefined,
                 });
                 const payload = ticket.getPayload();
 
@@ -495,11 +512,43 @@ const googleAuth = async (req, res, next) => {
             include: { facility: true }
         });
 
+        const targetRole = requestedRole || (is_signup ? "Mother" : undefined);
+
         if (!user) {
-            return res.status(404).json({
-                error: "ACCOUNT_NOT_FOUND",
-                message: "No account found matching this Google email. Please register your facility or contact your administrator."
-            });
+            if (targetRole === "Mother" || is_signup || auto_register) {
+                user = await prisma.$transaction(async (tx) => {
+                    const newUser = await tx.user.create({
+                        data: {
+                            first_name: firstName,
+                            last_name: lastName,
+                            email: cleanEmail,
+                            role: "Mother",
+                            address: bodyAddress || "Not specified",
+                            profile_url: profileUrl,
+                            is_active: true,
+                            sync_status: "synced",
+                        },
+                        include: { facility: true }
+                    });
+
+                    await tx.mother.create({
+                        data: {
+                            user_id: newUser.user_id,
+                            birth_date: new Date("1995-01-01"),
+                            civil_status: "Single",
+                            blood_type: "Unknown",
+                            sync_status: "synced",
+                        }
+                    });
+
+                    return newUser;
+                });
+            } else {
+                return res.status(404).json({
+                    error: "ACCOUNT_NOT_FOUND",
+                    message: "No account found matching this Google email. Please register your facility or contact your administrator."
+                });
+            }
         }
 
         if (profileUrl && !user.profile_url) {
