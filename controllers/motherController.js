@@ -712,6 +712,12 @@ const getProfile = async (req, res, next) => {
                         prenatalVisits: {
                             orderBy: { visit_date: "desc" }
                         },
+                        labScreenings: {
+                            orderBy: { date_of_screening: "desc" }
+                        },
+                        supplementationRecords: {
+                            orderBy: { date_given: "desc" }
+                        },
                         deliveryOutcomes: {
                             orderBy: { delivery_date: "desc" },
                             include: {

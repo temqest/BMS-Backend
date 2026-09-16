@@ -6,7 +6,7 @@ const { resolveEntityId } = require('../middleware/idResolver');
 const path = require('path');
 const fs = require('fs');
 
-function saveBase64ToFile(fileUrl) {
+function saveBase64ToFile(fileUrl, req) {
     if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.startsWith('data:')) {
         return fileUrl;
     }
@@ -24,7 +24,9 @@ function saveBase64ToFile(fileUrl) {
             }
             const localFilePath = path.join(uploadsDir, fileName);
             fs.writeFileSync(localFilePath, buffer);
-            const baseUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 6700}`;
+            const host = req?.headers?.host;
+            const protocol = req?.protocol || 'http';
+            const baseUrl = process.env.BACKEND_URL || process.env.BASE_URL || (host ? `${protocol}://${host}` : `http://localhost:${process.env.PORT || 6700}`);
             return `${baseUrl}/uploads/${fileName}`;
         }
     } catch (err) {
@@ -71,7 +73,9 @@ const uploadLabFile = async (req, res, next) => {
         const localFilePath = path.join(uploadsDir, fileName);
         fs.writeFileSync(localFilePath, file.buffer);
 
-        const baseUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 6700}`;
+        const host = req.headers.host;
+        const protocol = req.protocol || 'http';
+        const baseUrl = process.env.BACKEND_URL || process.env.BASE_URL || (host ? `${protocol}://${host}` : `http://localhost:${process.env.PORT || 6700}`);
         const file_url = `${baseUrl}/uploads/${fileName}`;
 
         return res.status(200).json({ file_url });
@@ -128,7 +132,7 @@ const registerLabScreening = async (req, res, next) => {
             }
         }
 
-        const finalFileUrl = saveBase64ToFile(file_url);
+        const finalFileUrl = saveBase64ToFile(file_url, req);
 
         const existingRecord = await prisma.lab_Screening.findFirst({
             where: {
@@ -181,7 +185,7 @@ const updateLabScreening = async (req, res, next) => {
         screening_id = resolvedId;
 
         if (clientData.file_url) {
-            clientData.file_url = saveBase64ToFile(clientData.file_url);
+            clientData.file_url = saveBase64ToFile(clientData.file_url, req);
         }
 
         const mvccResult = await updateWithMVCC('lab_Screening', screening_id, { version, ...clientData }, {
