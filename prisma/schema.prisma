@@ -70,6 +70,7 @@ model Mother {
 
   user        User?       @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
   pregnancies Pregnancy[]
+  shareLinks  Mother_Share_Link[]
 }
 
 //Pregnancy Schema
@@ -347,5 +348,21 @@ model Otp {
   created_at DateTime @default(now())
 
   @@index([identifier, type])
+}
+
+// Mother Share Link Schema for Secure QR Code & PIN-protected Journey
+model Mother_Share_Link {
+  share_id         String    @id @default(uuid())
+  mother_id        String
+  share_token      String    @unique @default(uuid())
+  pin_code         String
+  is_active        Boolean   @default(true)
+  expires_at       DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @default(now()) @updatedAt
+  last_accessed_at DateTime?
+  access_count     Int       @default(0)
+
+  mother Mother @relation(fields: [mother_id], references: [mother_id], onDelete: Cascade)
 }
 

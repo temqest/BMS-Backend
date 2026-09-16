@@ -12,6 +12,7 @@ const authRouter = require('./router/authRouter');
 const faciliityRouter = require('./router/facilityRouter');
 
 const motherRouter = require('./router/motherRouter');
+const shareRouter = require('./router/shareRouter');
 
 const pregnancyRouter = require('./router/pregnancyRouter');
 
@@ -66,6 +67,8 @@ app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/facility', faciliityRouter);
 
 app.use('/api/v1/mother', motherRouter);
+app.use('/api/v1/mother', shareRouter);
+app.use('/api/v1/share', shareRouter);
 
 app.use('/api/v1/pregnancy', pregnancyRouter);
 
