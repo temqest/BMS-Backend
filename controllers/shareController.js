@@ -161,6 +161,8 @@ const getPublicSharedJourney = async (req, res, next) => {
     const { token } = req.params;
     const { pin } = req.query;
 
+    console.log(`[ShareController] 📥 Inbound public journey request: token="${token}", pin="${pin || ""}"`);
+
     if (!token) {
       return res.status(400).json({ error: "Share token is required" });
     }
@@ -188,6 +190,7 @@ const getPublicSharedJourney = async (req, res, next) => {
     });
 
     if (!shareLink || !shareLink.mother) {
+      console.warn(`[ShareController] ❌ Share link not found or inactive for token: ${token}`);
       return res.status(404).json({
         error: "This pregnancy share link is invalid, inactive, or has expired.",
       });
@@ -203,6 +206,7 @@ const getPublicSharedJourney = async (req, res, next) => {
     // 1. PIN Gate Verification Check
     const providedPin = (pin || "").toString().trim();
     const isPinMatch = providedPin === shareLink.pin_code.toString().trim();
+    console.log(`[ShareController] 🔐 PIN check: provided="${providedPin}", expected="${shareLink.pin_code}", match=${isPinMatch}`);
 
     if (!isPinMatch) {
       return res.status(200).json({
@@ -221,6 +225,7 @@ const getPublicSharedJourney = async (req, res, next) => {
     }
 
     // 2. PIN is Valid - Record access metrics
+    console.log(`[ShareController] ✅ PIN verified! Fetching composite pregnancy records for mother: ${mother.mother_id}`);
     await prisma.mother_Share_Link.update({
       where: { share_id: shareLink.share_id },
       data: {
