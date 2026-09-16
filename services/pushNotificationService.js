@@ -19,11 +19,20 @@ async function sendNotificationToUser(userId, title, body, dataPayload = {}) {
       return { success: false, reason: 'Firebase not configured' };
     }
 
-    // 1. Fetch user and registered FCM token
-    const user = await prisma.user.findUnique({
-      where: { user_id: userId },
-      select: { user_id: true, fcm_token: true, first_name: true, last_name: true },
-    });
+    // 1. Fetch user and registered FCM token (with raw SQL fallback for Prisma schema lag)
+    let user = null;
+    try {
+      user = await prisma.user.findUnique({
+        where: { user_id: userId },
+        select: { user_id: true, fcm_token: true, first_name: true, last_name: true },
+      });
+    } catch (queryErr) {
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT "user_id", "fcm_token", "first_name", "last_name" FROM "User" WHERE "user_id" = $1 LIMIT 1`,
+        userId
+      );
+      user = rows && rows[0] ? rows[0] : null;
+    }
 
     if (!user) {
       console.warn(`[FCM] Target user ${userId} not found.`);
@@ -95,7 +104,14 @@ async function sendNotificationToUser(userId, title, body, dataPayload = {}) {
           data: { fcm_token: null },
         });
       } catch (dbErr) {
-        console.error('[FCM] Failed to reset invalid fcm_token in database:', dbErr.message);
+        try {
+          await prisma.$executeRawUnsafe(
+            `UPDATE "User" SET "fcm_token" = NULL WHERE "user_id" = $1`,
+            userId
+          );
+        } catch (rawErr) {
+          console.error('[FCM] Failed to reset invalid fcm_token in database:', rawErr.message);
+        }
       }
     }
 

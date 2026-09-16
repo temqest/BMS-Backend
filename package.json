@@ -4,6 +4,8 @@
   "description": "",
   "main": "main.js",
   "scripts": {
+    "postinstall": "prisma generate",
+    "build": "prisma generate",
     "start": "node main.js",
     "dev": "nodemon main.js",
     "clean:db": "node scripts/clean-db.js",

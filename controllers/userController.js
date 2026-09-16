@@ -552,20 +552,31 @@ const savePushToken = async (req, res, next) => {
             return res.status(400).json({ error: "A valid fcmToken is required." });
         }
 
-        const updatedUser = await prisma.user.update({
-            where: { user_id },
-            data: {
-                fcm_token: fcmToken.trim(),
-                updated_at: new Date()
-            },
-            select: {
-                user_id: true,
-                first_name: true,
-                last_name: true,
-                fcm_token: true,
-                updated_at: true
-            }
-        });
+        let updatedUser = null;
+        try {
+            updatedUser = await prisma.user.update({
+                where: { user_id },
+                data: {
+                    fcm_token: fcmToken.trim(),
+                    updated_at: new Date()
+                },
+                select: {
+                    user_id: true,
+                    first_name: true,
+                    last_name: true,
+                    fcm_token: true,
+                    updated_at: true
+                }
+            });
+        } catch (prismaErr) {
+            console.warn('[savePushToken] Prisma Client update failed, using raw SQL fallback:', prismaErr.message);
+            await prisma.$executeRawUnsafe(
+                `UPDATE "User" SET "fcm_token" = $1, "updated_at" = NOW() WHERE "user_id" = $2`,
+                fcmToken.trim(),
+                user_id
+            );
+            updatedUser = { user_id, fcm_token: fcmToken.trim() };
+        }
 
         return res.status(200).json({
             success: true,
