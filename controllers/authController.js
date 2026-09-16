@@ -18,7 +18,7 @@ const register = async (req, res, next) => {
     try {
         const { first_name, middle_name, last_name, role, phone_number, email, password, address, facility_id, otp, bypassCode } = req.body;
 
-        if(!first_name || !last_name || !role || !phone_number || !password || !otp){
+        if (!first_name || !last_name || !role || (!email && !phone_number) || !password || !otp) {
             return res.status(400).json({ error: 'Missing required fields' })
         }
 
@@ -33,17 +33,20 @@ const register = async (req, res, next) => {
             }
         }
     
-        const existingUser = await prisma.user.findFirst({
-            where: {
-                OR: [
-                    { phone_number: phone_number},
-                    { email: email || 'N/A'},
-                ]
-            }
-        });
+        const duplicateCheckConditions = [];
+        if (phone_number && phone_number.trim()) {
+            duplicateCheckConditions.push({ phone_number: phone_number.trim() });
+        }
+        if (email && email.trim()) {
+            duplicateCheckConditions.push({ email: email.trim() });
+        }
 
-        if(existingUser) {
-            return res.status(400).json({ error: 'Phone number or email is already registered'})
+        const existingUser = duplicateCheckConditions.length > 0 
+            ? await prisma.user.findFirst({ where: { OR: duplicateCheckConditions } }) 
+            : null;
+
+        if (existingUser) {
+            return res.status(400).json({ error: 'Phone number or email is already registered' })
         }
 
         const purpose = 'registration'

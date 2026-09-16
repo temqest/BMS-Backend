@@ -1,4 +1,7 @@
 .env
+.env*
 /node_modules
+client_secret*.json
+google-services*.json
 public/uploads/*
 !public/uploads/.gitkeep
