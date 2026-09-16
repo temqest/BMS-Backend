@@ -12,10 +12,12 @@ const {
     hardDeleteMother,
     getProfile,
     updateMyProfile,
+    uploadAvatar,
     assignFacilityByCode,
     getCompositeMotherProfile
 } = require("../controllers/motherController");
 const { verifyToken, checkUserRole } = require("../middleware/authMiddleware");
+const { upload } = require("../util/storage");
 
 const sysAdminOnly = ['SystemAdmin'];
 const staffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff'];
@@ -32,6 +34,7 @@ router.get('/search/:mother_id', verifyToken, checkUserRole(staffRoles), searchM
 router.post('/register', verifyToken, checkUserRole(staffRoles), registerMother);
 router.post('/self-register', selfRegisterMother);
 router.post('/assign-facility', verifyToken, checkUserRole(staffRoles), assignFacilityByCode);
+router.post('/avatar/upload', verifyToken, checkUserRole(allUserRoles), upload.single('file'), uploadAvatar);
 
 router.put('/update/:mother_id', verifyToken, checkUserRole(staffRoles), updateMother);
 router.put('/deactivate/:mother_id', verifyToken, checkUserRole(staffRoles), softDeleteMother);

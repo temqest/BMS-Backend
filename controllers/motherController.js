@@ -750,7 +750,8 @@ const updateMyProfile = async (req, res, next) => {
             return res.status(401).json({ error: "Unauthorized user" });
         }
 
-        const { first_name, middle_name, last_name, address, phone_number, email, birth_date, civil_status, blood_type } = req.body;
+        const { first_name, middle_name, last_name, address, phone_number, email, birth_date, civil_status, blood_type, profile_url, photo_url } = req.body;
+        const rawPhoto = profile_url || photo_url;
 
         const updatedProfile = await prisma.$transaction(async (prismaClient) => {
             const userData = {};
@@ -760,6 +761,7 @@ const updateMyProfile = async (req, res, next) => {
             if (address !== undefined) userData.address = address;
             if (phone_number !== undefined) userData.phone_number = phone_number;
             if (email !== undefined) userData.email = email;
+            if (rawPhoto !== undefined) userData.profile_url = rawPhoto;
 
             const user = await prismaClient.user.update({
                 where: { user_id: my_user_id },
@@ -798,7 +800,71 @@ const updateMyProfile = async (req, res, next) => {
     } catch (error) {
         return next(error);
     }
-}
+};
+
+const uploadAvatar = async (req, res, next) => {
+    try {
+        const file = req.file;
+        const my_user_id = req.user?.user_id || req.user?.id || 'anonymous';
+        if (!file) {
+            return res.status(400).json({ error: "No image file uploaded" });
+        }
+
+        const fileExt = path.extname(file.originalname) || '.jpg';
+        const fileName = `avatar-${my_user_id}-${Date.now()}${fileExt}`;
+        const { supabase } = require('../util/storage');
+
+        // 1. Try Supabase Storage under profiles/ in documents bucket
+        if (supabase) {
+            try {
+                const filePath = `profiles/${fileName}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('documents')
+                    .upload(filePath, file.buffer, {
+                        contentType: file.mimetype || 'image/jpeg',
+                        upsert: true
+                    });
+
+                if (!uploadError) {
+                    const { data: signedData } = await supabase.storage.from('documents').createSignedUrl(filePath, 60 * 60 * 24 * 365);
+                    const fileUrl = signedData?.signedUrl || (supabase.storage.from('documents').getPublicUrl(filePath)).data?.publicUrl;
+
+                    if (fileUrl) {
+                        return res.status(200).json({
+                            message: "Avatar uploaded successfully",
+                            fileUrl: fileUrl,
+                            profile_url: fileUrl,
+                        });
+                    }
+                }
+            } catch (supErr) {
+                console.warn("Supabase avatar upload skipped/failed:", supErr.message);
+            }
+        }
+
+        // 2. Fallback to local uploads directory
+        const uploadsDir = path.join(__dirname, '../public/uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        const localFilePath = path.join(uploadsDir, fileName);
+        fs.writeFileSync(localFilePath, file.buffer);
+
+        const protocol = req.protocol || 'http';
+        const host = req.get('host') || 'localhost:6700';
+        const baseUrl = `${protocol}://${host}`;
+        const file_url = `${baseUrl}/uploads/${fileName}`;
+
+        return res.status(200).json({
+            message: "Avatar uploaded successfully",
+            fileUrl: file_url,
+            profile_url: file_url,
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
 
 const assignFacilityByCode = async (req, res, next) => {
     try {
@@ -900,6 +966,7 @@ module.exports = {
     searchMotherByID,
     getAllActiveMotherByFacility,
     updateMyProfile,
+    uploadAvatar,
     getProfile,
     assignFacilityByCode,
     getCompositeMotherProfile
