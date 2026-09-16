@@ -539,6 +539,44 @@ const getStaffActivities = async (req, res, next) => {
     }
 };
 
+const savePushToken = async (req, res, next) => {
+    try {
+        const user_id = req.user?.user_id;
+        const fcmToken = req.body.fcmToken || req.body.fcm_token;
+
+        if (!user_id) {
+            return res.status(401).json({ error: "Unauthorized access" });
+        }
+
+        if (!fcmToken || typeof fcmToken !== 'string' || fcmToken.trim().length === 0) {
+            return res.status(400).json({ error: "A valid fcmToken is required." });
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { user_id },
+            data: {
+                fcm_token: fcmToken.trim(),
+                updated_at: new Date()
+            },
+            select: {
+                user_id: true,
+                first_name: true,
+                last_name: true,
+                fcm_token: true,
+                updated_at: true
+            }
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Push notification token registered successfully.",
+            result: updatedUser
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 module.exports = {
     getStaffByFacility,
     getStaffById,
@@ -546,5 +584,6 @@ module.exports = {
     deactivateStaff,
     updateUserProfile,
     adminResetStaffPassword,
-    getStaffActivities
+    getStaffActivities,
+    savePushToken
 };

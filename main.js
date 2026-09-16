@@ -96,6 +96,8 @@ app.use('/api/v1/appointment', appointmentRouter)
 app.use('/api/v1/send', sendRouter)
 
 app.use('/api/v1/user', userRouter)
+app.use('/api/users', userRouter)
+app.use('/api/user', userRouter)
 
 app.use((err, req, res, next) => {
     console.error("Unhandled Server Error", err);

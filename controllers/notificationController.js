@@ -1,5 +1,6 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
+const { sendNotificationToUser: sendPushToUser } = require('../services/pushNotificationService');
 
 const sendNotificationToUser = async (req, res, next) => {
 
@@ -22,6 +23,16 @@ const sendNotificationToUser = async (req, res, next) => {
                 notification_message : notification_message,
                 notification_date : notification_date ? new Date(notification_date) : undefined
             }
+        });
+
+        // Fire-and-forget push notification to user's mobile device
+        sendPushToUser(
+            user_id,
+            notification_type,
+            notification_message,
+            { notification_id: newNotification.notification_id, type: notification_type }
+        ).catch((pushErr) => {
+            console.error('[NotificationController] Failed to send push notification:', pushErr);
         });
 
         return res.status(200).json({

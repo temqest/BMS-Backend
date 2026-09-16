@@ -1,5 +1,6 @@
 const prisma = require('../util/db');
 const send = require('../services/sendProvider');
+const sendPush = require('../services/pushNotificationService');
 
 
 async function checkForUpcomingAppointment(days_before_appointment) {
@@ -84,6 +85,14 @@ async function sendAppointmentAlert(appointments) {
                     await send.sendEmail(user.email, message, subject);
                 } else if (user.phone_number) {
                     await send.sendSMS(user.phone_number, message);
+                }
+
+                // Send push notification to target user's device
+                if (app.user_id) {
+                    sendPush.sendNotificationToUser(app.user_id, subject, message, {
+                        appointment_id: app.appointment_id,
+                        type: 'appointment_reminder'
+                    }).catch(pushErr => console.error(`[AppointmentAlert] Failed to send push alert:`, pushErr));
                 }
             } catch (sendError) {
                 console.error(`Failed to send alert for user ${user.first_name} ${user.last_name}:`, sendError);

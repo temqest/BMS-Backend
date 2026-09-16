@@ -3,5 +3,7 @@
 /node_modules
 client_secret*.json
 google-services*.json
+*-firebase-adminsdk-*.json
+serviceAccountKey*.json
 public/uploads/*
 !public/uploads/.gitkeep

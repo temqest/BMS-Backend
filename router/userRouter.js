@@ -8,9 +8,11 @@ const {
     deactivateStaff,
     updateUserProfile,
     adminResetStaffPassword,
-    getStaffActivities
+    getStaffActivities,
+    savePushToken
 } = require('../controllers/userController');
 
+router.post('/push-token', verifyToken, savePushToken);
 router.put('/profile', verifyToken, updateUserProfile);
 router.get('/facility', verifyToken, getStaffByFacility);
 router.get('/:id/activities', verifyToken, getStaffActivities);

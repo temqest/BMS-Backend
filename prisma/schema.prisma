@@ -39,6 +39,7 @@ model User {
   address      String
   password     String?
   profile_url  String?
+  fcm_token    String?
   is_active    Boolean  @default(true)
   sync_status  String?  @default("synced")
   version      Int      @default(1)
