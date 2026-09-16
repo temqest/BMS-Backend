@@ -234,89 +234,74 @@ const getPublicSharedJourney = async (req, res, next) => {
       },
     });
 
-    // 3. Fetch full comprehensive composite pregnancy records
-    const fullMother = await prisma.mother.findUnique({
-      where: { mother_id: mother.mother_id },
-      include: {
-        user: {
-          include: {
-            facility: true,
+    // 3. Fetch composite pregnancy records in parallel (optimized for PgBouncer & speed)
+    const targetMotherId = mother.mother_id;
+    const [fullMother, pregnancies, prenatalVisits, labScreenings, supplements, deliveryOutcomes, referrals] = await Promise.all([
+      prisma.mother.findUnique({
+        where: { mother_id: targetMotherId },
+        include: {
+          user: {
+            include: {
+              facility: true,
+            },
           },
         },
-        pregnancies: {
-          orderBy: { date_of_registration: "desc" },
-          include: {
-            prenatalVisits: {
-              orderBy: { visit_date: "desc" },
-              include: {
-                healthWorker: {
-                  select: {
-                    user_id: true,
-                    first_name: true,
-                    last_name: true,
-                    role: true,
-                    facility: {
-                      select: {
-                        facility_id: true,
-                        facility_name: true,
-                        type: true,
-                      },
-                    },
-                  },
-                },
-                labScreenings: {
-                  orderBy: { date_of_screening: "desc" },
-                },
-                supplementationRecords: {
-                  orderBy: { date_given: "desc" },
-                },
-                cdssAlerts: {
-                  orderBy: { updated_at: "desc" },
-                },
-              },
-            },
-            labScreenings: {
-              orderBy: { date_of_screening: "desc" },
-            },
-            supplementationRecords: {
-              orderBy: { date_given: "desc" },
-            },
-            cdssAlerts: {
-              orderBy: { updated_at: "desc" },
-            },
-            onlineReferrals: {
-              orderBy: { date_referred: "desc" },
-              include: {
-                fromFacility: true,
-                toFacility: true,
-              },
-            },
-            deliveryOutcomes: {
-              orderBy: { delivery_date: "desc" },
-              include: {
-                newbornRecords: true,
-                postpartumVisits: {
-                  orderBy: { visit_date: "desc" },
+      }),
+      prisma.pregnancy.findMany({
+        where: { mother_id: targetMotherId },
+        orderBy: { date_of_registration: "desc" },
+      }),
+      prisma.prenatalVisit.findMany({
+        where: { pregnancy: { mother_id: targetMotherId } },
+        orderBy: { visit_date: "desc" },
+        include: {
+          healthWorker: {
+            select: {
+              user_id: true,
+              first_name: true,
+              last_name: true,
+              role: true,
+              facility: {
+                select: {
+                  facility_id: true,
+                  facility_name: true,
+                  type: true,
                 },
               },
             },
           },
         },
-      },
-    });
+      }),
+      prisma.lab_Screening.findMany({
+        where: { pregnancy: { mother_id: targetMotherId } },
+        orderBy: { date_of_screening: "desc" },
+      }),
+      prisma.supplementation_Record.findMany({
+        where: { pregnancy: { mother_id: targetMotherId } },
+        orderBy: { date_given: "desc" },
+      }),
+      prisma.delivery_Outcome.findMany({
+        where: { pregnancy: { mother_id: targetMotherId } },
+        orderBy: { delivery_date: "desc" },
+        include: {
+          newbornRecords: true,
+          postpartumVisits: {
+            orderBy: { visit_date: "desc" },
+          },
+        },
+      }),
+      prisma.online_Referral.findMany({
+        where: { pregnancy: { mother_id: targetMotherId } },
+        orderBy: { date_referred: "desc" },
+        include: {
+          fromFacility: true,
+          toFacility: true,
+        },
+      }),
+    ]);
 
-    const pregnancies = fullMother.pregnancies || [];
     const activePregnancy = pregnancies.find((p) => (p.pregnancy_status || "").toLowerCase() === "active") || pregnancies[0] || null;
-
-    // Extract all visits across all pregnancies for longitudinal vitals analysis
-    const allVisits = pregnancies.flatMap((p) => p.prenatalVisits || []);
-    const latestVisit = activePregnancy?.prenatalVisits?.[0] || allVisits[0] || null;
-
-    // Collect all laboratory & uploaded document scans
-    const allLabScreenings = pregnancies.flatMap((p) => p.labScreenings || []);
-    const allSupplements = pregnancies.flatMap((p) => p.supplementationRecords || []);
-    const allDeliveries = pregnancies.flatMap((p) => p.deliveryOutcomes || []);
-    const allReferrals = pregnancies.flatMap((p) => p.onlineReferrals || []);
+    const latestVisit = prenatalVisits[0] || null;
 
     const gaWeeks = activePregnancy?.lmp_date ? calculateGAWeeks(activePregnancy.lmp_date) : (latestVisit?.age_of_gestation_weeks || 0);
     const eddDate = activePregnancy?.lmp_date ? calculateEDD(activePregnancy.lmp_date) : null;
