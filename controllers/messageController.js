@@ -361,6 +361,7 @@ const uploadAttachment = async (req, res, next) => {
 
         return res.status(200).json({
             fileUrl: file_url,
+            file_url: file_url,
             fileName: file.originalname,
             fileType: fileType,
             fileSize: `${(file.size / 1024).toFixed(1)} KB`
