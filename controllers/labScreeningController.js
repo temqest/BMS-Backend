@@ -71,8 +71,9 @@ const uploadLabFile = async (req, res, next) => {
                 }
 
                 if (!error && data) {
-                    const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(filePath);
-                    return res.status(200).json({ file_url: publicUrlData.publicUrl });
+                    const { data: signedData } = await supabase.storage.from(bucketName).createSignedUrl(filePath, 60 * 60 * 24 * 365);
+                    const file_url = signedData?.signedUrl || (supabase.storage.from(bucketName).getPublicUrl(filePath)).data?.publicUrl;
+                    return res.status(200).json({ file_url });
                 } else if (error) {
                     console.warn("Supabase storage upload skipped/failed:", error.message || error);
                 }

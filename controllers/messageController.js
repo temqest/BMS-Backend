@@ -329,13 +329,13 @@ const uploadAttachment = async (req, res, next) => {
                     });
 
                 if (!uploadError) {
-                    const { data: publicUrlData } = supabase.storage
-                        .from('documents')
-                        .getPublicUrl(filePath);
+                    const { data: signedData } = await supabase.storage.from('documents').createSignedUrl(filePath, 60 * 60 * 24 * 365);
+                    const fileUrl = signedData?.signedUrl || (supabase.storage.from('documents').getPublicUrl(filePath)).data?.publicUrl;
 
-                    if (publicUrlData && publicUrlData.publicUrl) {
+                    if (fileUrl) {
                         return res.status(200).json({
-                            fileUrl: publicUrlData.publicUrl,
+                            fileUrl: fileUrl,
+                            file_url: fileUrl,
                             fileName: file.originalname,
                             fileType: fileType,
                             fileSize: `${(file.size / 1024).toFixed(1)} KB`
