@@ -49,16 +49,32 @@ const uploadLabFile = async (req, res, next) => {
             const { supabase } = require('../util/storage');
             if (supabase && supabase.storage) {
                 const filePath = `lab-documents/${fileName}`;
-                const { data, error } = await supabase.storage
-                    .from('lab-files')
+                let bucketName = 'lab-files';
+                let { data, error } = await supabase.storage
+                    .from(bucketName)
                     .upload(filePath, file.buffer, {
                         contentType: file.mimetype,
                         upsert: true,
                     });
 
+                if (error && (error.message?.includes('Bucket not found') || error.statusCode === '404' || error.code === 'NoSuchBucket')) {
+                    console.warn(`Bucket '${bucketName}' not found or RLS restricted. Retrying with 'documents' bucket...`);
+                    bucketName = 'documents';
+                    const retry = await supabase.storage
+                        .from(bucketName)
+                        .upload(filePath, file.buffer, {
+                            contentType: file.mimetype,
+                            upsert: true,
+                        });
+                    data = retry.data;
+                    error = retry.error;
+                }
+
                 if (!error && data) {
-                    const { data: publicUrlData } = supabase.storage.from('lab-files').getPublicUrl(filePath);
+                    const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(filePath);
                     return res.status(200).json({ file_url: publicUrlData.publicUrl });
+                } else if (error) {
+                    console.warn("Supabase storage upload skipped/failed:", error.message || error);
                 }
             }
         } catch (supabaseErr) {
