@@ -24,6 +24,7 @@ model Facility {
   onlineReferralsFrom Online_Referral[] @relation("FromFacility")
   onlineReferralsTo   Online_Referral[] @relation("ToFacility")
   appointments        Appointment[]
+  motherEnrollments   Mother_Facility_Enrollment[]
 }
 
 //User schema
@@ -71,9 +72,29 @@ model Mother {
   version          Int      @default(1)
   updated_at       DateTime @default(now()) @updatedAt
 
-  user        User?       @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
-  pregnancies Pregnancy[]
-  shareLinks  Mother_Share_Link[]
+  user                User?                        @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  pregnancies         Pregnancy[]
+  shareLinks          Mother_Share_Link[]
+  facilityEnrollments Mother_Facility_Enrollment[]
+}
+
+//Mother-Facility Enrollment Schema (Many-to-Many Multi-Facility Care)
+model Mother_Facility_Enrollment {
+  enrollment_id String   @id @default(uuid())
+  mother_id     String
+  facility_id   String
+  status        String   @default("Active")
+  notes         String?
+  enrolled_at   DateTime @default(now())
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now()) @updatedAt
+
+  mother        Mother   @relation(fields: [mother_id], references: [mother_id], onDelete: Cascade)
+  facility      Facility @relation(fields: [facility_id], references: [facility_id], onDelete: Cascade)
+
+  @@unique([mother_id, facility_id])
+  @@index([facility_id, status])
+  @@index([mother_id])
 }
 
 //Pregnancy Schema

@@ -14,7 +14,9 @@ const {
     updateMyProfile,
     uploadAvatar,
     assignFacilityByCode,
-    getCompositeMotherProfile
+    getCompositeMotherProfile,
+    enrollMotherInFacility,
+    getMotherFacilities
 } = require("../controllers/motherController");
 const { verifyToken, checkUserRole } = require("../middleware/authMiddleware");
 const { upload } = require("../util/storage");
@@ -30,8 +32,10 @@ router.get('/active/:facility_id', verifyToken, checkUserRole(staffRoles), getAl
 router.get('/composite/:mother_id', verifyToken, checkUserRole(staffRoles), getCompositeMotherProfile);
 router.get('/get/:mother_id', verifyToken, checkUserRole(staffRoles), searchMotherByID);
 router.get('/search/:mother_id', verifyToken, checkUserRole(staffRoles), searchMotherByID);
+router.get('/:mother_id/facilities', verifyToken, checkUserRole(staffRoles), getMotherFacilities);
 
 router.post('/register', verifyToken, checkUserRole(staffRoles), registerMother);
+router.post('/enroll', verifyToken, checkUserRole(staffRoles), enrollMotherInFacility);
 router.post('/self-register', selfRegisterMother);
 router.post('/assign-facility', verifyToken, checkUserRole(staffRoles), assignFacilityByCode);
 router.post('/avatar/upload', verifyToken, checkUserRole(allUserRoles), upload.single('file'), uploadAvatar);

@@ -154,11 +154,32 @@ const registerMother = async (req, res, next) => {
                 });
             }
 
+            const targetFacilityId = facility_id || req.user?.facility_id;
+            let enrollment = null;
+            if (targetFacilityId && fullMother?.mother_id) {
+                enrollment = await prisma.mother_Facility_Enrollment.upsert({
+                    where: {
+                        mother_id_facility_id: {
+                            mother_id: fullMother.mother_id,
+                            facility_id: targetFacilityId
+                        }
+                    },
+                    update: { status: "Active" },
+                    create: {
+                        mother_id: fullMother.mother_id,
+                        facility_id: targetFacilityId,
+                        status: "Active"
+                    }
+                }).catch(() => null);
+            }
+
             return res.status(200).json({
-                message: "User already exist",
+                message: "Mother enrolled in facility successfully",
                 already_exists: true,
+                enrolled: true,
                 user: existingMother,
-                mother: fullMother
+                mother: fullMother,
+                enrollment
             });
         }
 
@@ -190,6 +211,16 @@ const registerMother = async (req, res, next) => {
                 }
             });
 
+            if (user.facility_id && mother.mother_id) {
+                await prismaClient.mother_Facility_Enrollment.create({
+                    data: {
+                        mother_id: mother.mother_id,
+                        facility_id: user.facility_id,
+                        status: "Active"
+                    }
+                }).catch(() => null);
+            }
+
             return {user, mother}
         })
 
@@ -216,9 +247,27 @@ const registerMother = async (req, res, next) => {
             }).catch(() => null);
 
             if (fallbackUser) {
+                const targetFacilityId = req.body.facility_id || req.user?.facility_id;
+                if (targetFacilityId && fallbackUser.mother?.mother_id) {
+                    await prisma.mother_Facility_Enrollment.upsert({
+                        where: {
+                            mother_id_facility_id: {
+                                mother_id: fallbackUser.mother.mother_id,
+                                facility_id: targetFacilityId
+                            }
+                        },
+                        update: { status: "Active" },
+                        create: {
+                            mother_id: fallbackUser.mother.mother_id,
+                            facility_id: targetFacilityId,
+                            status: "Active"
+                        }
+                    }).catch(() => null);
+                }
                 return res.status(200).json({
-                    message: "User already exist",
+                    message: "Mother enrolled in facility successfully",
                     already_exists: true,
+                    enrolled: true,
                     user: fallbackUser,
                     mother: fallbackUser.mother || fallbackUser
                 });
@@ -530,18 +579,41 @@ const hardDeleteMother = async (req, res, next) => {
 
 const getAllActiveMother = async (req, res, next) => {
     try {
-        const facilityFilter = req.user?.role === 'SystemAdmin' ? {} : { facility_id: req.user?.facility_id };
+        const staffFacilityId = req.user?.facility_id;
+        const isSysAdmin = req.user?.role === 'SystemAdmin';
+
+        const whereCondition = isSysAdmin
+            ? { user: { role: "Mother", is_active: true } }
+            : {
+                user: { role: "Mother", is_active: true },
+                OR: [
+                    { user: { facility_id: staffFacilityId } },
+                    {
+                        facilityEnrollments: {
+                            some: {
+                                facility_id: staffFacilityId,
+                                status: "Active"
+                            }
+                        }
+                    }
+                ]
+            };
 
         const allActiveMothers = await prisma.mother.findMany({
-            where: {
-                user: {
-                    role: "Mother",
-                    is_active: true,
-                    ...facilityFilter,
-                }
-            },
+            where: whereCondition,
             include: {
                 user: { select: SAFE_USER_SELECT },
+                facilityEnrollments: {
+                    include: {
+                        facility: {
+                            select: {
+                                facility_id: true,
+                                facility_name: true,
+                                type: true
+                            }
+                        }
+                    }
+                },
                 pregnancies: {
                     orderBy: { created_at: "desc" },
                     include: {
@@ -580,6 +652,17 @@ const searchMotherByID = async (req, res, next) => {
             },
             include : {
                 user: { select: SAFE_USER_SELECT },
+                facilityEnrollments: {
+                    include: {
+                        facility: {
+                            select: {
+                                facility_id: true,
+                                facility_name: true,
+                                type: true
+                            }
+                        }
+                    }
+                },
                 pregnancies: {
                     include: {
                         prenatalVisits: true 
@@ -592,8 +675,14 @@ const searchMotherByID = async (req, res, next) => {
             return res.status(404).json({error : "Mother not found"});
         }
 
-        if (req.user?.role !== 'SystemAdmin' && searchMotherResult.user?.facility_id && searchMotherResult.user.facility_id !== req.user?.facility_id) {
-            return res.status(403).json({error : "Access Denied. Mother belongs to another facility"});
+        if (req.user?.role !== 'SystemAdmin') {
+            const homeFacilityMatch = searchMotherResult.user?.facility_id && searchMotherResult.user.facility_id === req.user?.facility_id;
+            const enrollmentMatch = (searchMotherResult.facilityEnrollments || []).some(
+                e => e.facility_id === req.user?.facility_id && e.status === 'Active'
+            );
+            if (searchMotherResult.user?.facility_id && !homeFacilityMatch && !enrollmentMatch) {
+                return res.status(403).json({error : "Access Denied. Mother belongs to another facility"});
+            }
         }
 
         res.status(200).json({
@@ -629,6 +718,17 @@ const getCompositeMotherProfile = async (req, res, next) => {
                             orderBy: { appointment_date: 'desc' },
                             include: {
                                 facility: true
+                            }
+                        }
+                    }
+                },
+                facilityEnrollments: {
+                    include: {
+                        facility: {
+                            select: {
+                                facility_id: true,
+                                facility_name: true,
+                                type: true
                             }
                         }
                     }
@@ -676,8 +776,14 @@ const getCompositeMotherProfile = async (req, res, next) => {
             return res.status(404).json({ error: "Mother not found" });
         }
 
-        if (req.user?.role !== 'SystemAdmin' && motherProfile.user?.facility_id && motherProfile.user.facility_id !== req.user?.facility_id) {
-            return res.status(403).json({ error: "Access Denied. Mother belongs to another facility" });
+        if (req.user?.role !== 'SystemAdmin') {
+            const homeFacilityMatch = motherProfile.user?.facility_id && motherProfile.user.facility_id === req.user?.facility_id;
+            const enrollmentMatch = (motherProfile.facilityEnrollments || []).some(
+                e => e.facility_id === req.user?.facility_id && e.status === 'Active'
+            );
+            if (motherProfile.user?.facility_id && !homeFacilityMatch && !enrollmentMatch) {
+                return res.status(403).json({ error: "Access Denied. Mother belongs to another facility" });
+            }
         }
 
         const canonicalMotherId = motherProfile.mother_id;
@@ -705,17 +811,41 @@ const getCompositeMotherProfile = async (req, res, next) => {
 
 const getAllMother = async (req, res, next) => {
     try {
-        const facilityFilter = req.user?.role === 'SystemAdmin' ? {} : { facility_id: req.user?.facility_id };
+        const staffFacilityId = req.user?.facility_id;
+        const isSysAdmin = req.user?.role === 'SystemAdmin';
+
+        const whereCondition = isSysAdmin
+            ? { user: { role: "Mother" } }
+            : {
+                user: { role: "Mother" },
+                OR: [
+                    { user: { facility_id: staffFacilityId } },
+                    {
+                        facilityEnrollments: {
+                            some: {
+                                facility_id: staffFacilityId,
+                                status: "Active"
+                            }
+                        }
+                    }
+                ]
+            };
 
         const allMothers = await prisma.mother.findMany({
-            where: {
-                user: {
-                    role: "Mother",
-                    ...facilityFilter,
-                }
-            },
+            where: whereCondition,
             include : {
                 user: { select: SAFE_USER_SELECT },
+                facilityEnrollments: {
+                    include: {
+                        facility: {
+                            select: {
+                                facility_id: true,
+                                facility_name: true,
+                                type: true
+                            }
+                        }
+                    }
+                },
                 pregnancies: {
                     orderBy: { created_at: "desc" },
                     include: {
@@ -754,13 +884,34 @@ const getAllActiveMotherByFacility = async (req, res, next) => {
         const facilityMothers = await prisma.mother.findMany({
             where : {
                 user: {
-                    facility_id: facility_id,
                     role: "Mother",
                     is_active: true
-                }
+                },
+                OR: [
+                    { user: { facility_id: facility_id } },
+                    {
+                        facilityEnrollments: {
+                            some: {
+                                facility_id: facility_id,
+                                status: "Active"
+                            }
+                        }
+                    }
+                ]
             },
             include : {
                 user: { select: SAFE_USER_SELECT },
+                facilityEnrollments: {
+                    include: {
+                        facility: {
+                            select: {
+                                facility_id: true,
+                                facility_name: true,
+                                type: true
+                            }
+                        }
+                    }
+                },
                 pregnancies: {
                     include: {
                         prenatalVisits: true
@@ -1027,9 +1178,29 @@ const assignFacilityByCode = async (req, res, next) => {
             include: { facility: true }
         });
 
+        if (staff_facility_id && motherRecord.mother_id) {
+            await prisma.mother_Facility_Enrollment.upsert({
+                where: {
+                    mother_id_facility_id: {
+                        mother_id: motherRecord.mother_id,
+                        facility_id: staff_facility_id
+                    }
+                },
+                update: { status: "Active" },
+                create: {
+                    mother_id: motherRecord.mother_id,
+                    facility_id: staff_facility_id,
+                    status: "Active"
+                }
+            }).catch(() => null);
+        }
+
         const fullMother = await prisma.mother.findUnique({
             where: { mother_id: motherRecord.mother_id },
-            include: { user: { include: { facility: true } } }
+            include: {
+                user: { include: { facility: true } },
+                facilityEnrollments: { include: { facility: true } }
+            }
         });
 
         return res.status(200).json({
@@ -1042,6 +1213,106 @@ const assignFacilityByCode = async (req, res, next) => {
         return next(error);
     }
 }
+
+const enrollMotherInFacility = async (req, res, next) => {
+    try {
+        const { mother_id, facility_id, notes } = req.body;
+        const targetFacilityId = facility_id || req.user?.facility_id;
+
+        if (!mother_id || !targetFacilityId) {
+            return res.status(400).json({ error: "Missing mother_id or facility_id" });
+        }
+
+        const mother = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            }
+        });
+
+        if (!mother) {
+            return res.status(404).json({ error: "Mother not found" });
+        }
+
+        const enrollment = await prisma.mother_Facility_Enrollment.upsert({
+            where: {
+                mother_id_facility_id: {
+                    mother_id: mother.mother_id,
+                    facility_id: targetFacilityId
+                }
+            },
+            update: {
+                status: "Active",
+                notes: notes || undefined
+            },
+            create: {
+                mother_id: mother.mother_id,
+                facility_id: targetFacilityId,
+                status: "Active",
+                notes: notes || null
+            },
+            include: {
+                facility: {
+                    select: {
+                        facility_id: true,
+                        facility_name: true,
+                        type: true
+                    }
+                }
+            }
+        });
+
+        return res.status(200).json({
+            message: "Mother successfully enrolled in facility",
+            result: enrollment
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const getMotherFacilities = async (req, res, next) => {
+    try {
+        const { mother_id } = req.params;
+
+        if (!mother_id) {
+            return res.status(400).json({ error: "Missing mother_id" });
+        }
+
+        const mother = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            },
+            include: {
+                user: {
+                    include: { facility: true }
+                },
+                facilityEnrollments: {
+                    include: { facility: true }
+                }
+            }
+        });
+
+        if (!mother) {
+            return res.status(404).json({ error: "Mother not found" });
+        }
+
+        return res.status(200).json({
+            message: "Mother facilities retrieved",
+            homeFacility: mother.user?.facility || null,
+            enrollments: mother.facilityEnrollments || []
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
 
 module.exports = {
     registerMother,
@@ -1057,5 +1328,7 @@ module.exports = {
     uploadAvatar,
     getProfile,
     assignFacilityByCode,
-    getCompositeMotherProfile
+    getCompositeMotherProfile,
+    enrollMotherInFacility,
+    getMotherFacilities
 }
