@@ -53,6 +53,9 @@ model User {
   appointments      Appointment[]
   notifications     Notification[]
   auditRevisionLogs Audit_Revision_Log[]
+
+  @@index([facility_id])
+  @@index([role, is_active])
 }
 
 //Mother Schema
@@ -101,6 +104,9 @@ model Pregnancy {
   cdssAlerts             CDSS_Alert[]
   onlineReferrals        Online_Referral[]
   deliveryOutcomes       Delivery_Outcome[]
+
+  @@index([mother_id])
+  @@index([pregnancy_status])
 }
 
 //PrenatalVisit Schema
@@ -132,6 +138,10 @@ model PrenatalVisit {
   supplementationRecords Supplementation_Record[]
   labScreenings          Lab_Screening[]
   cdssAlerts             CDSS_Alert[]
+
+  @@index([pregnancy_id])
+  @@index([health_worker_id])
+  @@index([visit_date])
 }
 
 //Supplementation Record Schema
@@ -149,6 +159,9 @@ model Supplementation_Record {
 
   pregnancy Pregnancy     @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   visit     PrenatalVisit @relation(fields: [visit_id], references: [visit_id], onDelete: Cascade)
+
+  @@index([pregnancy_id])
+  @@index([visit_id])
 }
 
 //Lab Screening Schema
@@ -167,6 +180,9 @@ model Lab_Screening {
 
   pregnancy Pregnancy     @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   visit     PrenatalVisit @relation(fields: [visit_id], references: [visit_id], onDelete: Cascade)
+
+  @@index([pregnancy_id])
+  @@index([visit_id])
 }
 
 //CDSS Alert Schema
@@ -186,6 +202,10 @@ model CDSS_Alert {
 
   pregnancy Pregnancy     @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   visit     PrenatalVisit @relation(fields: [visit_id], references: [visit_id], onDelete: Cascade)
+
+  @@index([pregnancy_id])
+  @@index([visit_id])
+  @@index([is_resolved, severity])
 }
 
 //Online Referral Schema
@@ -211,6 +231,12 @@ model Online_Referral {
   pregnancy    Pregnancy @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   fromFacility Facility  @relation("FromFacility", fields: [from_facility_id], references: [facility_id])
   toFacility   Facility? @relation("ToFacility", fields: [to_facility_id], references: [facility_id])
+
+  @@index([pregnancy_id])
+  @@index([from_facility_id])
+  @@index([to_facility_id])
+  @@index([shared_pin])
+  @@index([status])
 }
 
 //Delivery Outcome Schema
@@ -230,6 +256,8 @@ model Delivery_Outcome {
   pregnancy        Pregnancy          @relation(fields: [pregnancy_id], references: [pregnancy_id], onDelete: Cascade)
   newbornRecords   Newborn_Record[]
   postpartumVisits postpartum_visit[]
+
+  @@index([pregnancy_id])
 }
 
 //Newborn Record Schema
@@ -245,6 +273,8 @@ model Newborn_Record {
   updated_at      DateTime @default(now()) @updatedAt
 
   delivery Delivery_Outcome @relation(fields: [delivery_id], references: [delivery_id], onDelete: Cascade)
+
+  @@index([delivery_id])
 }
 
 //Postpartum Visit Schema
@@ -269,6 +299,8 @@ model postpartum_visit {
   updated_at            DateTime @default(now()) @updatedAt
 
   delivery Delivery_Outcome @relation(fields: [delivery_id], references: [delivery_id], onDelete: Cascade)
+
+  @@index([delivery_id])
 }
 
 //Appointment Schema
@@ -287,6 +319,11 @@ model Appointment {
 
   user     User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
   facility Facility? @relation(fields: [facility_id], references: [facility_id])
+
+  @@index([user_id])
+  @@index([facility_id])
+  @@index([appointment_date])
+  @@index([status])
 }
 
 //Notification Schema
@@ -302,6 +339,9 @@ model Notification {
   updated_at           DateTime @default(now()) @updatedAt
 
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id, is_read])
+  @@index([notification_date])
 }
 
 //In-App Message Schema
@@ -319,6 +359,10 @@ model In_App_Message {
 
   sender   User @relation("MessageSender", fields: [sender_id], references: [user_id])
   receiver User @relation("MessageReceiver", fields: [receiver_id], references: [user_id])
+
+  @@index([sender_id])
+  @@index([receiver_id])
+  @@index([message_date])
 }
 
 //Audit Revision Log Schema
@@ -333,6 +377,9 @@ model Audit_Revision_Log {
   sync_status      String   @default("synced")
 
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id, client_timestamp])
+  @@index([client_timestamp])
 }
 
 model Otp {
@@ -364,5 +411,7 @@ model Mother_Share_Link {
   access_count     Int       @default(0)
 
   mother Mother @relation(fields: [mother_id], references: [mother_id], onDelete: Cascade)
+
+  @@index([mother_id])
 }
 

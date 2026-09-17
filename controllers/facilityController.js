@@ -106,7 +106,7 @@ const publicRegisterFacility = async (req, res, next) => {
             return res.status(400).json({ error: "An account with this phone number or email already exists." });
         }
 
-        const salt = await bcrypt.genSalt(14);
+        const salt = await bcrypt.genSalt(12);
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const result = await prisma.$transaction(async (tx) => {

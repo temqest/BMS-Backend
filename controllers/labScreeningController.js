@@ -6,7 +6,7 @@ const { resolveEntityId } = require('../middleware/idResolver');
 const path = require('path');
 const fs = require('fs');
 
-function saveBase64ToFile(fileUrl, req) {
+async function saveBase64ToFile(fileUrl, req) {
     if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.startsWith('data:')) {
         return fileUrl;
     }
@@ -18,6 +18,43 @@ function saveBase64ToFile(fileUrl, req) {
             const buffer = Buffer.from(base64Data, 'base64');
             const ext = mimeType.split('/')[1] || 'jpg';
             const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
+
+            try {
+                const { supabase } = require('../util/storage');
+                if (supabase && supabase.storage) {
+                    const filePath = `lab-documents/${fileName}`;
+                    let bucketName = 'lab-files';
+                    let { data, error } = await supabase.storage
+                        .from(bucketName)
+                        .upload(filePath, buffer, {
+                            contentType: mimeType,
+                            upsert: true,
+                        });
+
+                    if (error && (error.message?.includes('Bucket not found') || error.statusCode === '404' || error.code === 'NoSuchBucket')) {
+                        bucketName = 'documents';
+                        const retry = await supabase.storage
+                            .from(bucketName)
+                            .upload(filePath, buffer, {
+                                contentType: mimeType,
+                                upsert: true,
+                            });
+                        data = retry.data;
+                        error = retry.error;
+                    }
+
+                    if (!error && data) {
+                        const { data: signedData } = await supabase.storage.from(bucketName).createSignedUrl(filePath, 60 * 60 * 24 * 365);
+                        const secureUrl = signedData?.signedUrl || (supabase.storage.from(bucketName).getPublicUrl(filePath)).data?.publicUrl;
+                        if (secureUrl) return secureUrl;
+                    } else if (error) {
+                        console.warn("Supabase storage upload for base64 skipped/failed:", error.message || error);
+                    }
+                }
+            } catch (supabaseErr) {
+                console.warn("Supabase storage upload for base64 failed, falling back to disk:", supabaseErr.message);
+            }
+
             const uploadsDir = path.join(__dirname, '../public/uploads');
             if (!fs.existsSync(uploadsDir)) {
                 fs.mkdirSync(uploadsDir, { recursive: true });
@@ -149,7 +186,7 @@ const registerLabScreening = async (req, res, next) => {
             }
         }
 
-        const finalFileUrl = saveBase64ToFile(file_url, req);
+        const finalFileUrl = await saveBase64ToFile(file_url, req);
 
         const existingRecord = await prisma.lab_Screening.findFirst({
             where: {
@@ -202,7 +239,7 @@ const updateLabScreening = async (req, res, next) => {
         screening_id = resolvedId;
 
         if (clientData.file_url) {
-            clientData.file_url = saveBase64ToFile(clientData.file_url, req);
+            clientData.file_url = await saveBase64ToFile(clientData.file_url, req);
         }
 
         const mvccResult = await updateWithMVCC('lab_Screening', screening_id, { version, ...clientData }, {

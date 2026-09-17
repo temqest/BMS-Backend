@@ -59,7 +59,7 @@ const register = async (req, res, next) => {
             return res.status(400).json({error : "Invalid OTP"})
         }
 
-        const salt = await bcrypt.genSalt(14);
+        const salt = await bcrypt.genSalt(12);
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const user = await prisma.$transaction(async (tx) => {
@@ -222,7 +222,7 @@ const setupPassword = async (req, res, next) => {
             return res.status(400).json({ error: "Invalid OTP code" });
         }
 
-        const salt = await bcrypt.genSalt(14);
+        const salt = await bcrypt.genSalt(12);
         const hashedPassword = await bcrypt.hash(newPassword, salt);
 
         const updatedUser = await prisma.user.update({
@@ -293,7 +293,7 @@ const resetPassword = async (req, res, next) => {
             return res.status(400).json({ error: "Invalid or expired OTP code" });
         }
 
-        const salt = await bcrypt.genSalt(14);
+        const salt = await bcrypt.genSalt(12);
         const hashedPassword = await bcrypt.hash(newPassword, salt);
 
         const updatedUser = await prisma.user.update({
@@ -372,7 +372,7 @@ const createStaff = async (req, res, next) => {
             return res.status(403).json({ error: "Access Denied. You cannot assign staff to a different facility." });
         }
 
-        const salt = await bcrypt.genSalt(14);
+        const salt = await bcrypt.genSalt(12);
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const staffUser = await prisma.user.create({
@@ -450,7 +450,7 @@ const changePassword = async (req, res, next) => {
             }
         }
 
-        const salt = await bcrypt.genSalt(14);
+        const salt = await bcrypt.genSalt(12);
         const hashedPassword = await bcrypt.hash(newPassword, salt);
 
         await prisma.user.update({

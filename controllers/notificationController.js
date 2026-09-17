@@ -55,22 +55,23 @@ const getNotificationByID = async (req, res, next) => {
             return res.status(400).json({error : "Missing Notification ID!"});
         }
 
-        if(!await validate.isNotificationExist(notification_id)) {
-            return res.status(404).json({error : "Notification Doesn't Exist!"});
-        }
-
         const notification = await prisma.notification.findUnique({
             where : {notification_id : notification_id},
             include : {
                 user : {
                     select : {
-                        name : true,
+                        first_name : true,
+                        last_name : true,
                         email : true,
-                        user_type : true
+                        role : true
                     }
                 }
             }
         });
+
+        if (!notification) {
+            return res.status(404).json({error : "Notification Doesn't Exist!"});
+        }
 
         return res.status(200).json({
             message : "Notification Fetched Successfully!",
@@ -117,6 +118,10 @@ const getAllNotificationByUser = async (req, res, next) => {
             orderBy: { notification_date: "desc" }
         });
 
+        const readNotificationIds = new Set(
+            directNotifications.filter(n => n.is_read).map(n => n.notification_id)
+        );
+
         const formattedDirect = directNotifications.map(n => ({
             ...n,
             sender: n.notification_type === 'vitals' ? 'Clinical Alert'
@@ -136,7 +141,7 @@ const getAllNotificationByUser = async (req, res, next) => {
                 prisma.cDSS_Alert.findMany({
                     where: {
                         is_resolved: false,
-                        severity: { in: ['high', 'High', 'critical', 'Critical'] },
+                        severity: { in: ['HIGH', 'High', 'high', 'CRITICAL', 'Critical', 'critical', 'CRITICAL_RISK'] },
                         pregnancy: {
                             mother: {
                                 user: {
@@ -404,7 +409,7 @@ const markAllNotificationAsRead = async (req, res, next) => {
                 prisma.cDSS_Alert.findMany({
                     where: {
                         is_resolved: false,
-                        severity: { in: ['high', 'High', 'critical', 'Critical'] },
+                        severity: { in: ['HIGH', 'High', 'high', 'CRITICAL', 'Critical', 'critical', 'CRITICAL_RISK'] },
                         pregnancy: { mother: { user: { facility_id: user.facility_id } } }
                     },
                     select: { alert_id: true }

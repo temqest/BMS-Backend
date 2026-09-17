@@ -348,7 +348,7 @@ const adminResetStaffPassword = async (req, res, next) => {
             return res.status(404).json({ error: "User not found." });
         }
 
-        const salt = await bcrypt.genSalt(14);
+        const salt = await bcrypt.genSalt(12);
         const hashedPassword = await bcrypt.hash(newPassword.trim(), salt);
 
         await prisma.user.update({
@@ -393,36 +393,40 @@ const getStaffActivities = async (req, res, next) => {
             return res.status(404).json({ error: "User not found." });
         }
 
-        // 1. Fetch audit logs created by this user
-        const auditLogs = await prisma.audit_Revision_Log.findMany({
-            where: { user_id: id },
-            take: 100,
-            orderBy: { client_timestamp: 'desc' }
-        });
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.max(1, parseInt(req.query.limit) || 10);
+        const fetchLimit = Math.min(Math.max(limit * page + 10, 20), 50);
 
-        // 2. Fetch clinical prenatal visits handled by this user
-        const visits = await prisma.prenatalVisit.findMany({
-            where: { health_worker_id: id },
-            take: 100,
-            include: {
-                pregnancy: {
-                    include: {
-                        mother: {
-                            include: {
-                                user: {
-                                    select: {
-                                        first_name: true,
-                                        middle_name: true,
-                                        last_name: true
+        // 1 & 2. Concurrently fetch audit logs and clinical prenatal visits handled by this user
+        const [auditLogs, visits] = await Promise.all([
+            prisma.audit_Revision_Log.findMany({
+                where: { user_id: id },
+                take: fetchLimit,
+                orderBy: { client_timestamp: 'desc' }
+            }),
+            prisma.prenatalVisit.findMany({
+                where: { health_worker_id: id },
+                take: fetchLimit,
+                include: {
+                    pregnancy: {
+                        include: {
+                            mother: {
+                                include: {
+                                    user: {
+                                        select: {
+                                            first_name: true,
+                                            middle_name: true,
+                                            last_name: true
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-            },
-            orderBy: { visit_date: 'desc' }
-        });
+                },
+                orderBy: { visit_date: 'desc' }
+            })
+        ]);
 
         // Map visits to unified activity objects
         const visitActivities = visits.map(v => {
@@ -518,8 +522,6 @@ const getStaffActivities = async (req, res, next) => {
         }
 
         // Pagination
-        const page = Math.max(1, parseInt(req.query.page) || 1);
-        const limit = Math.max(1, parseInt(req.query.limit) || 10);
         const startIndex = (page - 1) * limit;
         const paginated = combined.slice(startIndex, startIndex + limit);
         const hasMore = startIndex + limit < combined.length;

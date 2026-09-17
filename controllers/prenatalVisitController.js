@@ -1,6 +1,6 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
-const { evaluate_clinical_vitals } = require('../services/cdssRiskServices');
+const { evaluate_clinical_vitals, calculateTewsScore } = require('../services/cdssRiskServices');
 const { updateWithMVCC } = require('../services/conflicResolution');
 const { logAuditTrail } = require('../services/auditService');
 const { resolveEntityId } = require('../middleware/idResolver');
@@ -49,7 +49,8 @@ const registerPrenatalVisit = async (req, res, next) => {
 
         let targetPregnancyId = pregnancy_id;
         let pregnancy = await prisma.pregnancy.findUnique({
-            where : {pregnancy_id : pregnancy_id}
+            where : {pregnancy_id : pregnancy_id},
+            include: { mother: true }
         });
 
         if (!pregnancy && req.body.mother_id) {
@@ -59,10 +60,12 @@ const registerPrenatalVisit = async (req, res, next) => {
             if (motherRecord) {
                 pregnancy = await prisma.pregnancy.findFirst({
                     where: { mother_id: motherRecord.mother_id, pregnancy_status: "Active" },
-                    orderBy: { date_of_registration: "desc" }
+                    orderBy: { date_of_registration: "desc" },
+                    include: { mother: true }
                 }) || await prisma.pregnancy.findFirst({
                     where: { mother_id: motherRecord.mother_id },
-                    orderBy: { date_of_registration: "desc" }
+                    orderBy: { date_of_registration: "desc" },
+                    include: { mother: true }
                 });
             }
         }
@@ -90,6 +93,24 @@ const registerPrenatalVisit = async (req, res, next) => {
             }
         }
 
+        // Parallelize baseline lookup and compute TEWS in-memory before create
+        const baselineVisit = await prisma.prenatalVisit.findFirst({
+            where: {
+                pregnancy_id: targetPregnancyId,
+                trimester: 1,
+            },
+            orderBy: { visit_date: 'asc' },
+        });
+
+        const assessment = calculateTewsScore({
+            vitals: req.body,
+            mother: pregnancy.mother,
+            pregnancy: pregnancy,
+            baselineVisit: baselineVisit,
+        });
+
+        const finalRiskLevel = risk_level_assessed || assessment.risk_level;
+
         const newPrenatalVisit = await prisma.prenatalVisit.create({
             data: {
                 pregnancy_id: targetPregnancyId,
@@ -106,12 +127,29 @@ const registerPrenatalVisit = async (req, res, next) => {
                 fetal_heart_tone_bpm : fetal_heart_tone_bpm,
                 chief_complaint : chief_complaint,
                 danger_signs_observed : danger_signs_observed,
-                risk_level_assessed : risk_level_assessed,
+                risk_level_assessed : finalRiskLevel,
                 sync_status : "synced",
             }
         });
 
-        const cdssAssessment = await evaluate_clinical_vitals(newPrenatalVisit.visit_id);
+        let alertRecord = null;
+        if (assessment.risk_level === "HIGH" || assessment.risk_level === "MODERATE") {
+            alertRecord = await prisma.cDSS_Alert.create({
+                data: {
+                    pregnancy_id: targetPregnancyId,
+                    visit_id: newPrenatalVisit.visit_id,
+                    alert_type: assessment.risk_level === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
+                    alert_message: `TEWS Score: ${assessment.tews_score}. Triggered by ${assessment.risk_level} risk physiological vitals or history.`,
+                    severity: assessment.risk_level,
+                },
+            });
+        }
+
+        const cdssAssessment = {
+            visit_id: newPrenatalVisit.visit_id,
+            ...assessment,
+            alert: alertRecord,
+        };
 
         await logAuditTrail({
             userId: health_worker_id,

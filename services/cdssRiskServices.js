@@ -70,6 +70,57 @@ const calculateDemographicWeights = (mother, pregnancy) => {
     return weight;
 };
 
+const calculateTewsScore = ({ vitals, mother, pregnancy, baselineVisit }) => {
+    const sysScore = scoreSystolic(vitals.bp_systolic);
+    const diaScore = scoreDiastolic(vitals.bp_diastolic);
+    const hrScore = scoreHeartRate(vitals.pulse_rate_bpm);
+    const tempScore = scoreTemperature(vitals.temperature_celsius);
+    const dangerScore = scoreDangerSigns(vitals.danger_signs_observed);
+
+    const vitalScores = [sysScore, diaScore, hrScore, tempScore, dangerScore];
+    
+    let sumVitalScores = 0;
+    for (let i = 0; i < vitalScores.length; i++) {
+        sumVitalScores += vitalScores[i];
+    }
+    
+    let maxVitalScore = vitalScores[0];
+    for (let i = 1; i < vitalScores.length; i++) {
+        if (vitalScores[i] > maxVitalScore) {
+            maxVitalScore = vitalScores[i];
+        }
+    }
+
+    const demographicWeight = calculateDemographicWeights(mother, pregnancy);
+
+    let velocityMultiplier = 0;
+    if (baselineVisit && baselineVisit.visit_id !== vitals.visit_id) {
+        const deltaSys = (vitals.bp_systolic || 0) - (baselineVisit.bp_systolic || 0);
+        const deltaDia = (vitals.bp_diastolic || 0) - (baselineVisit.bp_diastolic || 0);
+
+        if (deltaSys >= 30 || deltaDia >= 15) {
+            velocityMultiplier = 2;
+        }
+    }
+
+    const TEWS = sumVitalScores + demographicWeight + velocityMultiplier;
+
+    let riskLevel = "LOW";
+    if (TEWS >= 6 || maxVitalScore >= 3) {
+        riskLevel = "HIGH";
+    } else if (TEWS >= 4 || maxVitalScore === 2) {
+        riskLevel = "MODERATE";
+    }
+
+    return {
+        tews_score: TEWS,
+        risk_level: riskLevel,
+        max_vital_score: maxVitalScore,
+        velocity_multiplier: velocityMultiplier,
+        demographic_weight: demographicWeight,
+    };
+};
+
 const evaluate_clinical_vitals = async (visit_id) => {
     
     const visit = await prisma.prenatalVisit.findUnique({
@@ -87,29 +138,6 @@ const evaluate_clinical_vitals = async (visit_id) => {
         throw new Error("Prenatal Visit Not Found");
     }
 
-    const sysScore = scoreSystolic(visit.bp_systolic);
-    const diaScore = scoreDiastolic(visit.bp_diastolic);
-    const hrScore = scoreHeartRate(visit.pulse_rate_bpm);
-    const tempScore = scoreTemperature(visit.temperature_celsius);
-    const dangerScore = scoreDangerSigns(visit.danger_signs_observed);
-
-    const vitalScores = [sysScore, diaScore, hrScore, tempScore, dangerScore];
-    
-    let sumVitalScores = 0;
-    for (let i = 0; i < vitalScores.length; i++) {
-        sumVitalScores += vitalScores[i];
-    }
-    
-    let maxVitalScore = vitalScores[0];
-    for (let i = 1; i < vitalScores.length; i++) {
-        if (vitalScores[i] > maxVitalScore) {
-            maxVitalScore = vitalScores[i];
-        }
-    }
-
-    const demographicWeight = calculateDemographicWeights(visit.pregnancy?.mother, visit.pregnancy);
-
-    let velocityMultiplier = 0;
     const baselineVisit = await prisma.prenatalVisit.findFirst({
         where: {
             pregnancy_id: visit.pregnancy_id,
@@ -118,53 +146,39 @@ const evaluate_clinical_vitals = async (visit_id) => {
         orderBy: { visit_date: 'asc' },
     });
 
-    if (baselineVisit && baselineVisit.visit_id !== visit.visit_id) {
-        const deltaSys = (visit.bp_systolic || 0) - (baselineVisit.bp_systolic || 0);
-        const deltaDia = (visit.bp_diastolic || 0) - (baselineVisit.bp_diastolic || 0);
-
-        if (deltaSys >= 30 || deltaDia >= 15) {
-            velocityMultiplier = 2;
-        }
-    }
-
-    const TEWS = sumVitalScores + demographicWeight + velocityMultiplier;
-
-    let riskLevel = "LOW";
-    if (TEWS >= 6 || maxVitalScore >= 3) {
-        riskLevel = "HIGH";
-    } else if (TEWS >= 4 || maxVitalScore === 2) {
-        riskLevel = "MODERATE";
-    }
+    const assessment = calculateTewsScore({
+        vitals: visit,
+        mother: visit.pregnancy?.mother,
+        pregnancy: visit.pregnancy,
+        baselineVisit,
+    });
 
     await prisma.prenatalVisit.update({
         where: { visit_id: visit_id },
-        data: { risk_level_assessed: riskLevel },
+        data: { risk_level_assessed: assessment.risk_level },
     });
 
     let alertRecord = null;
-    if (riskLevel === "HIGH" || riskLevel === "MODERATE") {
+    if (assessment.risk_level === "HIGH" || assessment.risk_level === "MODERATE") {
         alertRecord = await prisma.cDSS_Alert.create({
             data: {
                 pregnancy_id: visit.pregnancy_id,
                 visit_id: visit.visit_id,
-                alert_type: riskLevel === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
-                alert_message: `TEWS Score: ${TEWS}. Triggered by ${riskLevel} risk physiological vitals or history.`,
-                severity: riskLevel,
+                alert_type: assessment.risk_level === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
+                alert_message: `TEWS Score: ${assessment.tews_score}. Triggered by ${assessment.risk_level} risk physiological vitals or history.`,
+                severity: assessment.risk_level,
             },
         });
     }
 
     return {
         visit_id: visit_id,
-        tews_score: TEWS,
-        risk_level: riskLevel,
-        max_vital_score: maxVitalScore,
-        velocity_multiplier: velocityMultiplier,
-        demographic_weight: demographicWeight,
+        ...assessment,
         alert: alertRecord,
     };
 };
 
 module.exports = {
+    calculateTewsScore,
     evaluate_clinical_vitals,
 };

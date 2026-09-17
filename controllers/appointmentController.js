@@ -49,17 +49,20 @@ const createAppointment = async (req, res, next) => {
             return res.status(404).json({ error: "Patient user record not found. Please ensure the mother is registered." });
         }
 
-        if (facility_id && !(await validate.isFacilityExist(facility_id))) {
+        const [facilityRecord, isConflict] = await Promise.all([
+            facility_id ? prisma.facility.findUnique({ where: { facility_id } }) : Promise.resolve(true),
+            prisma.appointment.findFirst({
+                where: {
+                    user_id: targetUserId,
+                    appointment_date: new Date(appointment_date),
+                    appointment_time: appointment_time,
+                }
+            })
+        ]);
+
+        if (facility_id && !facilityRecord) {
             return res.status(404).json({ error: "Facility Doesn't Exist!" });
         }
-
-        const isConflict = await prisma.appointment.findFirst({
-            where : {
-                user_id: targetUserId,
-                appointment_date : new Date(appointment_date),
-                appointment_time : appointment_time,
-            }
-        });
 
         if (isConflict) {
             return res.status(200).json({
@@ -143,10 +146,6 @@ const getAppointmentById = async (req, res, next) => {
             return res.status(400).json({ error: "Missing Required Fields!" });
         }
 
-        if (!(await validate.isAppointmentExist(appointment_id))) {
-            return res.status(404).json({ error: "Appointment Doesn't Exist!" });
-        }
-
         const appointment = await prisma.appointment.findUnique({
             where: { appointment_id: appointment_id },
             include: {
@@ -164,6 +163,10 @@ const getAppointmentById = async (req, res, next) => {
                 facility: true,
             },
         });
+
+        if (!appointment) {
+            return res.status(404).json({ error: "Appointment Doesn't Exist!" });
+        }
 
         if (req.user?.role !== 'SystemAdmin' && appointment.facility_id && appointment.facility_id !== req.user?.facility_id) {
             return res.status(403).json({ error: "Access Denied. You cannot access appointments for another facility." });

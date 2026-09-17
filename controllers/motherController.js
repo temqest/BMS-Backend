@@ -14,6 +14,24 @@ if (!JWT_SECRET) {
   console.warn("Warning: JWT_SECRET environment variable is missing.");
 }
 
+const SAFE_USER_SELECT = {
+    user_id: true,
+    facility_id: true,
+    first_name: true,
+    middle_name: true,
+    last_name: true,
+    role: true,
+    phone_number: true,
+    email: true,
+    address: true,
+    profile_url: true,
+    fcm_token: true,
+    is_active: true,
+    sync_status: true,
+    version: true,
+    updated_at: true,
+};
+
 function saveBase64ToFile(fileUrl) {
     if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.startsWith('data:')) {
         return fileUrl;
@@ -193,7 +211,7 @@ const selfRegisterMother = async (req, res, next) => {
             return res.status(400).json({error : "Invalid OTP"})
         }
 
-        const salt = await bcrypt.genSalt(14);
+        const salt = await bcrypt.genSalt(12);
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const result = await prisma.$transaction(async (prismaClient) => {
@@ -459,7 +477,7 @@ const getAllActiveMother = async (req, res, next) => {
                 }
             },
             include: {
-                user: true,
+                user: { select: SAFE_USER_SELECT },
                 pregnancies: {
                     orderBy: { created_at: "desc" },
                     include: {
@@ -497,7 +515,7 @@ const searchMotherByID = async (req, res, next) => {
                 ]
             },
             include : {
-                user: true,
+                user: { select: SAFE_USER_SELECT },
                 pregnancies: {
                     include: {
                         prenatalVisits: true 
@@ -541,7 +559,8 @@ const getCompositeMotherProfile = async (req, res, next) => {
             },
             include: {
                 user: {
-                    include: {
+                    select: {
+                        ...SAFE_USER_SELECT,
                         appointments: {
                             orderBy: { appointment_date: 'desc' },
                             include: {
@@ -632,7 +651,7 @@ const getAllMother = async (req, res, next) => {
                 }
             },
             include : {
-                user : true,
+                user: { select: SAFE_USER_SELECT },
                 pregnancies: {
                     orderBy: { created_at: "desc" },
                     include: {
@@ -673,7 +692,7 @@ const getAllActiveMotherByFacility = async (req, res, next) => {
                 }
             },
             include : {
-                user: true,
+                user: { select: SAFE_USER_SELECT },
                 pregnancies: {
                     include: {
                         prenatalVisits: true
@@ -702,7 +721,8 @@ const getProfile = async (req, res, next) => {
             where : {user_id : my_user_id},
             include : {
                 user : {
-                    include: {
+                    select: {
+                        ...SAFE_USER_SELECT,
                         facility: true
                     }
                 },

@@ -47,19 +47,23 @@ const createReferral = async (req, res, next) => {
             return res.status(400).json({ error: "Either a destination facility or external facility name must be provided." });
         }
 
-        if (!(await validate.isPregnancyExist(pregnancy_id))) {
-            return res.status(404).json({ error: "Pregnancy Record Doesn't Exist" });
-        }
-
         if (req.user?.role !== 'SystemAdmin' && from_facility_id !== req.user?.facility_id) {
             return res.status(403).json({ error: "Access Denied. Referrals must originate from your facility." });
         }
 
-        if (!(await validate.isFacilityExist(from_facility_id))) {
+        const [pregnancy, fromFacility, toFacility] = await Promise.all([
+            prisma.pregnancy.findUnique({ where: { pregnancy_id } }),
+            prisma.facility.findUnique({ where: { facility_id: from_facility_id } }),
+            to_facility_id ? prisma.facility.findUnique({ where: { facility_id: to_facility_id } }) : Promise.resolve(true),
+        ]);
+
+        if (!pregnancy) {
+            return res.status(404).json({ error: "Pregnancy Record Doesn't Exist" });
+        }
+        if (!fromFacility) {
             return res.status(404).json({ error: "Origin Facility Doesn't Exist" });
         }
-
-        if (to_facility_id && !(await validate.isFacilityExist(to_facility_id))) {
+        if (to_facility_id && !toFacility) {
             return res.status(404).json({ error: "Destination Facility Doesn't Exist" });
         }
 
@@ -137,10 +141,6 @@ const getReferralById = async (req, res, next) => {
     try {
         const { id } = req.params;
 
-        if (!(await validate.isOnlineReferralExist(id))) {
-            return res.status(404).json({ error: "Referral Not Found!" });
-        }
-
         const referral = await prisma.online_Referral.findUnique({
             where: { referral_id: id },
             include: {
@@ -165,6 +165,10 @@ const getReferralById = async (req, res, next) => {
                 toFacility: true,
             },
         });
+
+        if (!referral) {
+            return res.status(404).json({ error: "Referral Not Found!" });
+        }
 
         return res.status(200).json({
             message: "Referral Details Retrieved Successfully",
@@ -304,13 +308,16 @@ const deleteReferral = async (req, res, next) => {
             return res.status(400).json({ error: "Missing Required Fields!" });
         }
 
-        if (!(await validate.isOnlineReferralExist(referral_id))) {
-            return res.status(404).json({ error: "Referral Doesn't Exist!" });
+        try {
+            await prisma.online_Referral.delete({
+                where: { referral_id: referral_id },
+            });
+        } catch (err) {
+            if (err.code === 'P2025') {
+                return res.status(404).json({ error: "Referral Doesn't Exist!" });
+            }
+            throw err;
         }
-
-        await prisma.online_Referral.delete({
-            where: { referral_id: referral_id },
-        });
 
         return res.status(200).json({
             message: "Referral Deleted Successfully",

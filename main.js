@@ -47,7 +47,10 @@ const userRouter = require('./router/userRouter');
 
 const path = require('path');
 
+const compression = require('compression');
+
 app.use(cors());
+app.use(compression({ threshold: 1024 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
