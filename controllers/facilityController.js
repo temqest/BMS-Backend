@@ -223,7 +223,7 @@ const searchFacility = async (req, res, next) => {
 
 const updateFacility = async (req, res, next) => {
     try {
-        const { facility_id } = req.params;
+        const facility_id = req.params.facility_id || req.body.facility_id || req.query.facility_id || req.user?.facility_id;
         const { facility_name, contact_number, address, email, type } = req.body;
 
         if (!facility_id) {
