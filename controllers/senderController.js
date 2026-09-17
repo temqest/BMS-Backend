@@ -11,17 +11,17 @@ const sendEmail = async (req, res, next) => {
             return res.status(400).json({error : "Missing required fields"});
         }
 
-        if(!(await validate.isEmailExist(email))) {
-            return res.status(404).json({error : "Email doesn't Exist"});
+        const isRecipientExist = await validate.isEmailExist(email);
+        if(!isRecipientExist) {
+            return res.status(400).json({error : "Unable to deliver notification to specified recipient."});
         }
 
-        const response = await send.sendEmail(email, message, subject, options) 
+        const response = await send.sendEmail(email, message, subject, options);
 
         return res.status(200).json({
             message : "Email sent successfully",
             data : response
-
-        })
+        });
 
     } catch (error) {
         return next(error);
@@ -38,8 +38,9 @@ const sendSMS = async (req, res, next) => {
             return res.status(400).json({error : "Missing required fields"});
         }
 
-        if (!(await validate.isPhoneExist(identifier))) {
-            return res.status(404).json({ error: "Phone number doesn't exist" });
+        const isRecipientExist = await validate.isPhoneExist(identifier);
+        if (!isRecipientExist) {
+            return res.status(400).json({ error: "Unable to deliver SMS to specified recipient." });
         }
 
         const response = await send.sendSMS(identifier, message, purpose);

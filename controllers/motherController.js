@@ -32,6 +32,13 @@ const SAFE_USER_SELECT = {
     updated_at: true,
 };
 
+const SAFE_IMAGE_MIMES = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+};
+
 function saveBase64ToFile(fileUrl) {
     if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.startsWith('data:')) {
         return fileUrl;
@@ -39,10 +46,14 @@ function saveBase64ToFile(fileUrl) {
     try {
         const matches = fileUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (matches && matches.length === 3) {
-            const mimeType = matches[1];
+            const mimeType = matches[1].toLowerCase();
+            const ext = SAFE_IMAGE_MIMES[mimeType];
+            if (!ext) {
+                console.warn(`[Security] Rejected unsupported avatar MIME type: ${mimeType}`);
+                return null;
+            }
             const base64Data = matches[2];
             const buffer = Buffer.from(base64Data, 'base64');
-            const ext = mimeType.split('/')[1] || 'jpg';
             const fileName = `avatar_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
             const uploadsDir = path.join(__dirname, '../public/uploads');
             if (!fs.existsSync(uploadsDir)) {
@@ -681,6 +692,10 @@ const getAllActiveMotherByFacility = async (req, res, next) => {
 
         if(!facility_id) {
             return res.status(400).json({error : "Missing facility ID"});
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && req.user?.facility_id !== facility_id) {
+            return res.status(403).json({ error: "Access Denied. You do not have permission to view mothers from another facility." });
         }
 
         const facilityMothers = await prisma.mother.findMany({

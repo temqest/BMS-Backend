@@ -75,10 +75,49 @@ function initFirebase() {
   }
 }
 
+const { getAuth } = require('firebase-admin/auth');
+
+/**
+ * Cryptographically verifies a Firebase Phone Auth ID token and checks phone match.
+ */
+async function verifyFirebasePhoneToken(idToken, expectedPhone) {
+  const app = initFirebase();
+  if (!app) {
+    console.warn('[Firebase] Admin SDK not initialized; cannot verify phone token.');
+    return { valid: false, error: 'Firebase Admin not configured' };
+  }
+  try {
+    const auth = getAuth(app);
+    const decodedToken = await auth.verifyIdToken(idToken);
+
+    // Normalize phone numbers for comparison (removing spaces, dashes)
+    const tokenPhone = (decodedToken.phone_number || '').replace(/[\s-]/g, '');
+    const cleanExpected = (expectedPhone || '').replace(/[\s-]/g, '');
+
+    // Allow match if exact match, or if one ends with the other (e.g. +63917... vs 0917...)
+    const isPhoneMatch = !expectedPhone ||
+      tokenPhone === cleanExpected ||
+      (cleanExpected.length >= 10 && tokenPhone.endsWith(cleanExpected.slice(-10))) ||
+      (tokenPhone.length >= 10 && cleanExpected.endsWith(tokenPhone.slice(-10)));
+
+    if (!isPhoneMatch) {
+      console.warn(`[Firebase] Phone mismatch: token phone=${tokenPhone}, expected=${cleanExpected}`);
+      return { valid: false, error: 'Phone number does not match verified token' };
+    }
+
+    return { valid: true, decodedToken };
+  } catch (err) {
+    console.error('[Firebase] Token verification error:', err.message);
+    return { valid: false, error: err.message };
+  }
+}
+
 // Attempt initial setup on load
 initFirebase();
 
 module.exports = {
   getMessaging,
+  getAuth,
   initFirebase,
+  verifyFirebasePhoneToken,
 };

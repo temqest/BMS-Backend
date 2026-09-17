@@ -144,6 +144,18 @@ const updateStaffRole = async (req, res, next) => {
             return res.status(404).json({ error: "User not found" });
         }
 
+        if (!isSuperAdmin) {
+            if (existingUser.role === 'SystemAdmin') {
+                return res.status(403).json({ error: "Access Denied. Facility administrators cannot modify SystemAdmin accounts." });
+            }
+            if (existingUser.facility_id !== requestingUser?.facility_id) {
+                return res.status(403).json({ error: "Access Denied. You cannot modify accounts belonging to another facility." });
+            }
+            if (role === 'SystemAdmin') {
+                return res.status(403).json({ error: "Access Denied. Only a SystemAdmin can grant the SystemAdmin role." });
+            }
+        }
+
         // If target user is an Admin in a facility and being changed to a non-admin role:
         // ensure there is at least one other active Admin in that facility
         if (existingUser.role === 'Admin' && role !== 'Admin' && existingUser.facility_id) {
@@ -216,6 +228,15 @@ const deactivateStaff = async (req, res, next) => {
         // A user can self-deactivate, but cannot modify someone else's account unless SuperAdmin or Admin
         if (!isSelf && !isSuperAdmin && !isAdmin) {
             return res.status(403).json({ error: "Access Denied. You do not have permission to modify someone else's account." });
+        }
+
+        if (!isSelf && !isSuperAdmin) {
+            if (existingUser.role === 'SystemAdmin') {
+                return res.status(403).json({ error: "Access Denied. Facility administrators cannot modify SystemAdmin accounts." });
+            }
+            if (existingUser.facility_id !== requestingUser?.facility_id) {
+                return res.status(403).json({ error: "Access Denied. You cannot modify accounts belonging to another facility." });
+            }
         }
 
         // If an account is being deactivated (is_active === false) and the target user is an Admin:
@@ -346,6 +367,15 @@ const adminResetStaffPassword = async (req, res, next) => {
 
         if (!existingUser) {
             return res.status(404).json({ error: "User not found." });
+        }
+
+        if (!isSuperAdmin) {
+            if (existingUser.role === 'SystemAdmin') {
+                return res.status(403).json({ error: "Access Denied. Facility administrators cannot reset SystemAdmin passwords." });
+            }
+            if (existingUser.facility_id !== requestingUser?.facility_id) {
+                return res.status(403).json({ error: "Access Denied. You cannot reset passwords for staff in another facility." });
+            }
         }
 
         const salt = await bcrypt.genSalt(12);

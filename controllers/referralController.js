@@ -3,6 +3,38 @@ const validate = require('../util/validation');
 const crypto = require('crypto');
 const { updateWithMVCC } = require('../services/conflicResolution');
 
+const referralPinAttempts = new Map();
+
+function checkReferralLockout(refId) {
+    const record = referralPinAttempts.get(refId);
+    if (!record) return { isLocked: false };
+    const now = Date.now();
+    if (record.lockedUntil && now < record.lockedUntil) {
+        const minutesLeft = Math.ceil((record.lockedUntil - now) / 60000);
+        return { isLocked: true, minutesLeft };
+    }
+    if (record.lockedUntil && now >= record.lockedUntil) {
+        referralPinAttempts.delete(refId);
+        return { isLocked: false };
+    }
+    return { isLocked: false };
+}
+
+function recordFailedReferralPin(refId) {
+    const now = Date.now();
+    const record = referralPinAttempts.get(refId) || { count: 0 };
+    record.count += 1;
+    if (record.count >= 5) {
+        record.lockedUntil = now + 15 * 60 * 1000;
+    }
+    referralPinAttempts.set(refId, record);
+    return record;
+}
+
+function clearReferralPin(refId) {
+    referralPinAttempts.delete(refId);
+}
+
 const generatePin = {
 
     async generateUniquePin() {
@@ -501,9 +533,24 @@ const getPublicReferral = async (req, res, next) => {
             return res.status(404).json({ error: "Referral record not found or link has expired." });
         }
 
+        const lockout = checkReferralLockout(referral.referral_id);
+        if (lockout.isLocked) {
+            return res.status(429).json({ error: `Too many failed PIN attempts. Referral link locked for ${lockout.minutesLeft} more minute(s).` });
+        }
+
         // Check if referral requires PIN protection
         const isPinRequired = Boolean(referral.shared_pin);
-        const isPinValid = !isPinRequired || (pin && pin.toString().trim() === referral.shared_pin.toString().trim());
+        const providedPin = (pin || "").toString().trim();
+        const isPinValid = !isPinRequired || (providedPin && providedPin === referral.shared_pin.toString().trim());
+
+        if (isPinRequired && providedPin && !isPinValid) {
+            const attempt = recordFailedReferralPin(referral.referral_id);
+            if (attempt.count >= 5) {
+                return res.status(429).json({ error: "Too many incorrect PIN attempts. Link locked for 15 minutes." });
+            }
+        } else if (isPinValid) {
+            clearReferralPin(referral.referral_id);
+        }
 
         // Construct safe response
         const motherUser = referral.pregnancy?.mother?.user;

@@ -105,7 +105,11 @@ const resolveAlert = async (req, res, next) => {
 
 const getHighRiskProfilesByFacility = async (req, res, next) => {
     try {
-        const facility_id = req.params.facility_id || req.user?.facility_id;
+        const requestedFacilityId = req.params.facility_id;
+        if (req.user?.role !== 'SystemAdmin' && requestedFacilityId && requestedFacilityId !== req.user?.facility_id) {
+            return res.status(403).json({ error: "Access Denied. You cannot view high-risk profiles from another facility." });
+        }
+        const facility_id = (req.user?.role === 'SystemAdmin' && requestedFacilityId) ? requestedFacilityId : req.user?.facility_id;
 
         // Fetch high-risk alerts (severity HIGH / CRITICAL)
         const highRiskAlerts = await prisma.cDSS_Alert.findMany({

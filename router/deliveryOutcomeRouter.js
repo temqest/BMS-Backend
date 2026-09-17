@@ -9,16 +9,17 @@ const {
 } = require('../controllers/deliveryOutcomeController');
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
+const clinicalStaffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife'];
+const viewRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
 
-router.post('/register', verifyToken, checkUserRole(allowedRoles), registerDeliveryOutcome);
+router.post('/register', verifyToken, checkUserRole(clinicalStaffRoles), registerDeliveryOutcome);
 
-router.put('/update/:delivery_id', verifyToken, checkUserRole(allowedRoles), updateDeliveryOutcome);
+router.put('/update/:delivery_id', verifyToken, checkUserRole(clinicalStaffRoles), updateDeliveryOutcome);
 
-router.delete('/delete/:delivery_id', verifyToken, checkUserRole(allowedRoles), deleteDeliveryOutcome);
+router.delete('/delete/:delivery_id', verifyToken, checkUserRole(clinicalStaffRoles), deleteDeliveryOutcome);
 
-router.get('/get/:delivery_id', verifyToken, checkUserRole(allowedRoles), getDeliveryOutcomeById);
+router.get('/get/:delivery_id', verifyToken, checkUserRole(viewRoles), getDeliveryOutcomeById);
 
-router.get('/get/pregnancy/:pregnancy_id', verifyToken, checkUserRole(allowedRoles), getDeliveryOutcomeByPregnancy);
+router.get('/get/pregnancy/:pregnancy_id', verifyToken, checkUserRole(viewRoles), getDeliveryOutcomeByPregnancy);
 
 module.exports = router;

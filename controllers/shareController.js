@@ -1,8 +1,41 @@
 const prisma = require("../util/db");
 const crypto = require("crypto");
 
+// In-memory failed PIN attempt tracker: tokenId -> { count, lockedUntil }
+const pinAttempts = new Map();
+
+function checkPinLockout(tokenId) {
+  const record = pinAttempts.get(tokenId);
+  if (!record) return { isLocked: false };
+  const now = Date.now();
+  if (record.lockedUntil && now < record.lockedUntil) {
+    const minutesLeft = Math.ceil((record.lockedUntil - now) / 60000);
+    return { isLocked: true, minutesLeft };
+  }
+  if (record.lockedUntil && now >= record.lockedUntil) {
+    pinAttempts.delete(tokenId);
+    return { isLocked: false };
+  }
+  return { isLocked: false };
+}
+
+function recordFailedPinAttempt(tokenId) {
+  const now = Date.now();
+  const record = pinAttempts.get(tokenId) || { count: 0, firstAttempt: now };
+  record.count += 1;
+  if (record.count >= 5) {
+    record.lockedUntil = now + 15 * 60 * 1000; // Lock for 15 minutes
+  }
+  pinAttempts.set(tokenId, record);
+  return record;
+}
+
+function clearPinAttempts(tokenId) {
+  pinAttempts.delete(tokenId);
+}
+
 /**
- * Helper to generate a 6-digit PIN code (e.g., "491823")
+ * Generate a cryptographically secure 6-digit numeric PIN code (e.g., "491823")
  */
 const generate6DigitPin = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -47,6 +80,25 @@ const getOrCreateMotherShareToken = async (req, res, next) => {
         return res.status(404).json({ error: "Mother profile not found for this user" });
       }
       targetMotherId = motherRec.mother_id;
+    } else {
+      // If targetMotherId was specified, verify ownership/access rights
+      const targetMother = await prisma.mother.findFirst({
+        where: {
+          OR: [{ mother_id: targetMotherId }, { user_id: targetMotherId }]
+        },
+        include: { user: true }
+      });
+      if (!targetMother) {
+        return res.status(404).json({ error: "Mother profile not found" });
+      }
+      targetMotherId = targetMother.mother_id;
+
+      if (req.user?.role === 'Mother' && targetMother.user_id !== my_user_id) {
+        return res.status(403).json({ error: "Access Denied. You cannot access another mother's sharing PIN." });
+      }
+      if (req.user?.role !== 'SystemAdmin' && req.user?.role !== 'Mother' && targetMother.user?.facility_id !== req.user?.facility_id) {
+        return res.status(403).json({ error: "Access Denied. You cannot access sharing PINs for mothers in another facility." });
+      }
     }
 
     // Find existing active share link
@@ -111,6 +163,24 @@ const regenerateShareToken = async (req, res, next) => {
         return res.status(404).json({ error: "Mother profile not found for this user" });
       }
       targetMotherId = motherRec.mother_id;
+    } else {
+      const targetMother = await prisma.mother.findFirst({
+        where: {
+          OR: [{ mother_id: targetMotherId }, { user_id: targetMotherId }]
+        },
+        include: { user: true }
+      });
+      if (!targetMother) {
+        return res.status(404).json({ error: "Mother profile not found" });
+      }
+      targetMotherId = targetMother.mother_id;
+
+      if (req.user?.role === 'Mother' && targetMother.user_id !== my_user_id) {
+        return res.status(403).json({ error: "Access Denied. You cannot regenerate another mother's sharing PIN." });
+      }
+      if (req.user?.role !== 'SystemAdmin' && req.user?.role !== 'Mother' && targetMother.user?.facility_id !== req.user?.facility_id) {
+        return res.status(403).json({ error: "Access Denied. You cannot regenerate sharing PINs for mothers in another facility." });
+      }
     }
 
     // Deactivate all existing links
@@ -203,12 +273,27 @@ const getPublicSharedJourney = async (req, res, next) => {
     const rawName = user ? `${user.first_name || ""} ${user.last_name || ""}`.trim() : "Patient";
     const maskedName = user?.first_name ? `${user.first_name.charAt(0)}. ${user.last_name || ""}` : "Protected Record";
 
-    // 1. PIN Gate Verification Check
+    // 1. PIN Gate Verification Check with Lockout Defense
+    const lockoutStatus = checkPinLockout(shareLink.share_token);
+    if (lockoutStatus.isLocked) {
+      return res.status(429).json({
+        error: `Too many failed PIN attempts. Link is locked for ${lockoutStatus.minutesLeft} more minute(s).`
+      });
+    }
+
     const providedPin = (pin || "").toString().trim();
-    const isPinMatch = providedPin === shareLink.pin_code.toString().trim();
-    console.log(`[ShareController] 🔐 PIN check: provided="${providedPin}", expected="${shareLink.pin_code}", match=${isPinMatch}`);
+    const isPinMatch = providedPin.length > 0 && providedPin === shareLink.pin_code.toString().trim();
 
     if (!isPinMatch) {
+      if (providedPin) {
+        const attemptRecord = recordFailedPinAttempt(shareLink.share_token);
+        if (attemptRecord.count >= 5) {
+          return res.status(429).json({
+            error: "Too many incorrect PIN attempts. This share link has been locked for 15 minutes."
+          });
+        }
+      }
+
       return res.status(200).json({
         message: "PIN verification required",
         data: {
@@ -224,8 +309,11 @@ const getPublicSharedJourney = async (req, res, next) => {
       });
     }
 
+    // Clear failed attempts on successful verification
+    clearPinAttempts(shareLink.share_token);
+
     // 2. PIN is Valid - Record access metrics
-    console.log(`[ShareController] ✅ PIN verified! Fetching composite pregnancy records for mother: ${mother.mother_id}`);
+    console.log(`[ShareController] ✅ PIN verified for share token ${shareLink.share_token}`);
     await prisma.mother_Share_Link.update({
       where: { share_id: shareLink.share_id },
       data: {

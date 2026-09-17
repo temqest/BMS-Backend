@@ -168,7 +168,11 @@ const getAppointmentById = async (req, res, next) => {
             return res.status(404).json({ error: "Appointment Doesn't Exist!" });
         }
 
-        if (req.user?.role !== 'SystemAdmin' && appointment.facility_id && appointment.facility_id !== req.user?.facility_id) {
+        if (req.user?.role === 'Mother' && appointment.user_id !== req.user?.user_id) {
+            return res.status(403).json({ error: "Access Denied. You cannot view another patient's appointment." });
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && req.user?.role !== 'Mother' && appointment.facility_id && appointment.facility_id !== req.user?.facility_id) {
             return res.status(403).json({ error: "Access Denied. You cannot access appointments for another facility." });
         }
 
@@ -188,6 +192,10 @@ const getAppointmentsByUser = async (req, res, next) => {
 
         if (!user_id) {
             return res.status(400).json({ error: "Missing Required Fields!" });
+        }
+
+        if (req.user?.role === 'Mother' && user_id !== req.user?.user_id) {
+            return res.status(403).json({ error: "Access Denied. You can only view your own appointments." });
         }
 
         if (!(await validate.isUserExist(user_id))) {
@@ -218,6 +226,10 @@ const getAppointmentsByFacility = async (req, res, next) => {
 
         if (!facility_id) {
             return res.status(400).json({ error: "Missing Required Fields!" });
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && facility_id !== req.user?.facility_id) {
+            return res.status(403).json({ error: "Access Denied. You cannot view appointments for another facility." });
         }
 
         if (!(await validate.isFacilityExist(facility_id))) {
@@ -313,6 +325,15 @@ const cancelAppointment = async (req, res, next) => {
         }
         appointment_id = resolvedId;
 
+        // Enforce ownership: Mothers can only cancel their own appointments
+        if (req.user?.role === 'Mother' && record.user_id !== req.user?.user_id) {
+            return res.status(403).json({ error: "Access Denied. You can only cancel your own appointments." });
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && req.user?.role !== 'Mother' && record.facility_id && record.facility_id !== req.user?.facility_id) {
+            return res.status(403).json({ error: "Access Denied. You cannot cancel appointments for another facility." });
+        }
+
         // Completed appointments cannot be cancelled
         if (record.status && record.status.toLowerCase() === "completed") {
             return res.status(400).json({ error: "Completed appointments cannot be cancelled." });
@@ -356,7 +377,13 @@ const deleteAppointment = async (req, res, next) => {
         if (!resolvedId || !record) {
             return res.status(200).json({ message: "Appointment Already Deleted" });
         }
-        appointment_id = resolvedId;
+        if (req.user?.role === 'Mother') {
+            return res.status(403).json({ error: "Access Denied. Only clinical staff can delete appointment records." });
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && record.facility_id && record.facility_id !== req.user?.facility_id) {
+            return res.status(403).json({ error: "Access Denied. You cannot delete appointments for another facility." });
+        }
 
         await prisma.appointment.delete({
             where: { appointment_id: appointment_id },

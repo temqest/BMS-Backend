@@ -19,7 +19,7 @@ const verifyToken = (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     try {
-        const decoded = jwt.verify(token, getJwtSecret())
+        const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] });
 
         req.user = decoded;
 

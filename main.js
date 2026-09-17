@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express')
 const app = express()
 const cors = require('cors');
+const helmet = require('helmet');
 const PORT = process.env.PORT || 6700
 
 app.set('trust proxy', 1);
@@ -49,11 +50,47 @@ const path = require('path');
 
 const compression = require('compression');
 
-app.use(cors());
+// Security Headers: Helmet with cross-origin asset support for images & documents
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false,
+}));
+
+// CORS configuration with credentials support
+const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    process.env.SITE_URL,
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost:4173',
+    'http://localhost:8081',
+    'http://127.0.0.1:5173',
+].filter(Boolean);
+
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (
+            allowedOrigins.includes(origin) ||
+            origin.endsWith('.vercel.app') ||
+            origin.endsWith('.online') ||
+            /^http:\/\/localhost:\d+$/.test(origin)
+        ) {
+            return callback(null, true);
+        }
+        return callback(null, true);
+    },
+    credentials: true,
+}));
+
 app.use(compression({ threshold: 1024 }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads'), {
+    setHeaders: (res) => {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+    }
+}));
 
 app.get('/health', (req, res) => {
     res.send("Birth Monitoring System's Backend is working fine")
@@ -106,11 +143,13 @@ app.use('/api/users', userRouter)
 app.use('/api/user', userRouter)
 
 app.use((err, req, res, next) => {
-    console.error("Unhandled Server Error", err);
-
-    res.status(500).json({
-        error : "InternalServerError",
-        message : err.message || "An unexpected error occurred."
+    console.error("Unhandled Server Error:", err);
+    const isProd = process.env.NODE_ENV === 'production';
+    res.status(err.status || 500).json({
+        error: "InternalServerError",
+        message: isProd
+            ? "An unexpected internal server error occurred. Please contact support."
+            : (err.message || "An unexpected error occurred.")
     });
 });
 

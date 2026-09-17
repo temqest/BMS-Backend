@@ -6,7 +6,7 @@ const { supabase } = require('../util/storage');
 
 const createMessage = async (req, res, next) => {
     try {
-        const sender_id = req.user?.user_id || req.body.sender_id;
+        const sender_id = req.user?.user_id;
         let { receiver_id, message_type, message_content, message_date } = req.body;
 
         if (!sender_id) {
@@ -83,8 +83,16 @@ const updateMessage = async (req, res, next) => {
             return res.status(400).json({ error: "Missing Required Fields!" });
         }
 
-        if (!(await validate.isMessageExist(message_id))) {
+        const existingMessage = await prisma.in_App_Message.findUnique({
+            where: { message_id: message_id }
+        });
+
+        if (!existingMessage) {
             return res.status(404).json({ error: "Message Doesn't Exist!" });
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && existingMessage.sender_id !== req.user?.user_id) {
+            return res.status(403).json({ error: "Access Denied. You can only edit your own sent messages." });
         }
 
         const updatedMessage = await prisma.in_App_Message.update({
@@ -112,8 +120,16 @@ const deleteMessage = async (req, res, next) => {
             return res.status(400).json({ error: "Missing Message_ID!" });
         }
 
-        if (!(await validate.isMessageExist(message_id))) {
+        const existingMessage = await prisma.in_App_Message.findUnique({
+            where: { message_id: message_id }
+        });
+
+        if (!existingMessage) {
             return res.status(404).json({ error: "Message Doesn't Exist!" });
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && existingMessage.sender_id !== req.user?.user_id) {
+            return res.status(403).json({ error: "Access Denied. You can only delete your own sent messages." });
         }
 
         await prisma.in_App_Message.delete({
@@ -137,8 +153,16 @@ const markMessageAsRead = async (req, res, next) => {
             return res.status(400).json({ error: "Missing Message_ID!" });
         }
 
-        if (!(await validate.isMessageExist(message_id))) {
+        const existingMessage = await prisma.in_App_Message.findUnique({
+            where: { message_id: message_id }
+        });
+
+        if (!existingMessage) {
             return res.status(404).json({ error: "Message Doesn't Exist!" });
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && existingMessage.receiver_id !== req.user?.user_id) {
+            return res.status(403).json({ error: "Access Denied. You can only mark messages sent to you as read." });
         }
 
         const markAsRead = await prisma.in_App_Message.update({
@@ -199,7 +223,10 @@ const markAllAsRead = async (req, res, next) => {
 
 const getAllMessageForUser = async (req, res, next) => {
     try {
-        const user_id = req.params?.user_id || req.query?.user_id || req.user?.user_id || req.body?.user_id;
+        const requestedUserId = req.params?.user_id || req.query?.user_id || req.body?.user_id;
+        const user_id = (req.user?.role === 'SystemAdmin' && requestedUserId)
+            ? requestedUserId
+            : req.user?.user_id;
 
         if (!user_id) {
             return res.status(400).json({ error: "Missing User_ID!" });

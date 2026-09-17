@@ -13,22 +13,23 @@ const {
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 const { upload } = require('../util/storage');
 
-const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
+const clinicalStaffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife'];
+const viewRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
 
-router.post('/upload', verifyToken, checkUserRole(allowedRoles), upload.single('file'), uploadLabFile);
+router.post('/upload', verifyToken, checkUserRole(clinicalStaffRoles), upload.single('file'), uploadLabFile);
 
-router.post('/register', verifyToken, checkUserRole(allowedRoles), registerLabScreening);
+router.post('/register', verifyToken, checkUserRole(clinicalStaffRoles), registerLabScreening);
 
-router.put('/update/:screening_id', verifyToken, checkUserRole(allowedRoles), updateLabScreening);
+router.put('/update/:screening_id', verifyToken, checkUserRole(clinicalStaffRoles), updateLabScreening);
 
-router.delete('/delete/:screening_id', verifyToken, checkUserRole(allowedRoles), deleteLabScreening);
+router.delete('/delete/:screening_id', verifyToken, checkUserRole(clinicalStaffRoles), deleteLabScreening);
 
-router.get('/get/:screening_id', verifyToken, checkUserRole(allowedRoles), getLabScreeningById);
+router.get('/get/:screening_id', verifyToken, checkUserRole(viewRoles), getLabScreeningById);
 
-router.get('/get/pregnancy/:pregnancy_id', verifyToken, checkUserRole(allowedRoles), getLabScreeningByPregnancy);
+router.get('/get/pregnancy/:pregnancy_id', verifyToken, checkUserRole(viewRoles), getLabScreeningByPregnancy);
 
-router.get('/get/visit/:visit_id', verifyToken, checkUserRole(allowedRoles), getLabScreeningByVisit);
+router.get('/get/visit/:visit_id', verifyToken, checkUserRole(viewRoles), getLabScreeningByVisit);
 
-router.get('/get/mother/:mother_id', verifyToken, checkUserRole(allowedRoles), getLabScreeningByMother);
+router.get('/get/mother/:mother_id', verifyToken, checkUserRole(viewRoles), getLabScreeningByMother);
 
 module.exports = router;

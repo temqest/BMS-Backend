@@ -6,6 +6,14 @@ const { resolveEntityId } = require('../middleware/idResolver');
 const path = require('path');
 const fs = require('fs');
 
+const SAFE_LAB_MIMES = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'application/pdf': 'pdf',
+};
+
 async function saveBase64ToFile(fileUrl, req) {
     if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.startsWith('data:')) {
         return fileUrl;
@@ -13,10 +21,14 @@ async function saveBase64ToFile(fileUrl, req) {
     try {
         const matches = fileUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
         if (matches && matches.length === 3) {
-            const mimeType = matches[1];
+            const mimeType = matches[1].toLowerCase();
+            const ext = SAFE_LAB_MIMES[mimeType];
+            if (!ext) {
+                console.warn(`[Security] Rejected unsupported lab document MIME type: ${mimeType}`);
+                return null;
+            }
             const base64Data = matches[2];
             const buffer = Buffer.from(base64Data, 'base64');
-            const ext = mimeType.split('/')[1] || 'jpg';
             const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
 
             try {
@@ -297,6 +309,16 @@ const getLabScreeningById = async (req, res, next) => {
             return res.status(404).json({error: "Lab Screening Not Found!"});
         }
 
+        if (req.user?.role === 'Mother') {
+            const screeningWithMother = await prisma.lab_Screening.findUnique({
+                where: { screening_id },
+                include: { pregnancy: { include: { mother: true } } }
+            });
+            if (!screeningWithMother || screeningWithMother.pregnancy?.mother?.user_id !== req.user?.user_id) {
+                return res.status(403).json({ error: "Access Denied. You do not have permission to view this lab screening." });
+            }
+        }
+
         return res.status(200).json({
             message : "Lab Screening Fetched Successfully!",
             data : isScreeningExist
@@ -375,6 +397,10 @@ const getLabScreeningByMother = async (req, res, next) => {
 
         if (!motherRecord) {
             return res.status(404).json({ error: "Mother Doesn't Exist" });
+        }
+
+        if (req.user?.role === 'Mother' && motherRecord.user_id !== req.user?.user_id) {
+            return res.status(403).json({ error: "Access Denied. You can only view your own lab screenings." });
         }
 
         const pregnancies = await prisma.pregnancy.findMany({

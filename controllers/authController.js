@@ -468,20 +468,27 @@ const changePassword = async (req, res, next) => {
 
 const googleAuth = async (req, res, next) => {
     try {
-        const { idToken, email: bodyEmail, first_name: bodyFirstName, last_name: bodyLastName, profile_url: bodyProfileUrl, role: requestedRole, is_signup, auto_register, address: bodyAddress } = req.body;
+        const { idToken, accessToken, access_token, role: requestedRole, is_signup, auto_register, address: bodyAddress } = req.body;
 
-        let email = bodyEmail;
-        let firstName = bodyFirstName || "Google";
-        let lastName = bodyLastName || "User";
-        let profileUrl = bodyProfileUrl || null;
+        const effectiveAccessToken = accessToken || access_token;
 
+        if (!idToken && !effectiveAccessToken) {
+            return res.status(401).json({ error: "Google authentication token (idToken or accessToken) is required." });
+        }
+
+        let verifiedEmail = null;
+        let firstName = "Google";
+        let lastName = "User";
+        let profileUrl = null;
+
+        // 1. If idToken is supplied, verify cryptographically with Google OAuth2Client or Firebase Admin
         if (idToken) {
             try {
                 const { OAuth2Client } = require('google-auth-library');
                 const googleClientId = process.env.GOOGLE_CLIENT_ID;
                 const client = new OAuth2Client(googleClientId);
                 
-                const validAudiences = [process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_ANDROID_CLIENT_ID].filter(Boolean);
+                const validAudiences = [process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_ANDROID_CLIENT_ID, process.env.GOOGLE_WEB_CLIENT_ID].filter(Boolean);
                 const ticket = await client.verifyIdToken({
                     idToken: idToken,
                     audience: validAudiences.length > 0 ? validAudiences : undefined,
@@ -489,24 +496,59 @@ const googleAuth = async (req, res, next) => {
                 const payload = ticket.getPayload();
 
                 if (payload && payload.email) {
-                    email = payload.email;
+                    verifiedEmail = payload.email;
                     firstName = payload.given_name || firstName;
                     lastName = payload.family_name || lastName;
                     profileUrl = payload.picture || profileUrl;
                 }
             } catch (tokenErr) {
-                console.warn("Google token verification warning:", tokenErr.message);
-                if (!email) {
-                    return res.status(400).json({ error: "Invalid Google token and no fallback email provided." });
+                console.warn("[GoogleAuth] Google idToken verification failed with google-auth-library:", tokenErr.message);
+                // Also attempt Firebase verifyIdToken if Firebase auth is configured
+                try {
+                    const { getAuth, initFirebase } = require('../services/firebaseService');
+                    const app = initFirebase();
+                    if (app) {
+                        const decoded = await getAuth(app).verifyIdToken(idToken);
+                        if (decoded && decoded.email) {
+                            verifiedEmail = decoded.email;
+                            firstName = decoded.name?.split(' ')[0] || firstName;
+                            lastName = decoded.name?.split(' ').slice(1).join(' ') || lastName;
+                            profileUrl = decoded.picture || profileUrl;
+                        }
+                    }
+                } catch (fbErr) {
+                    console.warn("[GoogleAuth] Firebase idToken verification also failed:", fbErr.message);
                 }
             }
         }
 
-        if (!email) {
-            return res.status(400).json({ error: "Email is required for Google Sign-In." });
+        // 2. If no verified email from idToken, verify effectiveAccessToken via Google userinfo API
+        if (!verifiedEmail && effectiveAccessToken) {
+            try {
+                const fetchRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+                    headers: { Authorization: `Bearer ${effectiveAccessToken}` }
+                });
+                if (fetchRes.ok) {
+                    const googleUser = await fetchRes.json();
+                    if (googleUser && googleUser.email && googleUser.email_verified !== false) {
+                        verifiedEmail = googleUser.email;
+                        firstName = googleUser.given_name || googleUser.name || firstName;
+                        lastName = googleUser.family_name || lastName;
+                        profileUrl = googleUser.picture || profileUrl;
+                    }
+                } else {
+                    console.warn(`[GoogleAuth] Google userinfo API responded with status ${fetchRes.status}`);
+                }
+            } catch (fetchErr) {
+                console.warn("[GoogleAuth] Failed to verify access token with Google API:", fetchErr.message);
+            }
         }
 
-        const cleanEmail = email.trim().toLowerCase();
+        if (!verifiedEmail) {
+            return res.status(401).json({ error: "Invalid or expired Google authentication token. Login rejected." });
+        }
+
+        const cleanEmail = verifiedEmail.trim().toLowerCase();
 
         let user = await prisma.user.findFirst({
             where: {

@@ -4,18 +4,19 @@ const { logAuditTrail } = require('../services/auditService');
 
 const createAuditTrail = async (req, res, next) => {
     try {
-        const { user_id, table_name, action_type, previous_state, new_state } = req.body;
+        const authoritativeUserId = req.user?.user_id || req.body.user_id;
+        const { table_name, action_type, previous_state, new_state } = req.body;
 
-        if (!user_id || !table_name || !action_type) {
+        if (!authoritativeUserId || !table_name || !action_type) {
             return res.status(400).json({ error: "Missing Required Fields" });
         }
 
-        if (!(await validate.isUserExist(user_id))) {
+        if (!(await validate.isUserExist(authoritativeUserId))) {
             return res.status(404).json({ error: "User Doesn't Exist" });
         }
 
         const audit = await logAuditTrail({
-            userId: user_id,
+            userId: authoritativeUserId,
             tableName: table_name,
             actionType: action_type,
             previousState: previous_state,

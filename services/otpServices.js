@@ -82,41 +82,77 @@ const generateOTP = async (identifier, type, purpose, provider = "email") => {
     }
 }
 
+const { verifyFirebasePhoneToken } = require('./firebaseService');
+
 const verifyOTP = async (identifier, code, purpose) => {
 
     try {
-        const isTesting = process.env.TESTING?.trim() === 'true';
+        if (!identifier || !code) {
+            return false;
+        }
+
+        const isTesting = process.env.NODE_ENV !== 'production' && process.env.TESTING?.trim() === 'true';
         if (isTesting && String(code) === '123456') {
             console.log(`[OTP TESTING MODE] OTP verification accepted '123456' for identifier: ${identifier}`);
             return true;
         }
 
-        if (code === "FIREBASE_VERIFIED" || code === "FIREBASE_SMS_VERIFIED") {
-            return true;
+        const cleanCode = String(code).trim();
+
+        // If client passes a Firebase ID token (JWT format or long token)
+        if (cleanCode.length > 50 || cleanCode.split('.').length === 3) {
+            const result = await verifyFirebasePhoneToken(cleanCode, identifier);
+            if (result.valid) {
+                return true;
+            }
+            console.warn(`[OTP] Firebase phone token verification failed: ${result.error}`);
+            return false;
         }
 
-        const isValid = await prisma.otp.findFirst({
-            where : {
-                identifier : identifier,
-                code : String(code),
-                is_used : false,
-                purpose : purpose,
-                expires_at : {
-                    gt : new Date()
+        // Standard numeric OTP verification with attempt tracking & invalidation
+        const activeOtp = await prisma.otp.findFirst({
+            where: {
+                identifier: identifier,
+                is_used: false,
+                purpose: purpose,
+                expires_at: {
+                    gt: new Date()
                 }
+            },
+            orderBy: {
+                created_at: 'desc'
             }
-        })
+        });
 
-        if(isValid) {
-            
-            await prisma.otp.update({
-                where : {otp_id : isValid.otp_id},
-                data : {
-                    is_used : true
-                }
-            })
+        if (activeOtp) {
+            if (activeOtp.attempts >= 5) {
+                await prisma.otp.update({
+                    where: { otp_id: activeOtp.otp_id },
+                    data: { is_used: true }
+                });
+                console.warn(`[OTP] Too many failed attempts for identifier: ${identifier}`);
+                return false;
+            }
 
-            return true
+            if (activeOtp.code === cleanCode) {
+                await prisma.otp.update({
+                    where: { otp_id: activeOtp.otp_id },
+                    data: {
+                        is_used: true
+                    }
+                });
+                return true;
+            } else {
+                const nextAttempts = (activeOtp.attempts || 0) + 1;
+                await prisma.otp.update({
+                    where: { otp_id: activeOtp.otp_id },
+                    data: {
+                        attempts: nextAttempts,
+                        is_used: nextAttempts >= 5 ? true : false
+                    }
+                });
+                return false;
+            }
         }
 
         return false;
