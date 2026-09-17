@@ -104,33 +104,61 @@ const registerMother = async (req, res, next) => {
             return res.status(400).json({error: "Missing Required Fields!"});
         }
 
-        const existingMother = await prisma.user.findFirst({
-            where : {
-                OR: [
-                    {
-                        first_name : first_name,
-                        last_name : last_name,
-                        mother : {
-                            birth_date : new Date(birth_date),
-                        }
-                    },
+        const duplicateConditions = [];
+        if (phone_number && phone_number.trim()) {
+            duplicateConditions.push({ phone_number: phone_number.trim() });
+        }
+        if (email && email.trim()) {
+            duplicateConditions.push({ email: email.trim() });
+        }
+        if (family_serial_no && family_serial_no.trim()) {
+            duplicateConditions.push({
+                mother: {
+                    family_serial_no: family_serial_no.trim()
+                }
+            });
+        }
+        if (first_name && last_name && birth_date) {
+            duplicateConditions.push({
+                first_name: first_name.trim(),
+                last_name: last_name.trim(),
+                mother: {
+                    birth_date: new Date(birth_date),
+                }
+            });
+        }
 
-                    ...(family_serial_no ? [{ mother : {
-                        family_serial_no : family_serial_no
-                    }}] : [])
-                ]
-            },
-        });
+        const existingMother = duplicateConditions.length > 0 
+            ? await prisma.user.findFirst({
+                where: { OR: duplicateConditions },
+                include: { mother: true }
+            })
+            : null;
 
-        if(existingMother) {
-            const fullMother = await prisma.mother.findUnique({
+        if (existingMother) {
+            let fullMother = existingMother.mother || await prisma.mother.findUnique({
                 where: { user_id: existingMother.user_id }
             });
+
+            if (!fullMother) {
+                fullMother = await prisma.mother.create({
+                    data: {
+                        user_id: existingMother.user_id,
+                        family_serial_no: family_serial_no || null,
+                        birth_date: new Date(birth_date),
+                        age: calculateAge(birth_date),
+                        civil_status: civil_status,
+                        blood_type: blood_type,
+                        sync_status: "synced",
+                    }
+                });
+            }
+
             return res.status(200).json({
                 message: "User already exist",
                 already_exists: true,
                 user: existingMother,
-                mother: fullMother || existingMother
+                mother: fullMother
             });
         }
 
@@ -171,6 +199,31 @@ const registerMother = async (req, res, next) => {
         });
 
     } catch (error) {
+        // Handle race-condition or duplicate key conflict gracefully
+        if (error.code === 'P2002' || error.message?.includes('Unique constraint') || error.message?.includes('already exist')) {
+            const fallbackUser = await prisma.user.findFirst({
+                where: {
+                    OR: [
+                        req.body.phone_number ? { phone_number: req.body.phone_number.trim() } : undefined,
+                        req.body.email ? { email: req.body.email.trim() } : undefined,
+                        (req.body.first_name && req.body.last_name) ? {
+                            first_name: req.body.first_name.trim(),
+                            last_name: req.body.last_name.trim()
+                        } : undefined,
+                    ].filter(Boolean)
+                },
+                include: { mother: true }
+            }).catch(() => null);
+
+            if (fallbackUser) {
+                return res.status(200).json({
+                    message: "User already exist",
+                    already_exists: true,
+                    user: fallbackUser,
+                    mother: fallbackUser.mother || fallbackUser
+                });
+            }
+        }
         return next(error);
     }
 
