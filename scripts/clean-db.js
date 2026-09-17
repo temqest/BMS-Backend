@@ -29,8 +29,7 @@ async function cleanDatabase() {
     try {
         if (deleteAll) {
             console.log('⚠️  Mode: Full Database Wipe');
-            
-            // Delete dependent records first
+
             await prisma.otp.deleteMany({});
             await prisma.audit_Revision_Log.deleteMany({});
             await prisma.notification.deleteMany({});
@@ -53,7 +52,6 @@ async function cleanDatabase() {
             return;
         }
 
-        // Default test targets if no specific CLI flags are provided
         if (targetEmails.length === 0 && targetPhones.length === 0 && targetFacilities.length === 0 && !pattern) {
             console.log('ℹ️  No specific arguments provided. Defaulting to cleaning common test identifiers ("Test", "Rural Health Unit", "patrickkurtv@gmail.com", "rhu1@gmail.com", "09686255210")...');
             targetEmails = ['patrickkurtv@gmail.com', 'rhu1@gmail.com'];
@@ -64,7 +62,6 @@ async function cleanDatabase() {
 
         console.log(`🔎 Target Filters - Emails: [${targetEmails.join(', ')}], Phones: [${targetPhones.join(', ')}], Pattern: "${pattern || 'N/A'}"`);
 
-        // Find users to delete
         const usersToDelete = await prisma.user.findMany({
             where: {
                 OR: [
@@ -83,7 +80,6 @@ async function cleanDatabase() {
         const userEmails = usersToDelete.map(u => u.email).filter(Boolean);
         const userPhones = usersToDelete.map(u => u.phone_number).filter(Boolean);
 
-        // Find facilities to delete
         const facilitiesToDelete = await prisma.facility.findMany({
             where: {
                 OR: [
@@ -101,7 +97,6 @@ async function cleanDatabase() {
 
         const facilityIds = facilitiesToDelete.map(f => f.facility_id);
 
-        // Clear OTPs related to test identifiers
         const identifiersToClear = Array.from(new Set([...targetEmails, ...targetPhones, ...userEmails, ...userPhones]));
         if (identifiersToClear.length > 0) {
             const deletedOtps = await prisma.otp.deleteMany({
@@ -110,9 +105,8 @@ async function cleanDatabase() {
             console.log(`🗑️  Deleted ${deletedOtps.count} OTP records.`);
         }
 
-        // Delete users (cascades to Mothers, Pregnancies, Visits, etc.)
         if (userIds.length > 0) {
-            // Delete user-related records that might not cascade automatically
+
             await prisma.appointment.deleteMany({ where: { user_id: { in: userIds } } });
             await prisma.notification.deleteMany({ where: { user_id: { in: userIds } } });
             await prisma.audit_Revision_Log.deleteMany({ where: { user_id: { in: userIds } } });
@@ -126,9 +120,8 @@ async function cleanDatabase() {
             console.log(`🗑️  Deleted ${deletedUsers.count} test User records.`);
         }
 
-        // Delete facilities
         if (facilityIds.length > 0) {
-            // Unlink any remaining users pointing to these facilities
+
             await prisma.user.updateMany({
                 where: { facility_id: { in: facilityIds } },
                 data: { facility_id: null }

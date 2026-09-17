@@ -7,7 +7,6 @@ async function deleteAllMothers() {
     console.log('====================================================\n');
 
     try {
-        // 1. Gather all mothers and associated patient users
         const allMothers = await prisma.mother.findMany({
             select: { mother_id: true, user_id: true }
         });
@@ -39,7 +38,6 @@ async function deleteAllMothers() {
         console.log(`   - ${motherIds.length} Mother profile(s)`);
         console.log(`   - ${allMotherUserIds.length} Mother user account(s)`);
 
-        // 2. Gather child pregnancy and visit IDs
         const pregnancies = await prisma.pregnancy.findMany({
             where: { mother_id: { in: motherIds } },
             select: { pregnancy_id: true }
@@ -64,7 +62,6 @@ async function deleteAllMothers() {
 
         console.log('🗑️  Deleting related sub-records in relational order...');
 
-        // 3. Child entities deletion
         const resPostpartum = await prisma.postpartum_visit.deleteMany({
             where: { delivery_id: { in: deliveryIds } }
         });

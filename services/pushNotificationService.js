@@ -1,17 +1,9 @@
 const prisma = require('../util/db');
 const { getMessaging, initFirebase } = require('./firebaseService');
 
-/**
- * Send a push notification to a user by their user_id.
- * Automatically handles token lookup, error handling, and dead-token cleanup.
- *
- * @param {string} userId - Target User ID in the database
- * @param {string} title - Notification Title
- * @param {string} body - Notification Body text
- * @param {Record<string, any>} [dataPayload={}] - Key-value custom payload (will be stringified)
- * @returns {Promise<{ success: boolean, messageId?: string, reason?: string, error?: string }>}
- */
+
 async function sendNotificationToUser(userId, title, body, dataPayload = {}) {
+  
   try {
     const app = initFirebase();
     if (!app) {
@@ -19,7 +11,6 @@ async function sendNotificationToUser(userId, title, body, dataPayload = {}) {
       return { success: false, reason: 'Firebase not configured' };
     }
 
-    // 1. Fetch user and registered FCM token (with raw SQL fallback for Prisma schema lag)
     let user = null;
     try {
       user = await prisma.user.findUnique({
@@ -44,7 +35,6 @@ async function sendNotificationToUser(userId, title, body, dataPayload = {}) {
       return { success: false, reason: 'No FCM token' };
     }
 
-    // 2. Format custom data payload (FCM requires string-only key-value map in data)
     const sanitizedData = {};
     if (dataPayload && typeof dataPayload === 'object') {
       for (const [key, value] of Object.entries(dataPayload)) {
@@ -54,7 +44,6 @@ async function sendNotificationToUser(userId, title, body, dataPayload = {}) {
       }
     }
 
-    // 3. Assemble FCM message
     const message = {
       token: user.fcm_token,
       notification: {
@@ -80,7 +69,6 @@ async function sendNotificationToUser(userId, title, body, dataPayload = {}) {
       },
     };
 
-    // 4. Send via Firebase Cloud Messaging
     const messaging = getMessaging(app);
     const response = await messaging.send(message);
     console.log(`[FCM] Successfully delivered push notification to user ${userId} (FCM ID: ${response})`);
@@ -89,7 +77,6 @@ async function sendNotificationToUser(userId, title, body, dataPayload = {}) {
     const errorCode = error.code || error.message;
     console.error(`[FCM] Failed to send push notification to user ${userId}:`, errorCode);
 
-    // 5. Cleanup dead/unregistered/invalid tokens
     const invalidTokenErrorCodes = [
       'messaging/registration-token-not-registered',
       'messaging/invalid-registration-token',

@@ -5,13 +5,6 @@ const { getMessaging } = require('firebase-admin/messaging');
 
 let firebaseApp = null;
 
-/**
- * Safely initialize Firebase Admin SDK using environment variables without hardcoded secrets.
- * Strictly adheres to AGENTS.md rules.
- * Supports:
- *  1. FIREBASE_SERVICE_ACCOUNT_KEY (raw JSON string or Base64-encoded JSON)
- *  2. FIREBASE_SERVICE_ACCOUNT_PATH or GOOGLE_APPLICATION_CREDENTIALS (file path to JSON key)
- */
 function initFirebase() {
   if (firebaseApp) return firebaseApp;
 
@@ -77,9 +70,6 @@ function initFirebase() {
 
 const { getAuth } = require('firebase-admin/auth');
 
-/**
- * Cryptographically verifies a Firebase Phone Auth ID token and checks phone match.
- */
 async function verifyFirebasePhoneToken(idToken, expectedPhone) {
   const app = initFirebase();
   if (!app) {
@@ -90,11 +80,9 @@ async function verifyFirebasePhoneToken(idToken, expectedPhone) {
     const auth = getAuth(app);
     const decodedToken = await auth.verifyIdToken(idToken);
 
-    // Normalize phone numbers for comparison (removing spaces, dashes)
     const tokenPhone = (decodedToken.phone_number || '').replace(/[\s-]/g, '');
     const cleanExpected = (expectedPhone || '').replace(/[\s-]/g, '');
 
-    // Allow match if exact match, or if one ends with the other (e.g. +63917... vs 0917...)
     const isPhoneMatch = !expectedPhone ||
       tokenPhone === cleanExpected ||
       (cleanExpected.length >= 10 && tokenPhone.endsWith(cleanExpected.slice(-10))) ||
@@ -112,7 +100,6 @@ async function verifyFirebasePhoneToken(idToken, expectedPhone) {
   }
 }
 
-// Attempt initial setup on load
 initFirebase();
 
 module.exports = {

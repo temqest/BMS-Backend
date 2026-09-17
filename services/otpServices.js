@@ -99,7 +99,6 @@ const verifyOTP = async (identifier, code, purpose) => {
 
         const cleanCode = String(code).trim();
 
-        // If client passes a Firebase ID token (JWT format or long token)
         if (cleanCode.length > 50 || cleanCode.split('.').length === 3) {
             const result = await verifyFirebasePhoneToken(cleanCode, identifier);
             if (result.valid) {
@@ -109,7 +108,6 @@ const verifyOTP = async (identifier, code, purpose) => {
             return false;
         }
 
-        // Standard numeric OTP verification with attempt tracking & invalidation
         const activeOtp = await prisma.otp.findFirst({
             where: {
                 identifier: identifier,

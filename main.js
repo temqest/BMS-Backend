@@ -1,5 +1,4 @@
 require('dotenv').config();
-// Environment loaded
 const express = require('express')
 const app = express()
 const cors = require('cors');
@@ -50,13 +49,11 @@ const path = require('path');
 
 const compression = require('compression');
 
-// Security Headers: Helmet with cross-origin asset support for images & documents
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
     contentSecurityPolicy: false,
 }));
 
-// CORS configuration with credentials support
 const allowedOrigins = [
     process.env.FRONTEND_URL,
     process.env.SITE_URL,
