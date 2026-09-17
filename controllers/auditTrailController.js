@@ -8,11 +8,11 @@ const createAuditTrail = async (req, res, next) => {
         const { table_name, action_type, previous_state, new_state } = req.body;
 
         if (!authoritativeUserId || !table_name || !action_type) {
-            return res.status(400).json({ error: "Missing Required Fields" });
+            return res.status(400).json({ error: "Missing required fields" });
         }
 
         if (!(await validate.isUserExist(authoritativeUserId))) {
-            return res.status(404).json({ error: "User Doesn't Exist" });
+            return res.status(404).json({ error: "User not found" });
         }
 
         const audit = await logAuditTrail({
@@ -24,7 +24,7 @@ const createAuditTrail = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Audit Trail Successfully Logged!",
+            message: "Audit trail logged successfully",
             data: audit
         });
 
@@ -49,7 +49,7 @@ const getAllAuditLogs = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "All Audit Logs Retrieved Successfully",
+            message: "Audit logs fetched",
             data: allLogs
         });
 
@@ -68,11 +68,11 @@ const getAllAuditLogsByUser = async (req, res, next) => {
         const limit = pageSize;
 
         if (!user_id) {
-            return res.status(400).json({ error: "Missing User_ID!" });
+            return res.status(400).json({ error: "Missing user ID" });
         }
 
         if (!(await validate.isUserExist(user_id))) {
-            return res.status(404).json({ error: "User Doesn't Exist" });
+            return res.status(404).json({ error: "User not found" });
         }
 
         const userAudit = await prisma.audit_Revision_Log.findMany({
@@ -85,7 +85,7 @@ const getAllAuditLogsByUser = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "User Audit Logs Successfully Retrieved",
+            message: "User audit logs retrieved",
             data: userAudit
         });
 
@@ -104,7 +104,7 @@ const getAuditLogByTable = async (req, res, next) => {
         const limit = pageSize;
 
         if (!table_name) {
-            return res.status(400).json({ error: "Missing Table_Name!" });
+            return res.status(400).json({ error: "Missing table name" });
         }
 
         const tableLogs = await prisma.audit_Revision_Log.findMany({
@@ -119,7 +119,7 @@ const getAuditLogByTable = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: `All Audit Logs for Table ${table_name} Successfully Retrieved!`,
+            message: `Audit logs for ${table_name} table loaded`,
             data: tableLogs
         });
 

@@ -22,11 +22,11 @@ const registerPostpartumVisit = async (req, res, next) => {
         } = req.body;
 
         if (!delivery_id || visit_number === undefined || weight_kg === undefined || temperature_celsius === undefined || pulse_rate_bpm === undefined || bp_diastolic === undefined || bp_systolic === undefined) {
-            return res.status(400).json({ error: "Missing Required Fields" });
+            return res.status(400).json({ error: "Required fields are missing" });
         }
 
-        if(!(await validate.isDeliveryOutcomeExist(delivery_id))) {
-            return res.status(404).json({error: "Delivery Outcome Not Found!"});
+        if (!(await validate.isDeliveryOutcomeExist(delivery_id))) {
+            return res.status(404).json({ error: "Delivery outcome not found" });
         }
 
         const postpartumVisit = await prisma.postpartum_visit.create({
@@ -50,9 +50,10 @@ const registerPostpartumVisit = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Postpartum Visit Successfully Registered!",
+            message: "Postpartum visit successfully registered",
             data: postpartumVisit
         });
+
     } catch (error) {
         return next(error);
     }
@@ -63,8 +64,8 @@ const updatePostpartumVisit = async (req, res, next) => {
         const { postpartum_visit_id } = req.params;
         const { strategy, version, ...clientData } = req.body;
 
-        if(!(await validate.isPostpartumVisitExist(postpartum_visit_id))) {
-            return res.status(404).json({error: "Postpartum Visit Not Found!"});
+        if (!(await validate.isPostpartumVisitExist(postpartum_visit_id))) {
+            return res.status(404).json({ error: "Postpartum visit not found" });
         }
 
         const mvccResult = await updateWithMVCC('postpartum_visit', postpartum_visit_id, { version, ...clientData }, {
@@ -80,10 +81,11 @@ const updatePostpartumVisit = async (req, res, next) => {
         }
 
         return res.status(200).json({
-            message: "Postpartum Visit Updated Successfully!",
+            message: "Postpartum visit updated successfully",
             data: mvccResult.record,
             strategyUsed: mvccResult.strategyUsed
         });
+
     } catch (error) {
         return next(error);
     }
@@ -93,8 +95,8 @@ const deletePostpartumVisit = async (req, res, next) => {
     try {
         const { postpartum_visit_id } = req.params;
 
-        if(!(await validate.isPostpartumVisitExist(postpartum_visit_id))) {
-            return res.status(404).json({error: "Postpartum Visit Not Found!"});
+        if (!(await validate.isPostpartumVisitExist(postpartum_visit_id))) {
+            return res.status(404).json({ error: "Postpartum visit not found" });
         }
 
         await prisma.postpartum_visit.delete({
@@ -102,8 +104,9 @@ const deletePostpartumVisit = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Postpartum Visit Deleted Successfully!"
+            message: "Postpartum visit deleted successfully"
         });
+
     } catch (error) {
         return next(error);
     }
@@ -114,14 +117,16 @@ const getPostpartumVisitById = async (req, res, next) => {
         const { postpartum_visit_id } = req.params;
 
         const visit = await validate.isPostpartumVisitExist(postpartum_visit_id);
-        if(!visit) {
-            return res.status(404).json({error: "Postpartum Visit Not Found!"});
+
+        if (!visit) {
+            return res.status(404).json({ error: "Postpartum visit not found" });
         }
 
         return res.status(200).json({
-            message: "Postpartum Visit Fetched Successfully!",
+            message: "Postpartum visit fetched successfully",
             data: visit
         });
+
     } catch (error) {
         return next(error);
     }
@@ -131,8 +136,8 @@ const getPostpartumVisitByDelivery = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
 
-        if(!(await validate.isDeliveryOutcomeExist(delivery_id))) {
-            return res.status(404).json({error: "Delivery Outcome Not Found!"});
+        if (!(await validate.isDeliveryOutcomeExist(delivery_id))) {
+            return res.status(404).json({ error: "Delivery outcome not found" });
         }
 
         const visits = await prisma.postpartum_visit.findMany({
@@ -140,9 +145,10 @@ const getPostpartumVisitByDelivery = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Postpartum Visits Successfully Retrieved",
+            message: "Postpartum visits successfully retrieved",
             data: visits
         });
+
     } catch (error) {
         return next(error);
     }

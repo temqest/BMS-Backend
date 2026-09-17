@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs');
 
-const checkOtp = require('../services/otpServices')
+const checkOtp = require('../services/otpServices');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -43,30 +43,38 @@ function saveBase64ToFile(fileUrl) {
     if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.startsWith('data:')) {
         return fileUrl;
     }
+
     try {
         const matches = fileUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+
         if (matches && matches.length === 3) {
             const mimeType = matches[1].toLowerCase();
             const ext = SAFE_IMAGE_MIMES[mimeType];
+
             if (!ext) {
                 console.warn(`[Security] Rejected unsupported avatar MIME type: ${mimeType}`);
                 return null;
             }
+
             const base64Data = matches[2];
             const buffer = Buffer.from(base64Data, 'base64');
             const fileName = `avatar_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
             const uploadsDir = path.join(__dirname, '../public/uploads');
+
             if (!fs.existsSync(uploadsDir)) {
                 fs.mkdirSync(uploadsDir, { recursive: true });
             }
+
             const localFilePath = path.join(uploadsDir, fileName);
             fs.writeFileSync(localFilePath, buffer);
+
             const baseUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 6700}`;
             return `${baseUrl}/uploads/${fileName}`;
         }
     } catch (err) {
         console.warn("Failed to convert base64 profile_url to file on server:", err);
     }
+
     return fileUrl;
 }
 
@@ -75,16 +83,16 @@ const calculateAge = (birthDate) => {
     const birth = new Date(birthDate);
     let age = today.getFullYear() - birth.getFullYear();
     const m = today.getMonth() - birth.getMonth();
+
     if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
         age--;
     }
+
     return age;
 };
 
 const registerMother = async (req, res, next) => {
-
     try {
-
         const {
             first_name,
             middle_name,
@@ -100,17 +108,20 @@ const registerMother = async (req, res, next) => {
             blood_type
         } = req.body;
 
-        if(!first_name || !last_name || !address || !birth_date || !civil_status) {
-            return res.status(400).json({error: "Missing Required Fields!"});
+        if (!first_name || !last_name || !address || !birth_date || !civil_status) {
+            return res.status(400).json({ error: "Please fill in all required fields" });
         }
 
         const duplicateConditions = [];
+
         if (phone_number && phone_number.trim()) {
             duplicateConditions.push({ phone_number: phone_number.trim() });
         }
+
         if (email && email.trim()) {
             duplicateConditions.push({ email: email.trim() });
         }
+
         if (family_serial_no && family_serial_no.trim()) {
             duplicateConditions.push({
                 mother: {
@@ -118,6 +129,7 @@ const registerMother = async (req, res, next) => {
                 }
             });
         }
+
         if (first_name && last_name && birth_date) {
             duplicateConditions.push({
                 first_name: first_name.trim(),
@@ -156,6 +168,7 @@ const registerMother = async (req, res, next) => {
 
             const targetFacilityId = facility_id || req.user?.facility_id;
             let enrollment = null;
+
             if (targetFacilityId && fullMother?.mother_id) {
                 enrollment = await prisma.mother_Facility_Enrollment.upsert({
                     where: {
@@ -183,31 +196,30 @@ const registerMother = async (req, res, next) => {
             });
         }
 
-        const result = await prisma.$transaction(async(prismaClient) => {
-
+        const result = await prisma.$transaction(async (prismaClient) => {
             const user = await prismaClient.user.create({
-                data : {
-                    first_name : first_name,
-                    middle_name : middle_name,
-                    last_name : last_name,
-                    address : address,
-                    email : email,
-                    phone_number : phone_number,
-                    facility_id : facility_id,
-                    role : "Mother",
-                    sync_status : "synced",
+                data: {
+                    first_name: first_name,
+                    middle_name: middle_name,
+                    last_name: last_name,
+                    address: address,
+                    email: email,
+                    phone_number: phone_number,
+                    facility_id: facility_id,
+                    role: "Mother",
+                    sync_status: "synced",
                 }
             });
 
             const mother = await prismaClient.mother.create({
-                data : {
-                    user_id : user.user_id,
-                    family_serial_no : family_serial_no,
-                    birth_date : new Date(birth_date),
-                    age : calculateAge(birth_date),
-                    civil_status : civil_status,
-                    blood_type : blood_type,
-                    sync_status : "synced",
+                data: {
+                    user_id: user.user_id,
+                    family_serial_no: family_serial_no,
+                    birth_date: new Date(birth_date),
+                    age: calculateAge(birth_date),
+                    civil_status: civil_status,
+                    blood_type: blood_type,
+                    sync_status: "synced",
                 }
             });
 
@@ -221,16 +233,15 @@ const registerMother = async (req, res, next) => {
                 }).catch(() => null);
             }
 
-            return {user, mother}
-        })
+            return { user, mother };
+        });
 
         return res.status(200).json({
-            message : "Mother registered successfully!",
-            result : result
+            message: "Mother registered successfully!",
+            result: result
         });
 
     } catch (error) {
-        // Handle race-condition or duplicate key conflict gracefully
         if (error.code === 'P2002' || error.message?.includes('Unique constraint') || error.message?.includes('already exist')) {
             const fallbackUser = await prisma.user.findFirst({
                 where: {
@@ -248,6 +259,7 @@ const registerMother = async (req, res, next) => {
 
             if (fallbackUser) {
                 const targetFacilityId = req.body.facility_id || req.user?.facility_id;
+
                 if (targetFacilityId && fallbackUser.mother?.mother_id) {
                     await prisma.mother_Facility_Enrollment.upsert({
                         where: {
@@ -264,6 +276,7 @@ const registerMother = async (req, res, next) => {
                         }
                     }).catch(() => null);
                 }
+
                 return res.status(200).json({
                     message: "Mother enrolled in facility successfully",
                     already_exists: true,
@@ -273,15 +286,13 @@ const registerMother = async (req, res, next) => {
                 });
             }
         }
+
         return next(error);
     }
-
 };
 
 const selfRegisterMother = async (req, res, next) => {
-
     try {
-
         const { 
             first_name, 
             middle_name, 
@@ -297,31 +308,30 @@ const selfRegisterMother = async (req, res, next) => {
             otp
         } = req.body;
 
-        if(!first_name || !last_name || !phone_number || !address || !password || !birth_date || !civil_status || !otp) {
-            return res.status(400).json({error : "Missing Required Fields"});
+        if (!first_name || !last_name || !phone_number || !address || !password || !birth_date || !civil_status || !otp) {
+            return res.status(400).json({ error: "Required fields are missing" });
         }
 
         const isMotherExist = await prisma.user.findFirst({
-            where : {
-                OR : [
-                    {email : email},
-                    {phone_number : phone_number}
+            where: {
+                OR: [
+                    { email: email },
+                    { phone_number: phone_number }
                 ]
             }
         });
 
-        if(isMotherExist) {
-            return res.status(400).json({error : "Account with the same credentials already exist"});
+        if (isMotherExist) {
+            return res.status(400).json({ error: "Account with these credentials already exist" });
         }
 
-        const purpose = 'registration'
-
+        const purpose = 'registration';
         const identifier = email ? email : phone_number;
 
         const isValidOtp = await checkOtp.verifyOTP(identifier, otp, purpose);
 
-        if(!isValidOtp) {
-            return res.status(400).json({error : "Invalid OTP"})
+        if (!isValidOtp) {
+            return res.status(400).json({ error: "Invalid OTP code" });
         }
 
         const salt = await bcrypt.genSalt(12);
@@ -329,28 +339,28 @@ const selfRegisterMother = async (req, res, next) => {
 
         const result = await prisma.$transaction(async (prismaClient) => {
             const user = await prismaClient.user.create({
-                data : {
-                    first_name : first_name,
-                    middle_name : middle_name,
-                    last_name : last_name,
-                    phone_number : phone_number,
-                    email : email,
-                    address : address,
-                    password : hashedPassword,
-                    role : "Mother",
-                    sync_status : "synced",
+                data: {
+                    first_name: first_name,
+                    middle_name: middle_name,
+                    last_name: last_name,
+                    phone_number: phone_number,
+                    email: email,
+                    address: address,
+                    password: hashedPassword,
+                    role: "Mother",
+                    sync_status: "synced",
                 }
             });
 
             const mother = await prismaClient.mother.create({
-                data : {
-                    user_id : user.user_id,
-                    family_serial_no : family_serial_no,
-                    birth_date : new Date(birth_date),
-                    age : calculateAge(birth_date),
-                    civil_status : civil_status,
-                    blood_type : blood_type,
-                    sync_status : "synced",
+                data: {
+                    user_id: user.user_id,
+                    family_serial_no: family_serial_no,
+                    birth_date: new Date(birth_date),
+                    age: calculateAge(birth_date),
+                    civil_status: civil_status,
+                    blood_type: blood_type,
+                    sync_status: "synced",
                 }
             });
 
@@ -358,34 +368,34 @@ const selfRegisterMother = async (req, res, next) => {
         });
 
         const token = jwt.sign({
-            user_id : result.user.user_id,
-            role : result.user.role,
-            email : result.user.email,
-            phone_number : result.user.phone_number,
-        }, JWT_SECRET, {expiresIn: "30d"});
+            user_id: result.user.user_id,
+            role: result.user.role,
+            email: result.user.email,
+            phone_number: result.user.phone_number,
+        }, JWT_SECRET, { expiresIn: "30d" });
 
-         return res.status(200).json({
-            message : "Mother Registered Successfully",
-            token : token,
-            user : {
-                user_id : result.user.user_id,
-                first_name : result.user.first_name,
-                middle_name : result.user.middle_name,
-                last_name : result.user.last_name,
-                address : result.user.address,
-                phone_number : result.user.phone_number,
-                email : result.user.email,
-                birth_date : result.mother.birth_date,
-                age : result.mother.age,
-                civil_status : result.mother.civil_status,
-                blood_type : result.mother.blood_type
+        return res.status(200).json({
+            message: "Mother registered successfully",
+            token: token,
+            user: {
+                user_id: result.user.user_id,
+                first_name: result.user.first_name,
+                middle_name: result.user.middle_name,
+                last_name: result.user.last_name,
+                address: result.user.address,
+                phone_number: result.user.phone_number,
+                email: result.user.email,
+                birth_date: result.mother.birth_date,
+                age: result.mother.age,
+                civil_status: result.mother.civil_status,
+                blood_type: result.mother.blood_type
             }
-         });
+        });
 
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const updateMother = async (req, res, next) => {
     try {
@@ -427,6 +437,7 @@ const updateMother = async (req, res, next) => {
         const rawProfileUrl = req.body.profile_url || req.body.photo_url;
         const profile_url = rawProfileUrl ? saveBase64ToFile(rawProfileUrl) : undefined;
         const userUpdateData = {};
+
         if (first_name !== undefined) userUpdateData.first_name = first_name;
         if (middle_name !== undefined) userUpdateData.middle_name = middle_name;
         if (last_name !== undefined) userUpdateData.last_name = last_name;
@@ -443,10 +454,12 @@ const updateMother = async (req, res, next) => {
         }
 
         const motherUpdateData = {};
+
         if (birth_date) {
             motherUpdateData.birth_date = new Date(birth_date);
             motherUpdateData.age = calculateAge(motherUpdateData.birth_date);
         }
+
         if (civil_status !== undefined) motherUpdateData.civil_status = civil_status;
         if (blood_type !== undefined) motherUpdateData.blood_type = blood_type;
         if (family_serial_no !== undefined) motherUpdateData.family_serial_no = family_serial_no;
@@ -482,12 +495,11 @@ const updateMother = async (req, res, next) => {
 };
 
 const softDeleteMother = async (req, res, next) => {
-
     try {
-        const {mother_id} = req.params;
+        const { mother_id } = req.params;
 
-        if(!mother_id) {
-            return res.status(400).json({error : "Missing Mother ID"});
+        if (!mother_id) {
+            return res.status(400).json({ error: "Mother ID is required" });
         }
 
         const motherRecord = await prisma.mother.findFirst({
@@ -500,12 +512,12 @@ const softDeleteMother = async (req, res, next) => {
             include: { user: true }
         });
 
-        if(!motherRecord) {
-            return res.status(404).json({error: "Mother not found!"});
+        if (!motherRecord) {
+            return res.status(404).json({ error: "Mother not found" });
         }
 
         if (req.user?.role !== 'SystemAdmin' && motherRecord.user?.facility_id && motherRecord.user.facility_id !== req.user?.facility_id) {
-            return res.status(403).json({error: "Access Denied. Mother belongs to another facility"});
+            return res.status(403).json({ error: "Mother belongs to another facility" });
         }
 
         await prisma.$transaction([
@@ -520,22 +532,20 @@ const softDeleteMother = async (req, res, next) => {
         ]);
 
         return res.status(200).json({
-            message : "Mother deleted successfully"
+            message: "Mother deleted successfully"
         });
 
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const hardDeleteMother = async (req, res, next) => {
-
     try {
+        const { mother_id } = req.params;
 
-        const {mother_id} = req.params;
-
-        if(!mother_id) {
-            return res.status(400).json({error : "Missing Mother ID"});
+        if (!mother_id) {
+            return res.status(400).json({ error: "Mother ID is required" });
         }
 
         const motherRecord = await prisma.mother.findUnique({
@@ -543,39 +553,38 @@ const hardDeleteMother = async (req, res, next) => {
             include: { user: true }
         });
 
-        if(!motherRecord) {
-            return res.status(404).json({error: "Mother not found!"});
+        if (!motherRecord) {
+            return res.status(404).json({ error: "Mother not found" });
         }
 
         if (req.user?.role !== 'SystemAdmin' && motherRecord.user?.facility_id && motherRecord.user.facility_id !== req.user?.facility_id) {
-            return res.status(403).json({error: "Access Denied. Mother belongs to another facility"});
+            return res.status(403).json({ error: "Mother belongs to another facility" });
         }
 
         const entireMother = await prisma.$transaction(async (prismaClient) => {
-
             const deletedMother = await prismaClient.mother.delete({
-                where : {mother_id : mother_id},
-                include : {
-                    pregnancies : true,
+                where: { mother_id: mother_id },
+                include: {
+                    pregnancies: true,
                 }
             });
 
             const deletedUser = await prismaClient.user.delete({
-                where : {user_id : motherRecord.user_id}
+                where: { user_id: motherRecord.user_id }
             });
 
-            return { deletedUser, deletedMother}
+            return { deletedUser, deletedMother };
         });
 
-        res.status(200).json({
-            message : "Mother deleted successfully",
-            result : entireMother
+        return res.status(200).json({
+            message: "Mother deleted successfully",
+            result: entireMother
         });
 
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const getAllActiveMother = async (req, res, next) => {
     try {
@@ -626,21 +635,21 @@ const getAllActiveMother = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message : "All active mothers",
-            result : allActiveMothers
+            message: "All active mothers",
+            result: allActiveMothers
         });
 
     } catch (error) {
-        return next(error)
+        return next(error);
     }
-}
+};
 
 const searchMotherByID = async (req, res, next) => {
     try {
-        const {mother_id} = req.params;
+        const { mother_id } = req.params;
 
-        if(!mother_id) {
-            return res.status(400).json({error : "Missing Mother ID"});
+        if (!mother_id) {
+            return res.status(400).json({ error: "Mother ID is required" });
         }
 
         const searchMotherResult = await prisma.mother.findFirst({
@@ -650,7 +659,7 @@ const searchMotherByID = async (req, res, next) => {
                     { user_id: mother_id }
                 ]
             },
-            include : {
+            include: {
                 user: { select: SAFE_USER_SELECT },
                 facilityEnrollments: {
                     include: {
@@ -671,8 +680,8 @@ const searchMotherByID = async (req, res, next) => {
             }
         });
 
-        if(!searchMotherResult) {
-            return res.status(404).json({error : "Mother not found"});
+        if (!searchMotherResult) {
+            return res.status(404).json({ error: "Mother not found" });
         }
 
         if (req.user?.role !== 'SystemAdmin') {
@@ -681,26 +690,26 @@ const searchMotherByID = async (req, res, next) => {
                 e => e.facility_id === req.user?.facility_id && e.status === 'Active'
             );
             if (searchMotherResult.user?.facility_id && !homeFacilityMatch && !enrollmentMatch) {
-                return res.status(403).json({error : "Access Denied. Mother belongs to another facility"});
+                return res.status(403).json({ error: "Mother belongs to another facility" });
             }
         }
 
-        res.status(200).json({
-            message : "Mother found",
-            result : searchMotherResult
+        return res.status(200).json({
+            message: "Mother found",
+            result: searchMotherResult
         });
 
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const getCompositeMotherProfile = async (req, res, next) => {
     try {
         const { mother_id } = req.params;
 
         if (!mother_id) {
-            return res.status(400).json({ error: "Missing Mother ID" });
+            return res.status(400).json({ error: "Mother ID is required" });
         }
 
         const motherProfile = await prisma.mother.findFirst({
@@ -782,7 +791,7 @@ const getCompositeMotherProfile = async (req, res, next) => {
                 e => e.facility_id === req.user?.facility_id && e.status === 'Active'
             );
             if (motherProfile.user?.facility_id && !homeFacilityMatch && !enrollmentMatch) {
-                return res.status(403).json({ error: "Access Denied. Mother belongs to another facility" });
+                return res.status(403).json({ error: "Mother belongs to another facility" });
             }
         }
 
@@ -804,6 +813,7 @@ const getCompositeMotherProfile = async (req, res, next) => {
                 appointments: allAppointments,
             }
         });
+
     } catch (error) {
         return next(error);
     }
@@ -833,7 +843,7 @@ const getAllMother = async (req, res, next) => {
 
         const allMothers = await prisma.mother.findMany({
             where: whereCondition,
-            include : {
+            include: {
                 user: { select: SAFE_USER_SELECT },
                 facilityEnrollments: {
                     include: {
@@ -858,31 +868,29 @@ const getAllMother = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message : "All Mothers",
-            result : allMothers
+            message: "All Mothers",
+            result: allMothers
         });
 
     } catch (error) {
-        return next(error)
+        return next(error);
     }
-}
+};
 
 const getAllActiveMotherByFacility = async (req, res, next) => {
-
     try {
+        const { facility_id } = req.params;
 
-        const {facility_id} = req.params;
-
-        if(!facility_id) {
-            return res.status(400).json({error : "Missing facility ID"});
+        if (!facility_id) {
+            return res.status(400).json({ error: "Facility ID is required" });
         }
 
         if (req.user?.role !== 'SystemAdmin' && req.user?.facility_id !== facility_id) {
-            return res.status(403).json({ error: "Access Denied. You do not have permission to view mothers from another facility." });
+            return res.status(403).json({ error: "Cannot view mothers from another facility." });
         }
 
         const facilityMothers = await prisma.mother.findMany({
-            where : {
+            where: {
                 user: {
                     role: "Mother",
                     is_active: true
@@ -899,7 +907,7 @@ const getAllActiveMotherByFacility = async (req, res, next) => {
                     }
                 ]
             },
-            include : {
+            include: {
                 user: { select: SAFE_USER_SELECT },
                 facilityEnrollments: {
                     include: {
@@ -928,24 +936,22 @@ const getAllActiveMotherByFacility = async (req, res, next) => {
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const getProfile = async (req, res, next) => {
-
     try {
-        
         const my_user_id = req.user.user_id;
 
         const myProfile = await prisma.mother.findUnique({
-            where : {user_id : my_user_id},
-            include : {
-                user : {
+            where: { user_id: my_user_id },
+            include: {
+                user: {
                     select: {
                         ...SAFE_USER_SELECT,
                         facility: true
                     }
                 },
-                pregnancies : {
+                pregnancies: {
                     orderBy: { date_of_registration: "desc" },
                     include: {
                         prenatalVisits: {
@@ -972,21 +978,21 @@ const getProfile = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message : "My profile retrieved successfully",
-            result : myProfile
+            message: "My profile retrieved successfully",
+            result: myProfile
         });
 
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const updateMyProfile = async (req, res, next) => {
     try {
         const my_user_id = req.user?.user_id;
 
         if (!my_user_id) {
-            return res.status(401).json({ error: "Unauthorized user" });
+            return res.status(401).json({ error: "Unauthorized access" });
         }
 
         const { first_name, middle_name, last_name, address, phone_number, email, birth_date, civil_status, blood_type, profile_url, photo_url } = req.body;
@@ -1045,6 +1051,7 @@ const uploadAvatar = async (req, res, next) => {
     try {
         const file = req.file;
         const my_user_id = req.user?.user_id || req.user?.id || 'anonymous';
+
         if (!file) {
             return res.status(400).json({ error: "No image file uploaded" });
         }
@@ -1053,7 +1060,6 @@ const uploadAvatar = async (req, res, next) => {
         const fileName = `avatar-${my_user_id}-${Date.now()}${fileExt}`;
         const { supabase } = require('../util/storage');
 
-        // 1. Try Supabase Storage under profiles/ in documents bucket
         if (supabase) {
             try {
                 const filePath = `profiles/${fileName}`;
@@ -1081,8 +1087,8 @@ const uploadAvatar = async (req, res, next) => {
             }
         }
 
-        // 2. Fallback to local uploads directory
         const uploadsDir = path.join(__dirname, '../public/uploads');
+
         if (!fs.existsSync(uploadsDir)) {
             fs.mkdirSync(uploadsDir, { recursive: true });
         }
@@ -1100,6 +1106,7 @@ const uploadAvatar = async (req, res, next) => {
             fileUrl: file_url,
             profile_url: file_url,
         });
+
     } catch (error) {
         return next(error);
     }
@@ -1120,6 +1127,7 @@ const assignFacilityByCode = async (req, res, next) => {
         }
 
         let cleanId = rawCode;
+
         if (cleanId.includes("{") && cleanId.includes("}")) {
             try {
                 const start = cleanId.indexOf("{");
@@ -1146,7 +1154,6 @@ const assignFacilityByCode = async (req, res, next) => {
             { user: { email: { equals: cleanId, mode: 'insensitive' } } }
         ];
 
-        // If at least 4 characters, allow prefix and suffix matching for short codes
         if (cleanId.length >= 4) {
             orConditions.push(
                 { mother_id: { startsWith: lowerCleanId, mode: 'insensitive' } },
@@ -1212,7 +1219,7 @@ const assignFacilityByCode = async (req, res, next) => {
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const enrollMotherInFacility = async (req, res, next) => {
     try {
@@ -1220,7 +1227,7 @@ const enrollMotherInFacility = async (req, res, next) => {
         const targetFacilityId = facility_id || req.user?.facility_id;
 
         if (!mother_id || !targetFacilityId) {
-            return res.status(400).json({ error: "Missing mother_id or facility_id" });
+            return res.status(400).json({ error: "Mother ID and Facility ID are required" });
         }
 
         const mother = await prisma.mother.findFirst({
@@ -1279,7 +1286,7 @@ const getMotherFacilities = async (req, res, next) => {
         const { mother_id } = req.params;
 
         if (!mother_id) {
-            return res.status(400).json({ error: "Missing mother_id" });
+            return res.status(400).json({ error: "Mother ID is required" });
         }
 
         const mother = await prisma.mother.findFirst({
@@ -1331,4 +1338,4 @@ module.exports = {
     getCompositeMotherProfile,
     enrollMotherInFacility,
     getMotherFacilities
-}
+};

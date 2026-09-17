@@ -1,12 +1,10 @@
 const prisma = require('../util/db');
 const validate = require('../util/validation');
-
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-
-const SYSTEM_ADMIN_BYPASS_CODE = process.env.BYPASSCODE
-
 const checkOtp = require('../services/otpServices');
+
+const SYSTEM_ADMIN_BYPASS_CODE = process.env.BYPASSCODE;
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -14,29 +12,31 @@ if (!JWT_SECRET) {
 }
 
 const register = async (req, res, next) => {
-
     try {
         const { first_name, middle_name, last_name, role, phone_number, email, password, address, facility_id, otp, bypassCode } = req.body;
 
         if (!first_name || !last_name || !role || (!email && !phone_number) || !password || !otp) {
-            return res.status(400).json({ error: 'Missing required fields' })
+            return res.status(400).json({ error: 'Please fill in all required fields' });
         }
 
         const restrictedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Staff'];
+
         if (restrictedRoles.includes(role)) {
             if (role === "SystemAdmin" || role === "Admin") {
                 if (!SYSTEM_ADMIN_BYPASS_CODE || bypassCode !== SYSTEM_ADMIN_BYPASS_CODE) {
-                    return res.status(403).json({ error: "Privileged role registration requires a valid bypass authorization code." });
+                    return res.status(403).json({ error: "Bypass code is invalid or missing for privileged accounts." });
                 }
             } else {
-                return res.status(403).json({ error: "Staff account creation must be performed by an authorized facility admin." });
+                return res.status(403).json({ error: "Staff accounts must be created by a facility admin." });
             }
         }
-    
+
         const duplicateCheckConditions = [];
+
         if (phone_number && phone_number.trim()) {
             duplicateCheckConditions.push({ phone_number: phone_number.trim() });
         }
+
         if (email && email.trim()) {
             duplicateCheckConditions.push({ email: email.trim() });
         }
@@ -46,17 +46,16 @@ const register = async (req, res, next) => {
             : null;
 
         if (existingUser) {
-            return res.status(400).json({ error: 'Phone number or email is already registered' })
+            return res.status(400).json({ error: 'Phone number or email already registered' });
         }
 
-        const purpose = 'registration'
-
+        const purpose = 'registration';
         const identifier = email ? email : phone_number;
-        
-        const isValidOtp = await checkOtp.verifyOTP(identifier, otp, purpose)
 
-        if(!isValidOtp) {
-            return res.status(400).json({error : "Invalid OTP"})
+        const isValidOtp = await checkOtp.verifyOTP(identifier, otp, purpose);
+
+        if (!isValidOtp) {
+            return res.status(400).json({ error: "Invalid OTP code" });
         }
 
         const salt = await bcrypt.genSalt(12);
@@ -94,12 +93,13 @@ const register = async (req, res, next) => {
         });
 
         const token = jwt.sign(
-            { user_id: user.user_id, role: user.role, facility_id: user.facility_id},
+            { user_id: user.user_id, role: user.role, facility_id: user.facility_id },
             JWT_SECRET,
-            {expiresIn: "30d"}
+            { expiresIn: "30d" }
         );
 
         let facilityName = "";
+
         if (facility_id) {
             const facility = await prisma.facility.findUnique({
                 where: { facility_id }
@@ -109,7 +109,7 @@ const register = async (req, res, next) => {
             }
         }
 
-        res.status(201).json({
+        return res.status(201).json({
             message: "Account registered succesfully",
             token: token,
             user: {
@@ -121,23 +121,23 @@ const register = async (req, res, next) => {
                 facility_id: user.facility_id,
             },
         });
+
     } catch (error) {
         next(error);
     }
 };
 
 const login = async (req, res, next) => {
-
     try {
-        const { identifier, password} = req.body;
+        const { identifier, password } = req.body;
 
         if (!identifier || !password) {
-            return res.status(400).json({error: "Identifier (phone/email) and password are missing"})
+            return res.status(400).json({ error: "Please enter your email/phone and password" });
         }
 
         const cleanIdentifier = identifier.trim();
 
-        const user  = await prisma.user.findFirst({
+        const user = await prisma.user.findFirst({
             where: {
                 OR: [
                     { phone_number: cleanIdentifier },
@@ -149,13 +149,13 @@ const login = async (req, res, next) => {
         });
 
         if (!user) {
-            return res.status(401).json({error: "Authentication Failed. User not found!"});
+            return res.status(401).json({ error: "User account not found" });
         }
 
         if (!user.password) {
             return res.status(400).json({
                 error: "PASSWORD_NOT_SET",
-                message: "Account exists but password is not set yet. Please verify OTP to set up your password.",
+                message: "Account exists but password is not set yet. Verify OTP first.",
                 requiresPasswordSetup: true,
                 identifier: user.email || user.phone_number || cleanIdentifier
             });
@@ -164,38 +164,39 @@ const login = async (req, res, next) => {
         const isPasswordMatch = await bcrypt.compare(password, user.password);
 
         if (!isPasswordMatch) {
-            return res.status(401).json({error: "Authentication Failed. Incorrect Password!"});
+            return res.status(401).json({ error: "Incorrect password, please try again" });
         }
 
         const token = jwt.sign(
-            { user_id : user.user_id, role: user.role, facility_id: user.facility_id},
+            { user_id: user.user_id, role: user.role, facility_id: user.facility_id },
             JWT_SECRET,
-            { expiresIn: "30d"}
+            { expiresIn: "30d" }
         );
 
-        res.status(200).json({
+        return res.status(200).json({
             message: "Login Successful",
             token: token,
             user: {
-                user_id : user.user_id,
-                first_name : user.first_name,
-                middle_name : user.middle_name,
-                last_name : user.last_name,
+                user_id: user.user_id,
+                first_name: user.first_name,
+                middle_name: user.middle_name,
+                last_name: user.last_name,
                 role: user.role,
-                facility_id : user.facility ? user.facility.facility_id : null,
+                facility_id: user.facility ? user.facility.facility_id : null,
             },
         });
+
     } catch (error) {
         next(error);
     }
-}
+};
 
 const setupPassword = async (req, res, next) => {
     try {
         const { identifier, otp, newPassword } = req.body;
 
         if (!identifier || !otp || !newPassword) {
-            return res.status(400).json({ error: "Missing required fields" });
+            return res.status(400).json({ error: "Required fields are missing" });
         }
 
         const cleanIdentifier = identifier.trim();
@@ -250,6 +251,7 @@ const setupPassword = async (req, res, next) => {
                 facility_id: user.facility ? user.facility.facility_id : null,
             }
         });
+
     } catch (error) {
         next(error);
     }
@@ -260,11 +262,11 @@ const resetPassword = async (req, res, next) => {
         const { identifier, otp, newPassword } = req.body;
 
         if (!identifier || !otp || !newPassword) {
-            return res.status(400).json({ error: "Missing required fields (identifier, OTP, and new password)" });
+            return res.status(400).json({ error: "Please enter identifier, OTP and new password" });
         }
 
         if (newPassword.length < 6) {
-            return res.status(400).json({ error: "New password must be at least 6 characters long" });
+            return res.status(400).json({ error: "New password must be at least 6 characters" });
         }
 
         const cleanIdentifier = identifier.trim();
@@ -281,7 +283,7 @@ const resetPassword = async (req, res, next) => {
         });
 
         if (!user) {
-            return res.status(404).json({ error: "No account found with this email or phone number" });
+            return res.status(404).json({ error: "No account found with this email or phone" });
         }
 
         let isValidOtp = await checkOtp.verifyOTP(cleanIdentifier, otp, 'reset_password');
@@ -326,21 +328,22 @@ const resetPassword = async (req, res, next) => {
                 profile_url: updatedUser.profile_url || null,
             }
         });
+
     } catch (error) {
         next(error);
     }
 };
-
 
 const createStaff = async (req, res, next) => {
     try {
         const { first_name, middle_name, last_name, role, phone_number, email, password, address, facility_id } = req.body;
 
         if (!first_name || !last_name || !role || !password) {
-            return res.status(400).json({ error: 'Missing required fields' });
+            return res.status(400).json({ error: 'Missing required staff details' });
         }
 
         const allowedStaffRoles = ['Admin', 'Doctor', 'Nurse', 'Midwife', 'HealthWorker', 'Staff'];
+
         if (!allowedStaffRoles.includes(role)) {
             return res.status(400).json({ error: 'Invalid staff role specified' });
         }
@@ -369,7 +372,7 @@ const createStaff = async (req, res, next) => {
         if (req.user?.role === 'SystemAdmin') {
             targetFacilityId = facility_id || req.user?.facility_id || null;
         } else if (facility_id && facility_id !== req.user?.facility_id) {
-            return res.status(403).json({ error: "Access Denied. You cannot assign staff to a different facility." });
+            return res.status(403).json({ error: "Cannot assign staff to a different facility." });
         }
 
         const salt = await bcrypt.genSalt(12);
@@ -391,6 +394,7 @@ const createStaff = async (req, res, next) => {
         });
 
         let facilityName = "";
+
         if (targetFacilityId) {
             const facility = await prisma.facility.findUnique({
                 where: { facility_id: targetFacilityId }
@@ -413,6 +417,7 @@ const createStaff = async (req, res, next) => {
                 facility_name: facilityName,
             },
         });
+
     } catch (error) {
         next(error);
     }
@@ -428,7 +433,7 @@ const changePassword = async (req, res, next) => {
         }
 
         if (!currentPassword || !newPassword) {
-            return res.status(400).json({ error: "Current password and new password are required" });
+            return res.status(400).json({ error: "Both current password and new password are required" });
         }
 
         if (newPassword.length < 6) {
@@ -461,6 +466,7 @@ const changePassword = async (req, res, next) => {
         return res.status(200).json({
             message: "Password updated successfully!"
         });
+
     } catch (error) {
         next(error);
     }
@@ -473,7 +479,7 @@ const googleAuth = async (req, res, next) => {
         const effectiveAccessToken = accessToken || access_token;
 
         if (!idToken && !effectiveAccessToken) {
-            return res.status(401).json({ error: "Google authentication token (idToken or accessToken) is required." });
+            return res.status(401).json({ error: "Google authentication token is missing." });
         }
 
         let verifiedEmail = null;
@@ -481,7 +487,6 @@ const googleAuth = async (req, res, next) => {
         let lastName = "User";
         let profileUrl = null;
 
-        // 1. If idToken is supplied, verify cryptographically with Google OAuth2Client or Firebase Admin
         if (idToken) {
             try {
                 const { OAuth2Client } = require('google-auth-library');
@@ -503,7 +508,7 @@ const googleAuth = async (req, res, next) => {
                 }
             } catch (tokenErr) {
                 console.warn("[GoogleAuth] Google idToken verification failed with google-auth-library:", tokenErr.message);
-                // Also attempt Firebase verifyIdToken if Firebase auth is configured
+
                 try {
                     const { getAuth, initFirebase } = require('../services/firebaseService');
                     const app = initFirebase();
@@ -517,12 +522,11 @@ const googleAuth = async (req, res, next) => {
                         }
                     }
                 } catch (fbErr) {
-                    console.warn("[GoogleAuth] Firebase idToken verification also failed:", fbErr.message);
+                    console.warn("[GoogleAuth] Firebase idToken verification failed:", fbErr.message);
                 }
             }
         }
 
-        // 2. If no verified email from idToken, verify effectiveAccessToken via Google userinfo API
         if (!verifiedEmail && effectiveAccessToken) {
             try {
                 const fetchRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
@@ -537,15 +541,15 @@ const googleAuth = async (req, res, next) => {
                         profileUrl = googleUser.picture || profileUrl;
                     }
                 } else {
-                    console.warn(`[GoogleAuth] Google userinfo API responded with status ${fetchRes.status}`);
+                    console.warn(`[GoogleAuth] Google userinfo API status: ${fetchRes.status}`);
                 }
             } catch (fetchErr) {
-                console.warn("[GoogleAuth] Failed to verify access token with Google API:", fetchErr.message);
+                console.warn("[GoogleAuth] Failed to verify access token:", fetchErr.message);
             }
         }
 
         if (!verifiedEmail) {
-            return res.status(401).json({ error: "Invalid or expired Google authentication token. Login rejected." });
+            return res.status(401).json({ error: "Invalid or expired Google token." });
         }
 
         const cleanEmail = verifiedEmail.trim().toLowerCase();
@@ -591,7 +595,7 @@ const googleAuth = async (req, res, next) => {
             } else {
                 return res.status(404).json({
                     error: "ACCOUNT_NOT_FOUND",
-                    message: "No account found matching this Google email. Please register your facility or contact your administrator."
+                    message: "No account found for this Google email."
                 });
             }
         }
@@ -654,6 +658,7 @@ const googleAuth = async (req, res, next) => {
                 profile_url: user.profile_url,
             }
         });
+
     } catch (error) {
         next(error);
     }
@@ -667,4 +672,4 @@ module.exports = {
     createStaff,
     changePassword,
     googleAuth,
-};
+};

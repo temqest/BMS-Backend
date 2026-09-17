@@ -10,11 +10,11 @@ const createMessage = async (req, res, next) => {
         let { receiver_id, message_type, message_content, message_date } = req.body;
 
         if (!sender_id) {
-            return res.status(401).json({ error: "Unauthorized access" });
+            return res.status(401).json({ error: "Unauthorized access, please login first" });
         }
 
         if (!message_content) {
-            return res.status(400).json({ error: "Message content is required" });
+            return res.status(400).json({ error: "Message content cannot be empty" });
         }
 
         const senderUser = await prisma.user.findUnique({
@@ -22,7 +22,7 @@ const createMessage = async (req, res, next) => {
         });
 
         if (!senderUser) {
-            return res.status(404).json({ error: "Sender Doesn't Exist" });
+            return res.status(404).json({ error: "Sender profile not found" });
         }
 
         message_type = message_type || "text";
@@ -30,7 +30,7 @@ const createMessage = async (req, res, next) => {
 
         if (!receiver_id) {
             if (!senderUser.facility_id) {
-                return res.status(400).json({ error: "NOT_AFFILIATED", message: "You are not affiliated with any healthcare facility." });
+                return res.status(400).json({ error: "NOT_AFFILIATED", message: "You are not affiliated with any facility yet" });
             }
 
             const staffUser = await prisma.user.findFirst({
@@ -40,19 +40,20 @@ const createMessage = async (req, res, next) => {
                     is_active: true,
                 }
             });
+
             if (staffUser) {
                 receiver_id = staffUser.user_id;
             } else {
-                return res.status(400).json({ error: "NOT_AFFILIATED", message: "No active healthcare staff found for your facility." });
+                return res.status(400).json({ error: "NOT_AFFILIATED", message: "No active staff members found for this facility" });
             }
         }
-        
+
         if (!(await validate.isUserExist(sender_id))) {
-            return res.status(404).json({ error: "Sender Doesn't Exist" });
+            return res.status(404).json({ error: "Sender profile not found" });
         }
 
         if (!(await validate.isUserExist(receiver_id))) {
-            return res.status(404).json({ error: "Receiver Doesn't Exist" });
+            return res.status(404).json({ error: "Receiver profile not found" });
         }
 
         const newMessage = await prisma.in_App_Message.create({
@@ -66,7 +67,7 @@ const createMessage = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Message Successfully Created",
+            message: "Message sent successfully",
             data: newMessage
         });
 
@@ -80,7 +81,7 @@ const updateMessage = async (req, res, next) => {
         const { message_id, message_content } = req.body;
 
         if (!message_id || !message_content) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Missing required fields" });
         }
 
         const existingMessage = await prisma.in_App_Message.findUnique({
@@ -88,11 +89,11 @@ const updateMessage = async (req, res, next) => {
         });
 
         if (!existingMessage) {
-            return res.status(404).json({ error: "Message Doesn't Exist!" });
+            return res.status(404).json({ error: "Message not found" });
         }
 
         if (req.user?.role !== 'SystemAdmin' && existingMessage.sender_id !== req.user?.user_id) {
-            return res.status(403).json({ error: "Access Denied. You can only edit your own sent messages." });
+            return res.status(403).json({ error: "Access denied. You can only edit your own messages" });
         }
 
         const updatedMessage = await prisma.in_App_Message.update({
@@ -103,7 +104,7 @@ const updateMessage = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Message Successfully Updated",
+            message: "Message updated successfully",
             data: updatedMessage
         });
 
@@ -117,7 +118,7 @@ const deleteMessage = async (req, res, next) => {
         const { message_id } = req.body;
 
         if (!message_id) {
-            return res.status(400).json({ error: "Missing Message_ID!" });
+            return res.status(400).json({ error: "Missing message ID" });
         }
 
         const existingMessage = await prisma.in_App_Message.findUnique({
@@ -125,11 +126,11 @@ const deleteMessage = async (req, res, next) => {
         });
 
         if (!existingMessage) {
-            return res.status(404).json({ error: "Message Doesn't Exist!" });
+            return res.status(404).json({ error: "Message not found" });
         }
 
         if (req.user?.role !== 'SystemAdmin' && existingMessage.sender_id !== req.user?.user_id) {
-            return res.status(403).json({ error: "Access Denied. You can only delete your own sent messages." });
+            return res.status(403).json({ error: "Access denied. You can only delete your own messages" });
         }
 
         await prisma.in_App_Message.delete({
@@ -137,7 +138,7 @@ const deleteMessage = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Message Deleted Successfully"
+            message: "Message deleted"
         });
 
     } catch (error) {
@@ -150,7 +151,7 @@ const markMessageAsRead = async (req, res, next) => {
         const { message_id } = req.body;
 
         if (!message_id) {
-            return res.status(400).json({ error: "Missing Message_ID!" });
+            return res.status(400).json({ error: "Missing message ID" });
         }
 
         const existingMessage = await prisma.in_App_Message.findUnique({
@@ -158,11 +159,11 @@ const markMessageAsRead = async (req, res, next) => {
         });
 
         if (!existingMessage) {
-            return res.status(404).json({ error: "Message Doesn't Exist!" });
+            return res.status(404).json({ error: "Message not found" });
         }
 
         if (req.user?.role !== 'SystemAdmin' && existingMessage.receiver_id !== req.user?.user_id) {
-            return res.status(403).json({ error: "Access Denied. You can only mark messages sent to you as read." });
+            return res.status(403).json({ error: "Access denied. You can only mark messages sent to you as read" });
         }
 
         const markAsRead = await prisma.in_App_Message.update({
@@ -173,9 +174,10 @@ const markMessageAsRead = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Message Marked as Read",
+            message: "Message marked as read",
             data: markAsRead
         });
+
     } catch (error) {
         return next(error);
     }
@@ -187,10 +189,11 @@ const markAllAsRead = async (req, res, next) => {
         const current_user_id = req.user?.user_id;
 
         if (!receiver_id && !sender_id && !current_user_id) {
-            return res.status(400).json({ error: "Missing Target User IDs!" });
+            return res.status(400).json({ error: "Missing user ID" });
         }
 
         let whereClause = { is_read: false };
+
         if (sender_id && receiver_id) {
             whereClause.sender_id = sender_id;
             whereClause.receiver_id = receiver_id;
@@ -213,9 +216,10 @@ const markAllAsRead = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Messages Marked as Read",
+            message: "Messages marked as read",
             data: markAsRead
         });
+
     } catch (error) {
         return next(error);
     }
@@ -229,7 +233,7 @@ const getAllMessageForUser = async (req, res, next) => {
             : req.user?.user_id;
 
         if (!user_id) {
-            return res.status(400).json({ error: "Missing User_ID!" });
+            return res.status(400).json({ error: "Missing user ID" });
         }
 
         const currentUser = await prisma.user.findUnique({
@@ -237,14 +241,14 @@ const getAllMessageForUser = async (req, res, next) => {
         });
 
         if (!currentUser) {
-            return res.status(404).json({ error: "User Doesn't Exist!" });
+            return res.status(404).json({ error: "User not found" });
         }
 
         let whereClause;
+
         if (currentUser.role === 'SystemAdmin') {
             whereClause = {};
         } else {
-            // Personalized 1-to-1 messaging: each user (staff or mother) only sees messages they sent or received
             whereClause = {
                 OR: [
                     { sender_id: user_id },
@@ -265,6 +269,7 @@ const getAllMessageForUser = async (req, res, next) => {
         });
 
         let contactUser = null;
+
         if (currentUser.role === 'Mother') {
             if (allMessages.length > 0) {
                 const staffMsg = allMessages.slice().reverse().find(m => m.sender?.role !== 'Mother' || m.receiver?.role !== 'Mother');
@@ -288,7 +293,7 @@ const getAllMessageForUser = async (req, res, next) => {
         const hasFacility = Boolean(currentUser.facility_id);
 
         return res.status(200).json({
-            message: "Messages Successfully Retrieved",
+            message: "Messages loaded successfully",
             data: allMessages,
             contact: contactUser,
             hasFacility: hasFacility
@@ -304,7 +309,7 @@ const getUnreadCount = async (req, res, next) => {
         const user_id = req.params?.user_id || req.query?.user_id || req.user?.user_id || req.body?.user_id;
 
         if (!user_id) {
-            return res.status(400).json({ error: "Missing User_ID" });
+            return res.status(400).json({ error: "Missing user ID" });
         }
 
         const currentUser = await prisma.user.findUnique({
@@ -312,10 +317,9 @@ const getUnreadCount = async (req, res, next) => {
         });
 
         if (!currentUser) {
-            return res.status(404).json({ error: "User Doesn't Exist" });
+            return res.status(404).json({ error: "User profile not found" });
         }
 
-        // 1-to-1 unread count: strictly messages sent to this specific user that are unread
         const whereClause = { receiver_id: user_id, is_read: false };
 
         const count = await prisma.in_App_Message.count({
@@ -323,7 +327,7 @@ const getUnreadCount = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Unread Count Successfully Retrieved",
+            message: "Unread count retrieved",
             data: count
         });
 
@@ -335,8 +339,9 @@ const getUnreadCount = async (req, res, next) => {
 const uploadAttachment = async (req, res, next) => {
     try {
         const file = req.file;
+
         if (!file) {
-            return res.status(400).json({ error: "No file uploaded" });
+            return res.status(400).json({ error: "No file uploaded, please select a file" });
         }
 
         const fileExt = path.extname(file.originalname) || '';
@@ -344,10 +349,10 @@ const uploadAttachment = async (req, res, next) => {
         const isImage = (file.mimetype && file.mimetype.startsWith('image/')) || /\.(jpg|jpeg|png|webp|gif)$/i.test(file.originalname);
         const fileType = isImage ? 'image' : 'file';
 
-        // 1. Try Supabase Storage if available
         if (supabase) {
             try {
                 const filePath = `messages/${fileName}`;
+
                 const { error: uploadError } = await supabase.storage
                     .from('documents')
                     .upload(filePath, file.buffer, {
@@ -370,12 +375,12 @@ const uploadAttachment = async (req, res, next) => {
                     }
                 }
             } catch (supErr) {
-                console.warn("Supabase storage upload skipped/failed:", supErr.message);
+                console.warn("Supabase storage upload failed:", supErr.message);
             }
         }
 
-        // 2. Fallback to local uploads directory
         const uploadsDir = path.join(__dirname, '../public/uploads');
+
         if (!fs.existsSync(uploadsDir)) {
             fs.mkdirSync(uploadsDir, { recursive: true });
         }
@@ -393,6 +398,7 @@ const uploadAttachment = async (req, res, next) => {
             fileType: fileType,
             fileSize: `${(file.size / 1024).toFixed(1)} KB`
         });
+
     } catch (error) {
         return next(error);
     }

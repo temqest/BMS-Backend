@@ -5,10 +5,10 @@ const { resolveEntityId } = require('../middleware/idResolver');
 
 const registerSupplementRecord = async (req, res, next) => {
     try {
-        const {pregnancy_id, supplement_type, date_given, tablets_given_count, visit_id} = req.body;
+        const { pregnancy_id, supplement_type, date_given, tablets_given_count, visit_id } = req.body;
 
         if (!pregnancy_id || !supplement_type || !date_given || !tablets_given_count || !visit_id) {
-            return res.status(400).json({error : "Missing Required Fields"});
+            return res.status(400).json({ error: "Required fields are missing" });
         }
 
         let targetPregnancyId = pregnancy_id;
@@ -29,8 +29,9 @@ const registerSupplementRecord = async (req, res, next) => {
         }
 
         if (!pregnancy) {
-            return res.status(404).json({ error: "Pregnancy ID doesn't Exist" });
+            return res.status(404).json({ error: "Pregnancy not found" });
         }
+
         targetPregnancyId = pregnancy.pregnancy_id;
 
         let targetVisitId = visit_id;
@@ -68,19 +69,19 @@ const registerSupplementRecord = async (req, res, next) => {
         }
 
         const newSupplementRecord = await prisma.supplementation_Record.create({
-            data : {
-                pregnancy_id : targetPregnancyId,
-                supplement_type : supplement_type,
-                date_given : date_given,
-                tablets_given_count : tablets_given_count,
-                visit_id : targetVisitId
+            data: {
+                pregnancy_id: targetPregnancyId,
+                supplement_type: supplement_type,
+                date_given: date_given,
+                tablets_given_count: tablets_given_count,
+                visit_id: targetVisitId
             }
         });
 
         return res.status(200).json({
-            message : "Supplement Record Successfully Created",
-            supplement_record : newSupplementRecord,
-            data : newSupplementRecord,
+            message: "Supplement record created successfully",
+            supplement_record: newSupplementRecord,
+            data: newSupplementRecord,
         });
 
     } catch (error) {
@@ -94,13 +95,15 @@ const updateSupplementRecord = async (req, res, next) => {
         let targetId = supplement_id || req.params.supplement_id;
 
         if (!targetId) {
-            return res.status(400).json({error : "Missing Required Fields"});
+            return res.status(400).json({ error: "Supplement ID is required" });
         }
 
         const { resolvedId, record } = await resolveEntityId('supplementation_Record', targetId, req.body);
+
         if (!resolvedId || !record) {
-            return res.status(404).json({error: "Supplement Record doesn't Exist"});
+            return res.status(404).json({ error: "Supplement record not found" });
         }
+
         targetId = resolvedId;
 
         const mvccResult = await updateWithMVCC('supplementation_Record', targetId, { version, ...clientData }, {
@@ -116,8 +119,8 @@ const updateSupplementRecord = async (req, res, next) => {
         }
 
         return res.status(200).json({
-            message : "Supplement Record Successfully Updated",
-            supplement_record : mvccResult.record,
+            message: "Supplement record updated successfully",
+            supplement_record: mvccResult.record,
             strategyUsed: mvccResult.strategyUsed
         });
 
@@ -128,20 +131,22 @@ const updateSupplementRecord = async (req, res, next) => {
 
 const deleteSupplementRecord = async (req, res, next) => {
     try {
-        let {supplement_id} = req.params;
+        let { supplement_id } = req.params;
 
         const { resolvedId, record } = await resolveEntityId('supplementation_Record', supplement_id, req.query || req.body);
+
         if (!resolvedId || !record) {
-            return res.status(200).json({ message: "Supplement Record Already Deleted" });
+            return res.status(200).json({ message: "Supplement record already deleted" });
         }
+
         supplement_id = resolvedId;
 
         await prisma.supplementation_Record.delete({
-            where : {supplement_id : supplement_id}
+            where: { supplement_id: supplement_id }
         });
 
         return res.status(200).json({
-            message : "Supplement Record Successfully Deleted"
+            message: "Supplement record deleted successfully"
         });
 
     } catch (error) {
@@ -151,19 +156,19 @@ const deleteSupplementRecord = async (req, res, next) => {
 
 const getSupplementRecordByID = async (req, res, next) => {
     try {
-        const {supplement_id} = req.params;
+        const { supplement_id } = req.params;
 
         const supplement_record = await prisma.supplementation_Record.findUnique({
-            where : {supplement_id : supplement_id}
+            where: { supplement_id: supplement_id }
         });
 
-        if(!supplement_record) {
-            return res.status(404).json({error: "Supplement Record Doesn't Exist!"});
+        if (!supplement_record) {
+            return res.status(404).json({ error: "Supplement record not found" });
         }
 
         return res.status(200).json({
-            message : "Supplement Record Found!",
-            supplement_record : supplement_record
+            message: "Supplement record found",
+            supplement_record: supplement_record
         });
 
     } catch (error) {
@@ -173,19 +178,19 @@ const getSupplementRecordByID = async (req, res, next) => {
 
 const getSupplementRecordByPregnancy = async (req, res, next) => {
     try {
-        const {pregnancy_id} = req.params;
+        const { pregnancy_id } = req.params;
 
-        if(!(await validate.isPregnancyExist(pregnancy_id))) {
-            return res.status(404).json({error: "Pregnancy doesn't Exist!"});
+        if (!(await validate.isPregnancyExist(pregnancy_id))) {
+            return res.status(404).json({ error: "Pregnancy not found" });
         }
 
         const supplement_records = await prisma.supplementation_Record.findMany({
-            where : {pregnancy_id : pregnancy_id}
+            where: { pregnancy_id: pregnancy_id }
         });
 
         return res.status(200).json({
-            message : "Supplement Records Found!",
-            supplement_records : supplement_records
+            message: "Supplement records found",
+            supplement_records: supplement_records
         });
 
     } catch (error) {
@@ -195,23 +200,23 @@ const getSupplementRecordByPregnancy = async (req, res, next) => {
 
 const getSupplementRecordByHealthWorker = async (req, res, next) => {
     try {
-        const {health_worker_id} = req.params;
+        const { health_worker_id } = req.params;
 
-        if(!(await validate.isUserExist(health_worker_id))) {
-            return res.status(404).json({error: "Health Worker doesn't Exist!"});
+        if (!(await validate.isUserExist(health_worker_id))) {
+            return res.status(404).json({ error: "Health worker not found" });
         }
 
         const supplement_records = await prisma.supplementation_Record.findMany({
-            where : {
+            where: {
                 visit: {
-                    health_worker_id : health_worker_id
+                    health_worker_id: health_worker_id
                 }
             }
         });
 
         return res.status(200).json({
-            message : "Supplement Records Found!",
-            supplement_records : supplement_records
+            message: "Supplement records found",
+            supplement_records: supplement_records
         });
 
     } catch (error) {
@@ -233,7 +238,7 @@ const getSupplementRecordByMother = async (req, res, next) => {
         });
 
         if (!motherRecord) {
-            return res.status(404).json({ error: "Mother doesn't exist" });
+            return res.status(404).json({ error: "Mother record not found" });
         }
 
         const pregnancies = await prisma.pregnancy.findMany({
@@ -260,7 +265,7 @@ const getSupplementRecordByMother = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Supplement Records Found!",
+            message: "Supplement records found",
             data: supplement_records
         });
 

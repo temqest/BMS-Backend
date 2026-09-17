@@ -14,7 +14,7 @@ const registerFacility = async (req, res, next) => {
         const { facility_name, address, contact_number, email, type } = req.body;
 
         if (!facility_name || !address || !contact_number || !type) {
-            return res.status(400).json({ error: "Facility Registration Failed. Required fields missing!" });
+            return res.status(400).json({ error: "Required fields are missing for facility registration" });
         }
 
         const isFacilityExist = await prisma.facility.findFirst({
@@ -27,7 +27,7 @@ const registerFacility = async (req, res, next) => {
         });
 
         if (isFacilityExist) {
-            return res.status(400).json({ error: "Facility with the same credentials and name already exist!" });
+            return res.status(400).json({ error: "Facility with this name or email already exist" });
         }
 
         const facility = await prisma.facility.create({
@@ -44,6 +44,7 @@ const registerFacility = async (req, res, next) => {
             message: "Facility successfully created",
             result: facility
         });
+
     } catch (error) {
         return next(error);
     }
@@ -67,17 +68,19 @@ const publicRegisterFacility = async (req, res, next) => {
         } = req.body;
 
         if (!facility_name || !type || !facility_address || !first_name || !last_name || !password || !otp) {
-            return res.status(400).json({ error: "Missing required facility or admin registration fields." });
+            return res.status(400).json({ error: "Missing required fields for registration" });
         }
 
         const identifier = email || phone_number;
+
         if (!identifier) {
-            return res.status(400).json({ error: "Email or Phone Number is required for OTP verification." });
+            return res.status(400).json({ error: "Email or Phone Number is required for verification" });
         }
 
         const isValidOtp = await checkOtp.verifyOTP(identifier, otp, 'registration');
+
         if (!isValidOtp) {
-            return res.status(400).json({ error: "Invalid or expired OTP code." });
+            return res.status(400).json({ error: "Invalid or expired OTP code" });
         }
 
         const isFacilityExist = await prisma.facility.findFirst({
@@ -90,7 +93,7 @@ const publicRegisterFacility = async (req, res, next) => {
         });
 
         if (isFacilityExist) {
-            return res.status(400).json({ error: "A facility with the same name or email already exists." });
+            return res.status(400).json({ error: "Facility name or email is already taken" });
         }
 
         const existingUser = await prisma.user.findFirst({
@@ -103,7 +106,7 @@ const publicRegisterFacility = async (req, res, next) => {
         });
 
         if (existingUser) {
-            return res.status(400).json({ error: "An account with this phone number or email already exists." });
+            return res.status(400).json({ error: "An account with this phone or email already exists" });
         }
 
         const salt = await bcrypt.genSalt(12);
@@ -184,6 +187,7 @@ const getPublicFacilities = async (req, res, next) => {
         return res.status(200).json({
             result: facilities
         });
+
     } catch (error) {
         next(error);
     }
@@ -194,7 +198,7 @@ const searchFacility = async (req, res, next) => {
         const { search } = req.query;
 
         if (!search) {
-            return res.status(400).json({ error: "Missing search query" });
+            return res.status(400).json({ error: "Search query is required" });
         }
 
         const facility = await prisma.facility.findMany({
@@ -210,12 +214,13 @@ const searchFacility = async (req, res, next) => {
         });
 
         if (facility.length === 0) {
-            return res.status(404).json({ error: "No facility found!" });
+            return res.status(404).json({ error: "No facility found" });
         }
 
         return res.status(200).json({
             result: facility
         });
+
     } catch (error) {
         return next(error);
     }
@@ -227,7 +232,7 @@ const updateFacility = async (req, res, next) => {
         const { facility_name, contact_number, address, email, type } = req.body;
 
         if (!facility_id) {
-            return res.status(400).json({ error: "Missing Facility ID!" });
+            return res.status(400).json({ error: "Facility ID is required" });
         }
 
         const isFacilityExist = await prisma.facility.findUnique({
@@ -235,7 +240,7 @@ const updateFacility = async (req, res, next) => {
         });
 
         if (!isFacilityExist) {
-            return res.status(404).json({ error: "Facility Doesn't Exist!" });
+            return res.status(404).json({ error: "Facility not found" });
         }
 
         const updatedFacility = await prisma.facility.update({
@@ -250,9 +255,10 @@ const updateFacility = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Facility Successfully updated",
+            message: "Facility successfully updated",
             result: updatedFacility,
         });
+
     } catch (error) {
         return next(error);
     }
@@ -263,11 +269,11 @@ const deleteFacility = async (req, res, next) => {
         const { facility_id } = req.params;
 
         if (!facility_id) {
-            return res.status(400).json({ error: "Missing Facility ID!" });
+            return res.status(400).json({ error: "Facility ID is required" });
         }
 
         if (!(await validate.isFacilityExist(facility_id))) {
-            return res.status(404).json({ error: "Facility Doesn't Exist!" });
+            return res.status(404).json({ error: "Facility not found" });
         }
 
         await prisma.facility.delete({
@@ -275,8 +281,9 @@ const deleteFacility = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Facility Successfully Deleted"
+            message: "Facility successfully deleted"
         });
+
     } catch (error) {
         return next(error);
     }
@@ -296,9 +303,10 @@ const viewAllFacility = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Viewed all Facility",
+            message: "Fetched all facilities",
             result: facility
         });
+
     } catch (error) {
         return next(error);
     }
@@ -307,19 +315,24 @@ const viewAllFacility = async (req, res, next) => {
 const getFacilityById = async (req, res, next) => {
     try {
         const { facility_id } = req.params;
+
         if (!facility_id) {
-            return res.status(400).json({ error: "Missing Facility ID!" });
+            return res.status(400).json({ error: "Facility ID is required" });
         }
+
         const facility = await prisma.facility.findUnique({
             where: { facility_id: facility_id }
         });
+
         if (!facility) {
-            return res.status(404).json({ error: "Facility Doesn't Exist!" });
+            return res.status(404).json({ error: "Facility not found" });
         }
+
         return res.status(200).json({
-            message: "Facility Retrieved Successfully",
+            message: "Facility retrieved successfully",
             result: facility
         });
+
     } catch (error) {
         return next(error);
     }

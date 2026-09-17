@@ -8,11 +8,11 @@ const evaluateVisitRisk = async (req, res, next) => {
         const { visit_id } = req.params;
 
         if (!visit_id) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Visit ID is required" });
         }
 
         if (!(await validate.isPrenatalVisitExist(visit_id))) {
-            return res.status(404).json({ error: "Prenatal Visit Doesn't Exist!" });
+            return res.status(404).json({ error: "Prenatal visit not found" });
         }
 
         const result = await evaluate_clinical_vitals(visit_id);
@@ -32,11 +32,11 @@ const getAlertsByPregnancy = async (req, res, next) => {
         const { pregnancy_id } = req.params;
 
         if (!pregnancy_id) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Pregnancy ID is required" });
         }
 
         if (!(await validate.isPregnancyExist(pregnancy_id))) {
-            return res.status(404).json({ error: "Pregnancy Record Doesn't Exist" });
+            return res.status(404).json({ error: "Pregnancy record not found" });
         }
 
         const alerts = await prisma.cDSS_Alert.findMany({
@@ -68,11 +68,11 @@ const resolveAlert = async (req, res, next) => {
         const { resolved_by, strategy, version } = req.body;
 
         if (!alert_id || !resolved_by) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Alert ID and resolved_by are required" });
         }
 
         if (!(await validate.isCDSSAlertExist(alert_id))) {
-            return res.status(404).json({ error: "CDSS Alert Doesn't Exist!" });
+            return res.status(404).json({ error: "CDSS alert not found" });
         }
 
         const mvccResult = await updateWithMVCC('cDSS_Alert', alert_id, {
@@ -93,7 +93,7 @@ const resolveAlert = async (req, res, next) => {
         }
 
         return res.status(200).json({
-            message: "CDSS Alert Resolved Successfully",
+            message: "CDSS alert resolved successfully",
             data: mvccResult.record,
             strategyUsed: mvccResult.strategyUsed
         });
@@ -106,12 +106,13 @@ const resolveAlert = async (req, res, next) => {
 const getHighRiskProfilesByFacility = async (req, res, next) => {
     try {
         const requestedFacilityId = req.params.facility_id;
+
         if (req.user?.role !== 'SystemAdmin' && requestedFacilityId && requestedFacilityId !== req.user?.facility_id) {
-            return res.status(403).json({ error: "Access Denied. You cannot view high-risk profiles from another facility." });
+            return res.status(403).json({ error: "Cannot view high-risk profiles from another facility." });
         }
+
         const facility_id = (req.user?.role === 'SystemAdmin' && requestedFacilityId) ? requestedFacilityId : req.user?.facility_id;
 
-        // Fetch high-risk alerts (severity HIGH / CRITICAL)
         const highRiskAlerts = await prisma.cDSS_Alert.findMany({
             where: {
                 is_resolved: false,
@@ -140,7 +141,6 @@ const getHighRiskProfilesByFacility = async (req, res, next) => {
             }
         });
 
-        // Also fetch visits explicitly assessed as HIGH risk
         const highRiskVisits = await prisma.prenatalVisit.findMany({
             where: {
                 risk_level_assessed: { in: ['HIGH', 'High', 'High Risk'] },
@@ -157,7 +157,6 @@ const getHighRiskProfilesByFacility = async (req, res, next) => {
             select: { pregnancy_id: true }
         });
 
-        // Deduplicate unique high risk mother/pregnancy profiles
         const highRiskMotherIds = new Set();
         highRiskAlerts.forEach(alert => {
             if (alert.pregnancy?.mother_id) {

@@ -61,6 +61,7 @@ const getStaffByFacility = async (req, res, next) => {
             message: "Staff list retrieved successfully",
             result: staff
         });
+
     } catch (error) {
         return next(error);
     }
@@ -109,6 +110,7 @@ const getStaffById = async (req, res, next) => {
             message: "Staff member fetched successfully",
             result: user
         });
+
     } catch (error) {
         return next(error);
     }
@@ -128,12 +130,11 @@ const updateStaffRole = async (req, res, next) => {
             return res.status(400).json({ error: "Role is required" });
         }
 
-        // Only Admin or SystemAdmin can modify another user's role/account
         const isSuperAdmin = requestingUser?.role === 'SystemAdmin';
         const isAdmin = requestingUser?.role === 'Admin';
 
         if (!isSuperAdmin && !isAdmin) {
-            return res.status(403).json({ error: "Access Denied. Only an administrator can modify account roles." });
+            return res.status(403).json({ error: "Only admins can modify account roles." });
         }
 
         const existingUser = await prisma.user.findUnique({
@@ -146,18 +147,16 @@ const updateStaffRole = async (req, res, next) => {
 
         if (!isSuperAdmin) {
             if (existingUser.role === 'SystemAdmin') {
-                return res.status(403).json({ error: "Access Denied. Facility administrators cannot modify SystemAdmin accounts." });
+                return res.status(403).json({ error: "Facility admins cannot modify SystemAdmin accounts." });
             }
             if (existingUser.facility_id !== requestingUser?.facility_id) {
-                return res.status(403).json({ error: "Access Denied. You cannot modify accounts belonging to another facility." });
+                return res.status(403).json({ error: "You cannot modify accounts from another facility." });
             }
             if (role === 'SystemAdmin') {
-                return res.status(403).json({ error: "Access Denied. Only a SystemAdmin can grant the SystemAdmin role." });
+                return res.status(403).json({ error: "Only SystemAdmin can assign the SystemAdmin role." });
             }
         }
 
-        // If target user is an Admin in a facility and being changed to a non-admin role:
-        // ensure there is at least one other active Admin in that facility
         if (existingUser.role === 'Admin' && role !== 'Admin' && existingUser.facility_id) {
             const otherActiveAdminCount = await prisma.user.count({
                 where: {
@@ -170,7 +169,7 @@ const updateStaffRole = async (req, res, next) => {
 
             if (otherActiveAdminCount === 0) {
                 return res.status(400).json({
-                    error: "Cannot change role. There must be at least 1 active administrator per facility."
+                    error: "Cannot change role. At least 1 active admin is required per facility."
                 });
             }
         }
@@ -198,6 +197,7 @@ const updateStaffRole = async (req, res, next) => {
             message: "Staff role updated successfully",
             result: updatedUser
         });
+
     } catch (error) {
         return next(error);
     }
@@ -225,22 +225,19 @@ const deactivateStaff = async (req, res, next) => {
         const isSuperAdmin = requestingUser?.role === 'SystemAdmin';
         const isAdmin = requestingUser?.role === 'Admin';
 
-        // A user can self-deactivate, but cannot modify someone else's account unless SuperAdmin or Admin
         if (!isSelf && !isSuperAdmin && !isAdmin) {
-            return res.status(403).json({ error: "Access Denied. You do not have permission to modify someone else's account." });
+            return res.status(403).json({ error: "You don't have permission to modify this account." });
         }
 
         if (!isSelf && !isSuperAdmin) {
             if (existingUser.role === 'SystemAdmin') {
-                return res.status(403).json({ error: "Access Denied. Facility administrators cannot modify SystemAdmin accounts." });
+                return res.status(403).json({ error: "Facility admins cannot modify SystemAdmin accounts." });
             }
             if (existingUser.facility_id !== requestingUser?.facility_id) {
-                return res.status(403).json({ error: "Access Denied. You cannot modify accounts belonging to another facility." });
+                return res.status(403).json({ error: "You cannot modify accounts from another facility." });
             }
         }
 
-        // If an account is being deactivated (is_active === false) and the target user is an Admin:
-        // check that there is at least one other active Admin in their facility
         if (!is_active && existingUser.role === 'Admin' && existingUser.facility_id) {
             const otherActiveAdminCount = await prisma.user.count({
                 where: {
@@ -253,7 +250,7 @@ const deactivateStaff = async (req, res, next) => {
 
             if (otherActiveAdminCount === 0) {
                 return res.status(400).json({
-                    error: "Cannot deactivate account. There must be at least 1 active administrator per facility."
+                    error: "Cannot deactivate account. Facility must have at least 1 active admin."
                 });
             }
         }
@@ -281,6 +278,7 @@ const deactivateStaff = async (req, res, next) => {
             message: `Staff account ${is_active ? 'activated' : 'deactivated'} successfully`,
             result: updatedUser
         });
+
     } catch (error) {
         return next(error);
     }
@@ -335,6 +333,7 @@ const updateUserProfile = async (req, res, next) => {
             message: "Profile updated successfully",
             result: updatedUser
         });
+
     } catch (error) {
         return next(error);
     }
@@ -350,15 +349,15 @@ const adminResetStaffPassword = async (req, res, next) => {
         const isAdmin = requestingUser?.role === 'Admin';
 
         if (!isSuperAdmin && !isAdmin) {
-            return res.status(403).json({ error: "Access Denied. Only administrators can reset staff passwords." });
+            return res.status(403).json({ error: "Only admins can reset staff passwords." });
         }
 
         if (!id) {
-            return res.status(400).json({ error: "Staff User ID is required." });
+            return res.status(400).json({ error: "Staff User ID is required" });
         }
 
         if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length < 6) {
-            return res.status(400).json({ error: "New password is required and must be at least 6 characters long." });
+            return res.status(400).json({ error: "New password must be at least 6 characters" });
         }
 
         const existingUser = await prisma.user.findUnique({
@@ -366,15 +365,15 @@ const adminResetStaffPassword = async (req, res, next) => {
         });
 
         if (!existingUser) {
-            return res.status(404).json({ error: "User not found." });
+            return res.status(404).json({ error: "User not found" });
         }
 
         if (!isSuperAdmin) {
             if (existingUser.role === 'SystemAdmin') {
-                return res.status(403).json({ error: "Access Denied. Facility administrators cannot reset SystemAdmin passwords." });
+                return res.status(403).json({ error: "Facility admins cannot reset SystemAdmin passwords." });
             }
             if (existingUser.facility_id !== requestingUser?.facility_id) {
-                return res.status(403).json({ error: "Access Denied. You cannot reset passwords for staff in another facility." });
+                return res.status(403).json({ error: "Cannot reset passwords for staff in another facility." });
             }
         }
 
@@ -398,9 +397,10 @@ const adminResetStaffPassword = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Staff password has been successfully reset.",
+            message: "Staff password has been reset successfully.",
             success: true
         });
+
     } catch (error) {
         return next(error);
     }
@@ -411,7 +411,7 @@ const getStaffActivities = async (req, res, next) => {
         const { id } = req.params;
 
         if (!id) {
-            return res.status(400).json({ error: "User ID is required." });
+            return res.status(400).json({ error: "User ID is required" });
         }
 
         const user = await prisma.user.findUnique({
@@ -420,14 +420,13 @@ const getStaffActivities = async (req, res, next) => {
         });
 
         if (!user) {
-            return res.status(404).json({ error: "User not found." });
+            return res.status(404).json({ error: "User not found" });
         }
 
         const page = Math.max(1, parseInt(req.query.page) || 1);
         const limit = Math.max(1, parseInt(req.query.limit) || 10);
         const fetchLimit = Math.min(Math.max(limit * page + 10, 20), 50);
 
-        // 1 & 2. Concurrently fetch audit logs and clinical prenatal visits handled by this user
         const [auditLogs, visits] = await Promise.all([
             prisma.audit_Revision_Log.findMany({
                 where: { user_id: id },
@@ -458,7 +457,6 @@ const getStaffActivities = async (req, res, next) => {
             })
         ]);
 
-        // Map visits to unified activity objects
         const visitActivities = visits.map(v => {
             const motherUser = v.pregnancy?.mother?.user;
             const motherName = motherUser 
@@ -477,7 +475,6 @@ const getStaffActivities = async (req, res, next) => {
             };
         });
 
-        // Map audit logs to unified activity objects
         const auditActivities = auditLogs.map(log => {
             let parsedNewState = null;
             try {
@@ -536,11 +533,9 @@ const getStaffActivities = async (req, res, next) => {
             };
         });
 
-        // Combine and filter duplicates
         let combined = [...visitActivities, ...auditActivities];
         combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-        // Search filtering
         const search = req.query.search ? req.query.search.trim().toLowerCase() : '';
         if (search) {
             combined = combined.filter(act => 
@@ -551,7 +546,6 @@ const getStaffActivities = async (req, res, next) => {
             );
         }
 
-        // Pagination
         const startIndex = (page - 1) * limit;
         const paginated = combined.slice(startIndex, startIndex + limit);
         const hasMore = startIndex + limit < combined.length;
@@ -566,6 +560,7 @@ const getStaffActivities = async (req, res, next) => {
                 limit
             }
         });
+
     } catch (error) {
         return next(error);
     }
@@ -585,6 +580,7 @@ const savePushToken = async (req, res, next) => {
         }
 
         let updatedUser = null;
+
         try {
             updatedUser = await prisma.user.update({
                 where: { user_id },
@@ -602,11 +598,13 @@ const savePushToken = async (req, res, next) => {
             });
         } catch (prismaErr) {
             console.warn('[savePushToken] Prisma Client update failed, using raw SQL fallback:', prismaErr.message);
+
             await prisma.$executeRawUnsafe(
                 `UPDATE "User" SET "fcm_token" = $1, "updated_at" = NOW() WHERE "user_id" = $2`,
                 fcmToken.trim(),
                 user_id
             );
+
             updatedUser = { user_id, fcm_token: fcmToken.trim() };
         }
 
@@ -615,6 +613,7 @@ const savePushToken = async (req, res, next) => {
             message: "Push notification token registered successfully.",
             result: updatedUser
         });
+
     } catch (error) {
         return next(error);
     }

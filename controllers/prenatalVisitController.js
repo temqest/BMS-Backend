@@ -6,9 +6,7 @@ const { logAuditTrail } = require('../services/auditService');
 const { resolveEntityId } = require('../middleware/idResolver');
 
 const registerPrenatalVisit = async (req, res, next) => {
-    
     try {
-
         const {
             pregnancy_id,
             health_worker_id,
@@ -27,7 +25,7 @@ const registerPrenatalVisit = async (req, res, next) => {
             risk_level_assessed,
         } = req.body;
 
-        if(
+        if (
             !pregnancy_id ||
             !health_worker_id ||
             !trimester ||
@@ -39,17 +37,17 @@ const registerPrenatalVisit = async (req, res, next) => {
             !bp_diastolic ||
             !bp_systolic
         ) {
-            return res.status(400).json({error: "Missing Required Fields"});
+            return res.status(400).json({ error: "Required fields are missing" });
         }
 
         const vitalsValidationErrors = validate.validateClinicalVitals(req.body);
         if (vitalsValidationErrors.length > 0) {
-            return res.status(400).json({ error: "Invalid Medical Data", details: vitalsValidationErrors });
+            return res.status(400).json({ error: "Invalid medical data provided", details: vitalsValidationErrors });
         }
 
         let targetPregnancyId = pregnancy_id;
         let pregnancy = await prisma.pregnancy.findUnique({
-            where : {pregnancy_id : pregnancy_id},
+            where: { pregnancy_id: pregnancy_id },
             include: { mother: true }
         });
 
@@ -70,9 +68,10 @@ const registerPrenatalVisit = async (req, res, next) => {
             }
         }
 
-        if(!pregnancy) {
-            return res.status(404).json({error: "Pregnancy Not Found!"});
+        if (!pregnancy) {
+            return res.status(404).json({ error: "Pregnancy not found" });
         }
+
         targetPregnancyId = pregnancy.pregnancy_id;
 
         let healthWorkerIdToUse = health_worker_id;
@@ -89,11 +88,10 @@ const registerPrenatalVisit = async (req, res, next) => {
                 health_worker = fallbackUser;
                 healthWorkerIdToUse = fallbackUser.user_id;
             } else {
-                return res.status(404).json({ error: "Health Worker Not Found!" });
+                return res.status(404).json({ error: "Health worker not found" });
             }
         }
 
-        // Parallelize baseline lookup and compute TEWS in-memory before create
         const baselineVisit = await prisma.prenatalVisit.findFirst({
             where: {
                 pregnancy_id: targetPregnancyId,
@@ -115,20 +113,20 @@ const registerPrenatalVisit = async (req, res, next) => {
             data: {
                 pregnancy_id: targetPregnancyId,
                 health_worker_id: healthWorkerIdToUse,
-                trimester : trimester,
-                visit_number : visit_number,
-                age_of_gestation_weeks : age_of_gestation_weeks,
-                weight_kg : weight_kg,
-                temperature_celsius : temperature_celsius,
-                pulse_rate_bpm : pulse_rate_bpm,
-                bp_diastolic : bp_diastolic,
-                bp_systolic : bp_systolic,
-                fundic_height_cm : fundic_height_cm,
-                fetal_heart_tone_bpm : fetal_heart_tone_bpm,
-                chief_complaint : chief_complaint,
-                danger_signs_observed : danger_signs_observed,
-                risk_level_assessed : finalRiskLevel,
-                sync_status : "synced",
+                trimester: trimester,
+                visit_number: visit_number,
+                age_of_gestation_weeks: age_of_gestation_weeks,
+                weight_kg: weight_kg,
+                temperature_celsius: temperature_celsius,
+                pulse_rate_bpm: pulse_rate_bpm,
+                bp_diastolic: bp_diastolic,
+                bp_systolic: bp_systolic,
+                fundic_height_cm: fundic_height_cm,
+                fetal_heart_tone_bpm: fetal_heart_tone_bpm,
+                chief_complaint: chief_complaint,
+                danger_signs_observed: danger_signs_observed,
+                risk_level_assessed: finalRiskLevel,
+                sync_status: "synced",
             }
         });
 
@@ -159,10 +157,10 @@ const registerPrenatalVisit = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Prenatal Visit Registered Successfully",
+            message: "Prenatal visit registered successfully",
             prenatalVisit: newPrenatalVisit,
             cdssAssessment: cdssAssessment,
-        })
+        });
 
     } catch (error) {
         return next(error);
@@ -171,21 +169,23 @@ const registerPrenatalVisit = async (req, res, next) => {
 
 const updatePrenatalVisit = async (req, res, next) => {
     try {
-        let {visit_id} = req.params;
+        let { visit_id } = req.params;
 
-        if(!visit_id) {
-            return res.status(400).json({error: "Missing Visit ID"});
+        if (!visit_id) {
+            return res.status(400).json({ error: "Visit ID is required" });
         }
 
         const { resolvedId, record: existing } = await resolveEntityId('prenatalVisit', visit_id, req.body);
-        if(!resolvedId || !existing) {
-            return res.status(404).json({error: "Prenatal Visit not found"});
+
+        if (!resolvedId || !existing) {
+            return res.status(404).json({ error: "Prenatal visit not found" });
         }
+
         visit_id = resolvedId;
 
         const vitalsValidationErrors = validate.validateClinicalVitals(req.body);
         if (vitalsValidationErrors.length > 0) {
-            return res.status(400).json({ error: "Invalid Medical Data", details: vitalsValidationErrors });
+            return res.status(400).json({ error: "Invalid medical data provided", details: vitalsValidationErrors });
         }
 
         const { strategy, version, ...clientData } = req.body;
@@ -205,7 +205,7 @@ const updatePrenatalVisit = async (req, res, next) => {
         const cdssAssessment = await evaluate_clinical_vitals(updatedVisit.visit_id);
 
         return res.status(200).json({
-            message: "Prenatal Visit Successfully Updated!",
+            message: "Prenatal visit successfully updated!",
             result: updatedVisit,
             strategyUsed: mvccResult.strategyUsed,
             cdssAssessment: cdssAssessment,
@@ -218,20 +218,22 @@ const updatePrenatalVisit = async (req, res, next) => {
 
 const deletePrenatalVisit = async (req, res, next) => {
     try {
-        let {visit_id} = req.params;
+        let { visit_id } = req.params;
 
-        if(!visit_id) {
-            return res.status(400).json({error : "Missing Visit ID"});
+        if (!visit_id) {
+            return res.status(400).json({ error: "Visit ID is required" });
         }
 
         const { resolvedId, record: existingVisit } = await resolveEntityId('prenatalVisit', visit_id, req.query || req.body);
-        if(!resolvedId || !existingVisit) {
-            return res.status(200).json({ message: "Prenatal Visit Already Deleted" });
+
+        if (!resolvedId || !existingVisit) {
+            return res.status(200).json({ message: "Prenatal visit already deleted" });
         }
+
         visit_id = resolvedId;
 
         await prisma.prenatalVisit.delete({
-            where : {visit_id : visit_id}
+            where: { visit_id: visit_id }
         });
 
         await logAuditTrail({
@@ -242,7 +244,7 @@ const deletePrenatalVisit = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message : "Prenatal Visit Deleted Successfully!",
+            message: "Prenatal visit deleted successfully!",
         });
 
     } catch (error) {
@@ -252,131 +254,123 @@ const deletePrenatalVisit = async (req, res, next) => {
 
 const getAllPrenatalVisits = async (req, res, next) => {
     try {
-
         const prenatalVisits = await prisma.prenatalVisit.findMany({
-            include : {
-                healthWorker : {
-                    select : {
-                        user_id : true,
-                        first_name : true,
-                        middle_name : true,
-                        last_name : true,
-                        role : true,
-                        facility : true,
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
                     }
                 }
             }
         });
 
         return res.status(200).json({
-            message : "All prenatal Visit Data Retreived Successfully!",
-            result : prenatalVisits,
+            message: "All prenatal visit data retrieved successfully!",
+            result: prenatalVisits,
         });
-        
+
     } catch (error) {
         return next(error);
     }
 };
 
 const getPrenatalVisitById = async (req, res, next) => {
-
     try {
+        const { visit_id } = req.params;
 
-        const {visit_id} = req.params;
-
-        if(!visit_id) {
-            return res.status(400).json({error : "Missing Visit ID!"});
+        if (!visit_id) {
+            return res.status(400).json({ error: "Visit ID is required" });
         }
 
         const isVisitExist = await prisma.prenatalVisit.findUnique({
-            where : {
-                visit_id : visit_id
+            where: {
+                visit_id: visit_id
             }
-        })
+        });
 
-        if(!__isVisitExist) {
-            return res.status(404).json({error: "Prenatal Visit not found!"});
+        if (!isVisitExist) {
+            return res.status(404).json({ error: "Prenatal visit not found" });
         }
 
         const visitResult = await prisma.prenatalVisit.findUnique({
-            where : {
-                visit_id : visit_id
+            where: {
+                visit_id: visit_id
             },
-            include : {
-                healthWorker : {
-                    select : {
-                        user_id : true,
-                        first_name : true,
-                        middle_name : true,
-                        last_name : true,
-                        role : true,
-                        facility : true,
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
                     }
                 }
             }
         });
 
         return res.status(200).json({
-            message : "Prenatal Visit Data Retreived Successfully",
-            result : visitResult
+            message: "Prenatal visit data retrieved successfully",
+            result: visitResult
         });
-        
+
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const getPrentalVisitByPregnancy = async (req, res, next) => {
-
     try {
+        const { pregnancy_id } = req.params;
 
-        const {pregnancy_id} = req.params;
-
-        if(!pregnancy_id) {
-            return res.status(400).json({error : "Missing Pregnancy ID!"});
+        if (!pregnancy_id) {
+            return res.status(400).json({ error: "Pregnancy ID is required" });
         }
 
-        if(!(await validate.isPregnancyExist(pregnancy_id))) {
-            return res.status(404).json({error: "Pregnancy Not Found!"})
+        if (!(await validate.isPregnancyExist(pregnancy_id))) {
+            return res.status(404).json({ error: "Pregnancy not found" });
         }
 
         const visit = await prisma.prenatalVisit.findMany({
-            where : {
-                pregnancy_id : pregnancy_id
+            where: {
+                pregnancy_id: pregnancy_id
             },
-            include : {
-                healthWorker : {
-                    select : {
-                        user_id : true,
-                        first_name : true,
-                        middle_name : true,
-                        last_name : true,
-                        role : true,
-                        facility : true,
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
                     }
                 }
             }
         });
 
         return res.status(200).json({
-            message : "Prenatal Visit Data Retreived Successfully",
-            result : visit
+            message: "Prenatal visit data retrieved successfully",
+            result: visit
         });
-        
+
     } catch (error) {
         return next(error);
     }
-    
 };
 
 const getAllPrenatalVisitsByMother = async (req, res, next) => {
-
     try {
+        const { mother_id } = req.params;
 
-        const {mother_id} = req.params;
-
-        if(!mother_id) {
-            return res.status(400).json("Missing Mother ID")
+        if (!mother_id) {
+            return res.status(400).json({ error: "Mother ID is required" });
         }
 
         const motherRecord = await prisma.mother.findFirst({
@@ -389,7 +383,7 @@ const getAllPrenatalVisitsByMother = async (req, res, next) => {
         });
 
         if (!motherRecord) {
-            return res.status(404).json({ error: "Mother Not Found!" });
+            return res.status(404).json({ error: "Mother not found" });
         }
 
         const visits = await prisma.prenatalVisit.findMany({
@@ -398,117 +392,111 @@ const getAllPrenatalVisitsByMother = async (req, res, next) => {
                     mother_id: motherRecord.mother_id
                 }
             },
-            include : {
-                healthWorker : {
-                    select : {
-                        user_id : true,
-                        first_name : true,
-                        middle_name : true,
-                        last_name : true,
-                        role : true,
-                        facility : true,
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
                     }
                 }
             }
         });
 
         return res.status(200).json({
-            message : "Prenatal Visit Data Retreived Successfully",
-            result : visits
+            message: "Prenatal visit data retrieved successfully",
+            result: visits
         });
-        
+
     } catch (error) {
         return next(error);
     }
-
 };
 
 const getAllPrenatalVisitsByHealthWorker = async (req, res, next) => {
-
     try {
+        const { health_worker_id } = req.params;
 
-        const {health_worker_id} = req.params;
-
-        if(!health_worker_id) {
-            return res.status(400).json("Missing Health Worker ID");
+        if (!health_worker_id) {
+            return res.status(400).json({ error: "Health Worker ID is required" });
         }
 
-        if(!(await validate.isUserExist(health_worker_id))) {
-            return res.status(404).json({error: "Health Worker Not Found!"});
+        if (!(await validate.isUserExist(health_worker_id))) {
+            return res.status(404).json({ error: "Health worker not found" });
         }
 
         const visits = await prisma.prenatalVisit.findMany({
-            where : {
-                health_worker_id : health_worker_id
+            where: {
+                health_worker_id: health_worker_id
             },
-            include : {
-                healthWorker : {
-                    select : {
-                        user_id : true,
-                        first_name : true,
-                        middle_name : true,
-                        last_name : true,
-                        role : true,
-                        facility : true,
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
                     }
                 }
             }
         });
 
         return res.status(200).json({
-            message : "Prenatal Visit Data Retreived Successfully",
-            result : visits
+            message: "Prenatal visit data retrieved successfully",
+            result: visits
         });
-        
+
     } catch (error) {
         return next(error);
     }
-
 };
 
-const getAllPrenatalVisitByFacility = async(req, res, next) => {
-
+const getAllPrenatalVisitByFacility = async (req, res, next) => {
     try {
+        const { facility_id } = req.params;
 
-        const {facility_id} = req.params;
-
-        if(!facility_id) {
-            return res.status(400).json("Missing Facility ID")
+        if (!facility_id) {
+            return res.status(400).json({ error: "Facility ID is required" });
         }
 
-        if(!(await validate.isFacilityExist(facility_id))) {
-            return res.status(404).json({error: "Facility Not Found!"});
+        if (!(await validate.isFacilityExist(facility_id))) {
+            return res.status(404).json({ error: "Facility not found" });
         }
 
         const visits = await prisma.prenatalVisit.findMany({
-            where : {
-                healthWorker : {
-                    facility_id : facility_id
+            where: {
+                healthWorker: {
+                    facility_id: facility_id
                 }
             },
-            include : {
-                healthWorker : {
-                    select : {
-                        user_id : true,
-                        first_name : true,
-                        middle_name : true,
-                        last_name : true,
-                        role : true,
-                        facility : true,
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
                     }
                 }
             }
         });
 
         return res.status(200).json({
-            message : "Prenatal Visit Data Retreived Successfully",
-            result : visits
+            message: "Prenatal visit data retrieved successfully",
+            result: visits
         });
 
     } catch (error) {
         return next(error);
     }
-}
+};
 
 module.exports = {
     registerPrenatalVisit,
@@ -520,4 +508,4 @@ module.exports = {
     getAllPrenatalVisitsByHealthWorker,
     getAllPrenatalVisitByFacility,
     getPrenatalVisitById
-}
+};

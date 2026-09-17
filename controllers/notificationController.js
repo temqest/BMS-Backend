@@ -3,92 +3,87 @@ const validate = require('../util/validation');
 const { sendNotificationToUser: sendPushToUser } = require('../services/pushNotificationService');
 
 const sendNotificationToUser = async (req, res, next) => {
-
     try {
+        const { user_id, notification_type, notification_message, notification_date } = req.body;
 
-        const {user_id, notification_type, notification_message, notification_date} = req.body;
-
-        if(!user_id || !notification_type || !notification_message) {
-            return res.status(400).json({error : "Missing Required Fields!"});
+        if (!user_id || !notification_type || !notification_message) {
+            return res.status(400).json({ error: "Missing required fields" });
         }
 
-        if(!await validate.isUserExist(user_id)) {
-            return res.status(404).json({error : "User not found!"});
+        if (!await validate.isUserExist(user_id)) {
+            return res.status(404).json({ error: "User not found" });
         }
 
         const newNotification = await prisma.notification.create({
-            data : {
-                user_id : user_id,
-                notification_type : notification_type,
-                notification_message : notification_message,
-                notification_date : notification_date ? new Date(notification_date) : undefined
+            data: {
+                user_id: user_id,
+                notification_type: notification_type,
+                notification_message: notification_message,
+                notification_date: notification_date ? new Date(notification_date) : undefined
             }
         });
 
-        // Fire-and-forget push notification to user's mobile device
         sendPushToUser(
             user_id,
             notification_type,
             notification_message,
             { notification_id: newNotification.notification_id, type: notification_type }
         ).catch((pushErr) => {
-            console.error('[NotificationController] Failed to send push notification:', pushErr);
+            console.error('[NotificationController] Push notification warning:', pushErr);
         });
 
         return res.status(200).json({
-            message : "Notification Sent Successfully!",
-            notification : newNotification
+            message: "Notification sent successfully",
+            notification: newNotification
         });
 
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const getNotificationByID = async (req, res, next) => {
-
     try {
+        const { notification_id } = req.params;
 
-        const {notification_id} = req.params;
-
-        if(!notification_id) {
-            return res.status(400).json({error : "Missing Notification ID!"});
+        if (!notification_id) {
+            return res.status(400).json({ error: "Missing notification ID" });
         }
 
         const notification = await prisma.notification.findUnique({
-            where : {notification_id : notification_id},
-            include : {
-                user : {
-                    select : {
-                        first_name : true,
-                        last_name : true,
-                        email : true,
-                        role : true
+            where: { notification_id: notification_id },
+            include: {
+                user: {
+                    select: {
+                        first_name: true,
+                        last_name: true,
+                        email: true,
+                        role: true
                     }
                 }
             }
         });
 
         if (!notification) {
-            return res.status(404).json({error : "Notification Doesn't Exist!"});
+            return res.status(404).json({ error: "Notification not found" });
         }
 
         return res.status(200).json({
-            message : "Notification Fetched Successfully!",
-            notification : notification
+            message: "Notification details retrieved",
+            notification: notification
         });
 
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const getAllNotificationByUser = async (req, res, next) => {
     try {
         const { user_id } = req.params;
 
         if (!user_id) {
-            return res.status(400).json({ error: "Missing User ID!" });
+            return res.status(400).json({ error: "Missing user ID" });
         }
 
         const user = await prisma.user.findUnique({
@@ -109,10 +104,9 @@ const getAllNotificationByUser = async (req, res, next) => {
         });
 
         if (!user) {
-            return res.status(404).json({ error: "User not found!" });
+            return res.status(404).json({ error: "User not found" });
         }
 
-        // 1. Direct user-targeted notifications
         const directNotifications = await prisma.notification.findMany({
             where: { user_id: user_id },
             orderBy: { notification_date: "desc" }
@@ -134,10 +128,8 @@ const getAllNotificationByUser = async (req, res, next) => {
 
         let facilityAlerts = [];
 
-        // 2. If user belongs to a facility and is staff, retrieve active facility alerts
         if (user.facility_id && user.role !== 'Mother' && user.role !== 'MOTHER') {
             const [cdssAlerts, incomingReferrals, upcomingAppointments] = await Promise.all([
-                // A. Active High-Risk CDSS alerts in this facility
                 prisma.cDSS_Alert.findMany({
                     where: {
                         is_resolved: false,
@@ -167,7 +159,6 @@ const getAllNotificationByUser = async (req, res, next) => {
                     take: 10
                 }),
 
-                // B. Active incoming referrals to this facility
                 prisma.online_Referral.findMany({
                     where: {
                         to_facility_id: user.facility_id,
@@ -189,7 +180,6 @@ const getAllNotificationByUser = async (req, res, next) => {
                     take: 10
                 }),
 
-                // C. Active appointments in this facility
                 prisma.appointment.findMany({
                     where: {
                         facility_id: user.facility_id,
@@ -258,12 +248,11 @@ const getAllNotificationByUser = async (req, res, next) => {
             facilityAlerts = [...formattedCDSS, ...formattedReferrals, ...formattedAppointments];
         }
 
-        // Combine direct and facility alerts, sort descending by date
         const combined = [...formattedDirect, ...facilityAlerts];
         combined.sort((a, b) => new Date(b.notification_date).getTime() - new Date(a.notification_date).getTime());
 
         return res.status(200).json({
-            message: "Notifications Fetched Successfully!",
+            message: "Notifications fetched successfully",
             notifications: combined
         });
 
@@ -277,7 +266,7 @@ const deleteNotification = async (req, res, next) => {
         const { notification_id } = req.params;
 
         if (!notification_id) {
-            return res.status(400).json({ error: "Missing Notification ID!" });
+            return res.status(400).json({ error: "Missing notification ID" });
         }
 
         const existingNotification = await prisma.notification.findUnique({
@@ -291,7 +280,7 @@ const deleteNotification = async (req, res, next) => {
         }
 
         return res.status(200).json({
-            message: "Notification Deleted Successfully!"
+            message: "Notification deleted"
         });
 
     } catch (error) {
@@ -306,10 +295,11 @@ const updateNotification = async (req, res, next) => {
         const user_id = bodyUserId || req.user?.user_id;
 
         if (!notification_id || is_read === undefined) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Missing required fields" });
         }
 
         let updatedNotification;
+
         if (user_id) {
             updatedNotification = await prisma.notification.upsert({
                 where: { notification_id: notification_id },
@@ -329,6 +319,7 @@ const updateNotification = async (req, res, next) => {
             const existingNotification = await prisma.notification.findUnique({
                 where: { notification_id: notification_id }
             });
+
             if (existingNotification) {
                 updatedNotification = await prisma.notification.update({
                     where: { notification_id: notification_id },
@@ -340,7 +331,7 @@ const updateNotification = async (req, res, next) => {
         }
 
         return res.status(200).json({
-            message: "Notification Updated Successfully!",
+            message: "Notification updated",
             notification: updatedNotification
         });
 
@@ -354,11 +345,11 @@ const getUnreadNotificationCount = async (req, res, next) => {
         const { user_id } = req.params;
 
         if (!user_id) {
-            return res.status(400).json({ error: "Missing User ID!" });
+            return res.status(400).json({ error: "Missing user ID" });
         }
 
         if (!await validate.isUserExist(user_id)) {
-            return res.status(404).json({ error: "User doesn't Exist!" });
+            return res.status(404).json({ error: "User not found" });
         }
 
         const unreadCount = await prisma.notification.count({
@@ -366,7 +357,7 @@ const getUnreadNotificationCount = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Unread Notification Count Fetched Successfully!",
+            message: "Unread notification count fetched",
             unreadCount: unreadCount
         });
 
@@ -380,7 +371,7 @@ const markAllNotificationAsRead = async (req, res, next) => {
         const { user_id } = req.params;
 
         if (!user_id) {
-            return res.status(400).json({ error: "Missing User ID!" });
+            return res.status(400).json({ error: "Missing user ID" });
         }
 
         const user = await prisma.user.findUnique({
@@ -389,10 +380,9 @@ const markAllNotificationAsRead = async (req, res, next) => {
         });
 
         if (!user) {
-            return res.status(404).json({ error: "User doesn't Exist!" });
+            return res.status(404).json({ error: "User not found" });
         }
 
-        // 1. Mark all existing direct notifications as read
         await prisma.notification.updateMany({
             where: {
                 user_id: user_id,
@@ -403,7 +393,6 @@ const markAllNotificationAsRead = async (req, res, next) => {
             }
         });
 
-        // 2. If staff member with facility, also mark active facility alerts as read
         if (user.facility_id && user.role !== 'Mother' && user.role !== 'MOTHER') {
             const [cdssAlerts, incomingReferrals, upcomingAppointments] = await Promise.all([
                 prisma.cDSS_Alert.findMany({
@@ -448,8 +437,8 @@ const markAllNotificationAsRead = async (req, res, next) => {
             }
         }
 
-        return res.status(200).json({ message: "All Notification Marked as Read Successfully!" });
-        
+        return res.status(200).json({ message: "All notifications marked as read" });
+
     } catch (error) {
         return next(error);
     }

@@ -20,8 +20,9 @@ const registerPregnancy = async (req, res, next) => {
         } = req.body;
 
         let targetMotherId = motherId || req.body.mother_id;
-        if (!targetMotherId || !gravida || !parity || !age_group || !lmp_date || !pregnancy_status){
-            return res.status(400).json({ error: "Missing Required Fields"});
+
+        if (!targetMotherId || !gravida || !parity || !age_group || !lmp_date || !pregnancy_status) {
+            return res.status(400).json({ error: "Required fields are missing" });
         }
 
         const motherRecord = await prisma.mother.findFirst({
@@ -31,14 +32,14 @@ const registerPregnancy = async (req, res, next) => {
         if (motherRecord) {
             targetMotherId = motherRecord.mother_id;
         } else {
-            return res.status(404).json({ error: "Mother Not Found!" });
+            return res.status(404).json({ error: "Mother not found" });
         }
 
         const today = new Date();
         const Lmp_Date = new Date(lmp_date);
 
-        if(Lmp_Date > today){
-            return res.status(400).json({error: "LMP Date Cannot Be In The Future"});
+        if (Lmp_Date > today) {
+            return res.status(400).json({ error: "LMP date cannot be in the future" });
         }
 
         const existingPreg = await prisma.pregnancy.findFirst({
@@ -56,7 +57,7 @@ const registerPregnancy = async (req, res, next) => {
         }
 
         const pregnancy = await prisma.pregnancy.create({
-            data : {
+            data: {
                 mother_id: targetMotherId,
                 date_of_registration: today,
                 lmp_date: Lmp_Date,
@@ -79,7 +80,7 @@ const registerPregnancy = async (req, res, next) => {
             newState: pregnancy
         });
 
-        res.status(201).json({
+        return res.status(201).json({
             message: "Pregnancy registered successfully",
             pregnancy: pregnancy,
         });
@@ -90,11 +91,12 @@ const registerPregnancy = async (req, res, next) => {
 };
 
 const updatePregnancy = async (req, res, next) => {
-    let {pregnancy_id} = req.params;
+    let { pregnancy_id } = req.params;
     const { strategy, version, ...clientData } = req.body;
 
     try {
         const { resolvedId, record } = await resolveEntityId('pregnancy', pregnancy_id, req.body);
+
         if (resolvedId && record) {
             pregnancy_id = resolvedId;
         }
@@ -111,11 +113,12 @@ const updatePregnancy = async (req, res, next) => {
             });
         }
 
-        res.status(200).json({
+        return res.status(200).json({
             message: "Pregnancy updated successfully",
             pregnancy: mvccResult.record,
             strategyUsed: mvccResult.strategyUsed,
         });
+
     } catch (error) {
         return next(error);
     }
@@ -136,9 +139,9 @@ const deletePregnancy = async (req, res, next) => {
                 pregnancy_id
             });
         }
+
         pregnancy_id = resolvedId;
 
-        // Cascade delete child records first to avoid foreign key constraint errors
         try {
             await prisma.prenatalVisit.deleteMany({ where: { pregnancy_id } });
             await prisma.supplementation_Record.deleteMany({ where: { pregnancy_id } });
@@ -165,6 +168,7 @@ const deletePregnancy = async (req, res, next) => {
             message: "Pregnancy deleted successfully",
             pregnancy: pregnancy,
         });
+
     } catch (error) {
         return next(error);
     }
@@ -172,18 +176,18 @@ const deletePregnancy = async (req, res, next) => {
 
 const getPregnancyByID = async (req, res, next) => {
     try {
-        const {pregnancy_id} = req.params;
+        const { pregnancy_id } = req.params;
 
-        if(!pregnancy_id) {
-            return res.status(400).json({error : "Missing Pregnancy ID!"});
+        if (!pregnancy_id) {
+            return res.status(400).json({ error: "Pregnancy ID is required" });
         }
 
         const pregnancy = await prisma.pregnancy.findUnique({
-            where : {pregnancy_id : pregnancy_id},
-            include : {
-                prenatalVisits : {
-                    orderBy : {visit_date : 'asc'},
-                    include : {
+            where: { pregnancy_id: pregnancy_id },
+            include: {
+                prenatalVisits: {
+                    orderBy: { visit_date: 'asc' },
+                    include: {
                         healthWorker: {
                             select: {
                                 user_id: true,
@@ -199,11 +203,11 @@ const getPregnancyByID = async (req, res, next) => {
             },
         });
 
-        if(!pregnancy) {
-            return res.status(404).json({error : "Pregnancy not found"});
+        if (!pregnancy) {
+            return res.status(404).json({ error: "Pregnancy not found" });
         }
 
-        res.status(200).json({
+        return res.status(200).json({
             message: "Pregnancy data retrieved successfully",
             pregnancy: pregnancy,
         });
@@ -215,10 +219,10 @@ const getPregnancyByID = async (req, res, next) => {
 
 const getAllPreganciesByMother = async (req, res, next) => {
     try {
-        const {mother_id} = req.params;
+        const { mother_id } = req.params;
 
-        if(!mother_id) {
-            return res.status(400).json({error : "Missing Mother ID!"});
+        if (!mother_id) {
+            return res.status(400).json({ error: "Mother ID is required" });
         }
 
         const mother = await prisma.mother.findFirst({
@@ -230,13 +234,13 @@ const getAllPreganciesByMother = async (req, res, next) => {
             }
         });
 
-        if(!mother) {
-            return res.status(404).json({error: "Mother Not found!"});
+        if (!mother) {
+            return res.status(404).json({ error: "Mother not found" });
         }
 
         const pregnancy = await prisma.pregnancy.findMany({
-            where : {mother_id : mother.mother_id},
-            orderBy : {date_of_registration : "desc"}
+            where: { mother_id: mother.mother_id },
+            orderBy: { date_of_registration: "desc" }
         });
 
         return res.status(200).json({

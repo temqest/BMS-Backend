@@ -61,7 +61,7 @@ const createAppointment = async (req, res, next) => {
         ]);
 
         if (facility_id && !facilityRecord) {
-            return res.status(404).json({ error: "Facility Doesn't Exist!" });
+            return res.status(404).json({ error: "Facility not found" });
         }
 
         if (isConflict) {
@@ -89,7 +89,7 @@ const createAppointment = async (req, res, next) => {
         });
 
         return res.status(201).json({
-            message: "Appointment Successfully Scheduled",
+            message: "Appointment successfully scheduled",
             data: newAppointment,
         });
 
@@ -129,7 +129,7 @@ const getAllAppointments = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Appointments Retrieved Successfully",
+            message: "Appointments retrieved successfully",
             data: appointments,
         });
 
@@ -143,7 +143,7 @@ const getAppointmentById = async (req, res, next) => {
         const { appointment_id } = req.params;
 
         if (!appointment_id) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Appointment ID is required" });
         }
 
         const appointment = await prisma.appointment.findUnique({
@@ -165,19 +165,19 @@ const getAppointmentById = async (req, res, next) => {
         });
 
         if (!appointment) {
-            return res.status(404).json({ error: "Appointment Doesn't Exist!" });
+            return res.status(404).json({ error: "Appointment not found" });
         }
 
         if (req.user?.role === 'Mother' && appointment.user_id !== req.user?.user_id) {
-            return res.status(403).json({ error: "Access Denied. You cannot view another patient's appointment." });
+            return res.status(403).json({ error: "You cannot view another patient's appointment." });
         }
 
         if (req.user?.role !== 'SystemAdmin' && req.user?.role !== 'Mother' && appointment.facility_id && appointment.facility_id !== req.user?.facility_id) {
-            return res.status(403).json({ error: "Access Denied. You cannot access appointments for another facility." });
+            return res.status(403).json({ error: "You cannot access appointments for another facility." });
         }
 
         return res.status(200).json({
-            message: "Appointment Details Retrieved Successfully",
+            message: "Appointment details retrieved successfully",
             data: appointment,
         });
 
@@ -191,15 +191,15 @@ const getAppointmentsByUser = async (req, res, next) => {
         const { user_id } = req.params;
 
         if (!user_id) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "User ID is required" });
         }
 
         if (req.user?.role === 'Mother' && user_id !== req.user?.user_id) {
-            return res.status(403).json({ error: "Access Denied. You can only view your own appointments." });
+            return res.status(403).json({ error: "You can only view your own appointments." });
         }
 
         if (!(await validate.isUserExist(user_id))) {
-            return res.status(404).json({ error: "User Doesn't Exist!" });
+            return res.status(404).json({ error: "User not found" });
         }
 
         const appointments = await prisma.appointment.findMany({
@@ -211,7 +211,7 @@ const getAppointmentsByUser = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "User Appointments Retrieved Successfully",
+            message: "User appointments retrieved successfully",
             data: appointments,
         });
 
@@ -225,15 +225,15 @@ const getAppointmentsByFacility = async (req, res, next) => {
         const { facility_id } = req.params;
 
         if (!facility_id) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Facility ID is required" });
         }
 
         if (req.user?.role !== 'SystemAdmin' && facility_id !== req.user?.facility_id) {
-            return res.status(403).json({ error: "Access Denied. You cannot view appointments for another facility." });
+            return res.status(403).json({ error: "You cannot view appointments for another facility." });
         }
 
         if (!(await validate.isFacilityExist(facility_id))) {
-            return res.status(404).json({ error: "Facility Doesn't Exist!" });
+            return res.status(404).json({ error: "Facility not found" });
         }
 
         const appointments = await prisma.appointment.findMany({
@@ -259,7 +259,7 @@ const getAppointmentsByFacility = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Facility Appointments Retrieved Successfully",
+            message: "Facility appointments retrieved successfully",
             data: appointments,
         });
 
@@ -273,13 +273,15 @@ const updateAppointment = async (req, res, next) => {
         let { appointment_id } = req.params;
 
         if (!appointment_id) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Appointment ID is required" });
         }
 
         const { resolvedId, record } = await resolveEntityId('appointment', appointment_id, req.body);
+
         if (!resolvedId || !record) {
-            return res.status(404).json({ error: "Appointment Doesn't Exist!" });
+            return res.status(404).json({ error: "Appointment not found" });
         }
+
         appointment_id = resolvedId;
 
         const { strategy, version, ...clientData } = req.body;
@@ -300,7 +302,7 @@ const updateAppointment = async (req, res, next) => {
         }
 
         return res.status(200).json({
-            message: "Appointment Updated Successfully",
+            message: "Appointment updated successfully",
             data: mvccResult.record,
             strategyUsed: mvccResult.strategyUsed
         });
@@ -316,25 +318,25 @@ const cancelAppointment = async (req, res, next) => {
         const { strategy, version } = req.body || {};
 
         if (!appointment_id) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Appointment ID is required" });
         }
 
         const { resolvedId, record } = await resolveEntityId('appointment', appointment_id, req.body || {});
+
         if (!resolvedId || !record) {
-            return res.status(404).json({ error: "Appointment Doesn't Exist!" });
+            return res.status(404).json({ error: "Appointment not found" });
         }
+
         appointment_id = resolvedId;
 
-        // Enforce ownership: Mothers can only cancel their own appointments
         if (req.user?.role === 'Mother' && record.user_id !== req.user?.user_id) {
-            return res.status(403).json({ error: "Access Denied. You can only cancel your own appointments." });
+            return res.status(403).json({ error: "You can only cancel your own appointments." });
         }
 
         if (req.user?.role !== 'SystemAdmin' && req.user?.role !== 'Mother' && record.facility_id && record.facility_id !== req.user?.facility_id) {
-            return res.status(403).json({ error: "Access Denied. You cannot cancel appointments for another facility." });
+            return res.status(403).json({ error: "You cannot cancel appointments for another facility." });
         }
 
-        // Completed appointments cannot be cancelled
         if (record.status && record.status.toLowerCase() === "completed") {
             return res.status(400).json({ error: "Completed appointments cannot be cancelled." });
         }
@@ -355,7 +357,7 @@ const cancelAppointment = async (req, res, next) => {
         }
 
         return res.status(200).json({
-            message: "Appointment Cancelled Successfully",
+            message: "Appointment cancelled successfully",
             data: mvccResult.record,
             strategyUsed: mvccResult.strategyUsed
         });
@@ -370,19 +372,21 @@ const deleteAppointment = async (req, res, next) => {
         let { appointment_id } = req.params;
 
         if (!appointment_id) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Appointment ID is required" });
         }
 
         const { resolvedId, record } = await resolveEntityId('appointment', appointment_id, req.query || req.body);
+
         if (!resolvedId || !record) {
-            return res.status(200).json({ message: "Appointment Already Deleted" });
+            return res.status(200).json({ message: "Appointment already deleted" });
         }
+
         if (req.user?.role === 'Mother') {
-            return res.status(403).json({ error: "Access Denied. Only clinical staff can delete appointment records." });
+            return res.status(403).json({ error: "Only clinical staff can delete appointment records." });
         }
 
         if (req.user?.role !== 'SystemAdmin' && record.facility_id && record.facility_id !== req.user?.facility_id) {
-            return res.status(403).json({ error: "Access Denied. You cannot delete appointments for another facility." });
+            return res.status(403).json({ error: "You cannot delete appointments for another facility." });
         }
 
         await prisma.appointment.delete({
@@ -390,7 +394,7 @@ const deleteAppointment = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Appointment Deleted Successfully",
+            message: "Appointment deleted successfully",
         });
 
     } catch (error) {

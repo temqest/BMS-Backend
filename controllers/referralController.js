@@ -7,26 +7,34 @@ const referralPinAttempts = new Map();
 
 function checkReferralLockout(refId) {
     const record = referralPinAttempts.get(refId);
+
     if (!record) return { isLocked: false };
+
     const now = Date.now();
+
     if (record.lockedUntil && now < record.lockedUntil) {
         const minutesLeft = Math.ceil((record.lockedUntil - now) / 60000);
         return { isLocked: true, minutesLeft };
     }
+
     if (record.lockedUntil && now >= record.lockedUntil) {
         referralPinAttempts.delete(refId);
         return { isLocked: false };
     }
+
     return { isLocked: false };
 }
 
 function recordFailedReferralPin(refId) {
     const now = Date.now();
     const record = referralPinAttempts.get(refId) || { count: 0 };
+
     record.count += 1;
+
     if (record.count >= 5) {
         record.lockedUntil = now + 15 * 60 * 1000;
     }
+
     referralPinAttempts.set(refId, record);
     return record;
 }
@@ -39,12 +47,15 @@ const generatePin = {
 
     async generateUniquePin() {
         const pin = Math.floor(100000 + Math.random() * 900000);
+
         const existingPin = await prisma.online_Referral.findFirst({
             where: { shared_pin: pin.toString() },
         });
+
         if (existingPin) {
             return this.generateUniquePin();
         }
+
         return pin.toString();
     },
 
@@ -53,12 +64,12 @@ const generatePin = {
 const createSecuredLink = {
 
     async generateLink() {
-
         const SITE_URL = process.env.SITE_URL || "http://localhost:5173";
         const unique_id = crypto.randomUUID();
 
         return `${SITE_URL}/referral/${unique_id}`;
     },
+
 };
 
 const createReferral = async (req, res, next) => {
@@ -72,15 +83,15 @@ const createReferral = async (req, res, next) => {
         } = req.body;
 
         if (!pregnancy_id || !from_facility_id || !reason) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Missing required fields, please check your input" });
         }
 
         if (!to_facility_id && !external_facility_name) {
-            return res.status(400).json({ error: "Either a destination facility or external facility name must be provided." });
+            return res.status(400).json({ error: "Please specify where this referral is going (select facility or enter external name)" });
         }
 
         if (req.user?.role !== 'SystemAdmin' && from_facility_id !== req.user?.facility_id) {
-            return res.status(403).json({ error: "Access Denied. Referrals must originate from your facility." });
+            return res.status(403).json({ error: "Access denied. Referrals must originate from your facility." });
         }
 
         const [pregnancy, fromFacility, toFacility] = await Promise.all([
@@ -90,13 +101,15 @@ const createReferral = async (req, res, next) => {
         ]);
 
         if (!pregnancy) {
-            return res.status(404).json({ error: "Pregnancy Record Doesn't Exist" });
+            return res.status(404).json({ error: "Pregnancy record not found" });
         }
+
         if (!fromFacility) {
-            return res.status(404).json({ error: "Origin Facility Doesn't Exist" });
+            return res.status(404).json({ error: "Origin facility not found" });
         }
+
         if (to_facility_id && !toFacility) {
-            return res.status(404).json({ error: "Destination Facility Doesn't Exist" });
+            return res.status(404).json({ error: "Destination facility not found" });
         }
 
         const secure_link = await createSecuredLink.generateLink();
@@ -115,7 +128,7 @@ const createReferral = async (req, res, next) => {
         });
 
         return res.status(201).json({
-            message: "Referral Successfully Created",
+            message: "Referral created successfully",
             data: newReferral,
         });
 
@@ -160,7 +173,7 @@ const getAllReferrals = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: "Referrals Retrieved Successfully",
+            message: "Referral records loaded",
             data: referrals,
         });
 
@@ -199,11 +212,11 @@ const getReferralById = async (req, res, next) => {
         });
 
         if (!referral) {
-            return res.status(404).json({ error: "Referral Not Found!" });
+            return res.status(404).json({ error: "Referral not found" });
         }
 
         return res.status(200).json({
-            message: "Referral Details Retrieved Successfully",
+            message: "Referral details fetched",
             data: referral,
         });
 
@@ -226,26 +239,27 @@ const updateReferral = async (req, res, next) => {
         } = req.body;
 
         if (!referral_id) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Missing referral ID" });
         }
 
         if (!(await validate.isOnlineReferralExist(referral_id))) {
-            return res.status(404).json({ error: "Referral Doesn't Exist!" });
+            return res.status(404).json({ error: "Referral record not found" });
         }
 
         if (pregnancy_id && !(await validate.isPregnancyExist(pregnancy_id))) {
-            return res.status(404).json({ error: "Pregnancy Record Doesn't Exist" });
+            return res.status(404).json({ error: "Pregnancy record not found" });
         }
 
         if (from_facility_id && !(await validate.isFacilityExist(from_facility_id))) {
-            return res.status(404).json({ error: "Origin Facility Doesn't Exist" });
+            return res.status(404).json({ error: "Origin facility not found" });
         }
 
         if (to_facility_id && !(await validate.isFacilityExist(to_facility_id))) {
-            return res.status(404).json({ error: "Destination Facility Doesn't Exist" });
+            return res.status(404).json({ error: "Destination facility not found" });
         }
 
         const { strategy, version, ...clientData } = req.body;
+
         const mvccResult = await updateWithMVCC('online_Referral', referral_id, { version, ...clientData }, {
             strategy,
             userId: req.user?.user_id || req.user?.id
@@ -253,13 +267,13 @@ const updateReferral = async (req, res, next) => {
 
         if (!mvccResult.resolved) {
             return res.status(409).json({
-                error: "Conflict detected requiring manual review",
+                error: "Conflict detected, manual review is needed",
                 details: mvccResult
             });
         }
 
         return res.status(200).json({
-            message: "Referral Updated Successfully",
+            message: "Referral updated",
             data: mvccResult.record,
             strategyUsed: mvccResult.strategyUsed
         });
@@ -275,7 +289,7 @@ const respondToReferral = async (req, res, next) => {
         const { status, response_notes, outcome, is_completed, strategy, version } = req.body;
 
         if (!referral_id || !status) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Missing required fields" });
         }
 
         const existingReferral = await prisma.online_Referral.findUnique({
@@ -283,21 +297,20 @@ const respondToReferral = async (req, res, next) => {
         });
 
         if (!existingReferral) {
-            return res.status(404).json({ error: "Referral Doesn't Exist!" });
+            return res.status(404).json({ error: "Referral record not found" });
         }
 
-        // Security check: only the destination facility or a SystemAdmin can accept, reject, or complete a referral.
-        // Origin facility can only cancel/withdraw an outgoing referral.
         const userFacilityId = req.user?.facility_id;
         const isSystemAdmin = req.user?.role === 'SystemAdmin';
         const isDestination = Boolean(userFacilityId && existingReferral.to_facility_id === userFacilityId);
         const isOrigin = Boolean(userFacilityId && existingReferral.from_facility_id === userFacilityId);
 
         const normalizedStatus = status.toLowerCase();
+
         if (['accepted', 'rejected', 'completed'].includes(normalizedStatus)) {
             if (!isSystemAdmin && !isDestination) {
                 return res.status(403).json({
-                    error: "Access Denied. Only the receiving destination facility can accept, decline, or complete this referral."
+                    error: "Access denied. Only the receiving destination facility can accept, decline or complete this referral."
                 });
             }
         }
@@ -316,13 +329,13 @@ const respondToReferral = async (req, res, next) => {
 
         if (!mvccResult.resolved) {
             return res.status(409).json({
-                error: "Conflict detected requiring manual review",
+                error: "Conflict detected, manual review is needed",
                 details: mvccResult
             });
         }
 
         return res.status(200).json({
-            message: "Referral Feedback/Response Recorded Successfully",
+            message: "Referral response saved successfully",
             data: mvccResult.record,
             strategyUsed: mvccResult.strategyUsed
         });
@@ -337,7 +350,7 @@ const deleteReferral = async (req, res, next) => {
         const { referral_id } = req.params;
 
         if (!referral_id) {
-            return res.status(400).json({ error: "Missing Required Fields!" });
+            return res.status(400).json({ error: "Missing referral ID" });
         }
 
         try {
@@ -346,13 +359,13 @@ const deleteReferral = async (req, res, next) => {
             });
         } catch (err) {
             if (err.code === 'P2025') {
-                return res.status(404).json({ error: "Referral Doesn't Exist!" });
+                return res.status(404).json({ error: "Referral record not found" });
             }
             throw err;
         }
 
         return res.status(200).json({
-            message: "Referral Deleted Successfully",
+            message: "Referral deleted",
         });
 
     } catch (error) {
@@ -361,24 +374,22 @@ const deleteReferral = async (req, res, next) => {
 };
 
 const getReferralByFacility = async (req, res, next) => {
-
     try {
+        const { facility_id } = req.params;
 
-        const {facility_id} = req.params;
-
-        if(!facility_id) {
-            return res.status(400).json({error : "Missing Required Fields!"});
+        if (!facility_id) {
+            return res.status(400).json({ error: "Missing facility ID" });
         }
 
-        if(!(await validate.isFacilityExist(facility_id))) {
-            return res.status(404).json({error : "Facility Doesn't Exist!"});
+        if (!(await validate.isFacilityExist(facility_id))) {
+            return res.status(404).json({ error: "Facility not found" });
         }
 
         const referralList = await prisma.online_Referral.findMany({
-            where : {
+            where: {
                 OR: [
-                    { from_facility_id : facility_id },
-                    { to_facility_id : facility_id }
+                    { from_facility_id: facility_id },
+                    { to_facility_id: facility_id }
                 ]
             },
             include: {
@@ -406,31 +417,29 @@ const getReferralByFacility = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message : "Referral List Retrieved Successfully",
-            data : referralList
+            message: "Referrals list retrieved",
+            data: referralList
         });
-        
+
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const getAllReferralByPregnancy = async (req, res, next) => {
-
     try {
+        const { pregnancy_id } = req.params;
 
-        const {pregnancy_id} = req.params;
-
-        if(!pregnancy_id) {
-            return res.status(400).json({error : "Missing Required Fields!"});
+        if (!pregnancy_id) {
+            return res.status(400).json({ error: "Missing pregnancy ID" });
         }
 
-        if(!(await validate.isPregnancyExist(pregnancy_id))) {
-            return res.status(404).json({error : "Pregnancy Record Doesn't Exist"});
+        if (!(await validate.isPregnancyExist(pregnancy_id))) {
+            return res.status(404).json({ error: "Pregnancy record not found" });
         }
 
         const referralList = await prisma.online_Referral.findMany({
-            where : {pregnancy_id : pregnancy_id},
+            where: { pregnancy_id: pregnancy_id },
             include: {
                 pregnancy: {
                     include: {
@@ -456,14 +465,14 @@ const getAllReferralByPregnancy = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message : "Referral List Retrieved Successfully",
-            data : referralList
+            message: "Referrals list retrieved",
+            data: referralList
         });
 
     } catch (error) {
         return next(error);
     }
-}
+};
 
 const getPublicReferral = async (req, res, next) => {
     try {
@@ -471,10 +480,9 @@ const getPublicReferral = async (req, res, next) => {
         const { pin } = req.query;
 
         if (!identifier) {
-            return res.status(400).json({ error: "Referral identifier is required." });
+            return res.status(400).json({ error: "Referral identifier is required" });
         }
 
-        // Find referral by referral_id or matching secure_link ending with identifier
         let referral = await prisma.online_Referral.findFirst({
             where: {
                 OR: [
@@ -530,15 +538,15 @@ const getPublicReferral = async (req, res, next) => {
         });
 
         if (!referral) {
-            return res.status(404).json({ error: "Referral record not found or link has expired." });
+            return res.status(404).json({ error: "Referral record not found or link might have expired" });
         }
 
         const lockout = checkReferralLockout(referral.referral_id);
+
         if (lockout.isLocked) {
-            return res.status(429).json({ error: `Too many failed PIN attempts. Referral link locked for ${lockout.minutesLeft} more minute(s).` });
+            return res.status(429).json({ error: `Too many wrong PIN attempts. Link locked for ${lockout.minutesLeft} more minute(s).` });
         }
 
-        // Check if referral requires PIN protection
         const isPinRequired = Boolean(referral.shared_pin);
         const providedPin = (pin || "").toString().trim();
         const isPinValid = !isPinRequired || (providedPin && providedPin === referral.shared_pin.toString().trim());
@@ -546,13 +554,12 @@ const getPublicReferral = async (req, res, next) => {
         if (isPinRequired && providedPin && !isPinValid) {
             const attempt = recordFailedReferralPin(referral.referral_id);
             if (attempt.count >= 5) {
-                return res.status(429).json({ error: "Too many incorrect PIN attempts. Link locked for 15 minutes." });
+                return res.status(429).json({ error: "Too many wrong PIN attempts. Link is locked for 15 minutes." });
             }
         } else if (isPinValid) {
             clearReferralPin(referral.referral_id);
         }
 
-        // Construct safe response
         const motherUser = referral.pregnancy?.mother?.user;
         const motherDetails = referral.pregnancy?.mother;
         const latestVisit = referral.pregnancy?.prenatalVisits?.[0];
@@ -637,7 +644,7 @@ const getPublicReferral = async (req, res, next) => {
         }
 
         return res.status(200).json({
-            message: "Public Referral Retrieved Successfully",
+            message: "Public referral retrieved",
             data: publicData
         });
 
@@ -652,15 +659,15 @@ const respondPublicReferral = async (req, res, next) => {
         const { pin, status, response_notes, outcome } = req.body;
 
         if (!identifier || !status) {
-            return res.status(400).json({ error: "Missing required fields (status is required)." });
+            return res.status(400).json({ error: "Missing required fields, status is required" });
         }
 
         const validStatuses = ["pending", "accepted", "rejected", "completed", "transferred"];
+
         if (!validStatuses.includes(status.toLowerCase())) {
-            return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+            return res.status(400).json({ error: `Invalid status option. Must be one of: ${validStatuses.join(", ")}` });
         }
 
-        // Find referral by referral_id or matching secure_link ending with identifier
         let referral = await prisma.online_Referral.findFirst({
             where: {
                 OR: [
@@ -671,13 +678,12 @@ const respondPublicReferral = async (req, res, next) => {
         });
 
         if (!referral) {
-            return res.status(404).json({ error: "Referral record not found." });
+            return res.status(404).json({ error: "Referral record not found" });
         }
 
-        // Validate PIN if configured
         if (referral.shared_pin) {
             if (!pin || pin.toString().trim() !== referral.shared_pin.toString().trim()) {
-                return res.status(403).json({ error: "Invalid security PIN. Action unauthorized." });
+                return res.status(403).json({ error: "Invalid security PIN, action unauthorized" });
             }
         }
 
@@ -694,7 +700,7 @@ const respondPublicReferral = async (req, res, next) => {
         });
 
         return res.status(200).json({
-            message: `Referral status successfully updated to ${status}.`,
+            message: `Referral status updated to ${status}`,
             data: updated
         });
 
@@ -717,4 +723,3 @@ module.exports = {
     getPublicReferral,
     respondPublicReferral,
 };
-
