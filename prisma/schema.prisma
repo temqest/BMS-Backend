@@ -25,6 +25,7 @@ model Facility {
   onlineReferralsTo   Online_Referral[] @relation("ToFacility")
   appointments        Appointment[]
   motherEnrollments   Mother_Facility_Enrollment[]
+  facilityDocuments   Facility_Document[]
 }
 
 //User schema
@@ -76,6 +77,7 @@ model Mother {
   pregnancies         Pregnancy[]
   shareLinks          Mother_Share_Link[]
   facilityEnrollments Mother_Facility_Enrollment[]
+  facilityDocuments   Facility_Document[]
 }
 
 //Mother-Facility Enrollment Schema (Many-to-Many Multi-Facility Care)
@@ -434,5 +436,31 @@ model Mother_Share_Link {
   mother Mother @relation(fields: [mother_id], references: [mother_id], onDelete: Cascade)
 
   @@index([mother_id])
+}
+
+// Facility & EHR Document Schema
+model Facility_Document {
+  document_id    String    @id @default(uuid())
+  facility_id    String
+  mother_id      String?
+  title          String
+  category       String    @default("Clinical Protocols")
+  patient_name   String?   @default("Facility General")
+  security_level String?   @default("Confidential")
+  format         String?   @default("PDF")
+  size           String?   @default("1.0 MB")
+  file_url       String?
+  uploaded_by    String?   @default("Healthcare Staff")
+  sync_status    String?   @default("synced")
+  version        Int       @default(1)
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @default(now()) @updatedAt
+
+  facility Facility @relation(fields: [facility_id], references: [facility_id], onDelete: Cascade)
+  mother   Mother?  @relation(fields: [mother_id], references: [mother_id], onDelete: SetNull)
+
+  @@index([facility_id])
+  @@index([mother_id])
+  @@index([category])
 }
 

@@ -44,6 +44,7 @@ const { apiLimiter } = require('./middleware/rateLimmiter');
 
 const sendRouter = require('./router/sendRouter');
 const userRouter = require('./router/userRouter');
+const ehrRouter = require('./router/ehrRouter');
 
 const path = require('path');
 
@@ -114,6 +115,8 @@ app.use('/api/v1/prenatal-visit', prenatalVisitRouter);
 app.use('/api/v1/supplement', supplementRouter)
 
 app.use('/api/v1/lab-screening', labScreeningRouter)
+
+app.use('/api/v1/ehr', ehrRouter);
 
 app.use('/api/v1/delivery-outcome', deliveryOutcomeRouter)
 

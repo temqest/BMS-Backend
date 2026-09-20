@@ -229,7 +229,7 @@ const searchFacility = async (req, res, next) => {
 const updateFacility = async (req, res, next) => {
     try {
         const facility_id = req.params.facility_id || req.body.facility_id || req.query.facility_id || req.user?.facility_id;
-        const { facility_name, contact_number, address, email, type } = req.body;
+        const { facility_name, contact_number, address, email, type, facility_profile_url } = req.body;
 
         if (!facility_id) {
             return res.status(400).json({ error: "Facility ID is required" });
@@ -251,6 +251,7 @@ const updateFacility = async (req, res, next) => {
                 contact_number: contact_number,
                 email: email,
                 type: type,
+                facility_profile_url: facility_profile_url !== undefined ? facility_profile_url : isFacilityExist.facility_profile_url,
             },
         });
 
