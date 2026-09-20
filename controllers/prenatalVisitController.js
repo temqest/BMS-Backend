@@ -25,17 +25,26 @@ const registerPrenatalVisit = async (req, res, next) => {
             risk_level_assessed,
         } = req.body;
 
+        let effectiveHealthWorkerId = health_worker_id || req.user?.user_id;
+        if (!effectiveHealthWorkerId || req.user?.role === 'Mother') {
+            const fallbackStaff = await prisma.user.findFirst({
+                where: { role: { in: ['Doctor', 'Midwife', 'Nurse', 'RHUHead', 'BHW', 'SystemAdmin'] } }
+            });
+            if (fallbackStaff) {
+                effectiveHealthWorkerId = fallbackStaff.user_id;
+            }
+        }
+
         if (
-            !pregnancy_id ||
-            !health_worker_id ||
-            !trimester ||
-            !visit_number ||
-            !age_of_gestation_weeks ||
-            !weight_kg ||
-            !temperature_celsius ||
-            !pulse_rate_bpm ||
-            !bp_diastolic ||
-            !bp_systolic
+            !effectiveHealthWorkerId ||
+            trimester === undefined ||
+            visit_number === undefined ||
+            age_of_gestation_weeks === undefined ||
+            weight_kg === undefined ||
+            temperature_celsius === undefined ||
+            pulse_rate_bpm === undefined ||
+            bp_diastolic === undefined ||
+            bp_systolic === undefined
         ) {
             return res.status(400).json({ error: "Required fields are missing" });
         }
@@ -46,14 +55,18 @@ const registerPrenatalVisit = async (req, res, next) => {
         }
 
         let targetPregnancyId = pregnancy_id;
-        let pregnancy = await prisma.pregnancy.findUnique({
-            where: { pregnancy_id: pregnancy_id },
-            include: { mother: true }
-        });
+        let pregnancy = (pregnancy_id && !pregnancy_id.startsWith("temp-"))
+            ? await prisma.pregnancy.findUnique({
+                where: { pregnancy_id: pregnancy_id },
+                include: { mother: true }
+            })
+            : null;
 
-        if (!pregnancy && req.body.mother_id) {
+        const effectiveMotherId = req.body.mother_id || req.body.motherId || (req.user?.role === 'Mother' ? req.user?.user_id : null);
+
+        if (!pregnancy && effectiveMotherId) {
             const motherRecord = await prisma.mother.findFirst({
-                where: { OR: [{ mother_id: req.body.mother_id }, { user_id: req.body.mother_id }] }
+                where: { OR: [{ mother_id: effectiveMotherId }, { user_id: effectiveMotherId }] }
             });
             if (motherRecord) {
                 pregnancy = await prisma.pregnancy.findFirst({

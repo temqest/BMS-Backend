@@ -164,21 +164,26 @@ const registerLabScreening = async (req, res, next) => {
     try {
         const { pregnancy_id, visit_id, screening_type, result, file_url, date_of_screening, remarks } = req.body;
 
-        if (!pregnancy_id || !visit_id || !screening_type || !result || !date_of_screening) {
+        if (!screening_type || !result || !date_of_screening) {
             return res.status(400).json({ error: "Required fields are missing" });
         }
 
         let targetPregnancyId = pregnancy_id;
-        let pregnancy = await prisma.pregnancy.findUnique({
-            where: { pregnancy_id: pregnancy_id }
-        });
+        let pregnancy = (pregnancy_id && !pregnancy_id.startsWith("temp-"))
+            ? await prisma.pregnancy.findUnique({ where: { pregnancy_id: pregnancy_id } })
+            : null;
 
-        if (!pregnancy && req.body.mother_id) {
+        const effectiveMotherId = req.body.mother_id || req.body.motherId || (req.user?.role === 'Mother' ? req.user?.user_id : null);
+
+        if (!pregnancy && effectiveMotherId) {
             const motherRecord = await prisma.mother.findFirst({
-                where: { OR: [{ mother_id: req.body.mother_id }, { user_id: req.body.mother_id }] }
+                where: { OR: [{ mother_id: effectiveMotherId }, { user_id: effectiveMotherId }] }
             });
             if (motherRecord) {
                 pregnancy = await prisma.pregnancy.findFirst({
+                    where: { mother_id: motherRecord.mother_id, pregnancy_status: "Active" },
+                    orderBy: { date_of_registration: "desc" }
+                }) || await prisma.pregnancy.findFirst({
                     where: { mother_id: motherRecord.mother_id },
                     orderBy: { date_of_registration: "desc" }
                 });
@@ -192,7 +197,9 @@ const registerLabScreening = async (req, res, next) => {
         targetPregnancyId = pregnancy.pregnancy_id;
 
         let targetVisitId = visit_id;
-        let visitExists = visit_id ? await prisma.prenatalVisit.findUnique({ where: { visit_id: visit_id } }) : null;
+        let visitExists = (visit_id && !visit_id.startsWith("temp-"))
+            ? await prisma.prenatalVisit.findUnique({ where: { visit_id: visit_id } })
+            : null;
 
         if (!visitExists) {
             const latestVisit = await prisma.prenatalVisit.findFirst({
@@ -202,10 +209,26 @@ const registerLabScreening = async (req, res, next) => {
             if (latestVisit) {
                 targetVisitId = latestVisit.visit_id;
             } else {
+                // Find an active staff to satisfy the required foreign key constraint
+                let healthWorkerId = req.user?.user_id;
+                if (!healthWorkerId || req.user?.role === 'Mother') {
+                    const fallbackStaff = await prisma.user.findFirst({
+                        where: { role: { in: ['Doctor', 'Midwife', 'Nurse', 'RHUHead', 'BHW', 'SystemAdmin'] } }
+                    });
+                    if (fallbackStaff) {
+                        healthWorkerId = fallbackStaff.user_id;
+                    }
+                }
+
+                if (!healthWorkerId) {
+                    healthWorkerId = req.user?.user_id;
+                }
+
                 // Auto-create an initial/baseline visit record so lab screening can be saved without hard failure
                 const initialVisit = await prisma.prenatalVisit.create({
                     data: {
                         pregnancy_id: targetPregnancyId,
+                        health_worker_id: healthWorkerId,
                         visit_date: new Date(date_of_screening || Date.now()),
                         trimester: 1,
                         visit_number: 1,

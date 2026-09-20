@@ -21,7 +21,9 @@ const registerPregnancy = async (req, res, next) => {
 
         let targetMotherId = motherId || req.body.mother_id;
 
-        if (!targetMotherId || !gravida || !parity || !age_group || !lmp_date || !pregnancy_status) {
+        const isNullOrUndefined = (val) => val === undefined || val === null || (typeof val === 'string' && val.trim() === '');
+
+        if (!targetMotherId || isNullOrUndefined(gravida) || isNullOrUndefined(parity) || !age_group || !lmp_date || !pregnancy_status) {
             return res.status(400).json({ error: "Required fields are missing" });
         }
 

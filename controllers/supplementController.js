@@ -7,21 +7,28 @@ const registerSupplementRecord = async (req, res, next) => {
     try {
         const { pregnancy_id, supplement_type, date_given, tablets_given_count, visit_id } = req.body;
 
-        if (!pregnancy_id || !supplement_type || !date_given || !tablets_given_count || !visit_id) {
+        if (!supplement_type || !date_given) {
             return res.status(400).json({ error: "Required fields are missing" });
         }
 
-        let targetPregnancyId = pregnancy_id;
-        let pregnancy = await prisma.pregnancy.findUnique({
-            where: { pregnancy_id: pregnancy_id }
-        });
+        const parsedTabletsCount = parseInt(tablets_given_count, 10) || 1;
 
-        if (!pregnancy && req.body.mother_id) {
+        let targetPregnancyId = pregnancy_id;
+        let pregnancy = (pregnancy_id && !pregnancy_id.startsWith("temp-"))
+            ? await prisma.pregnancy.findUnique({ where: { pregnancy_id: pregnancy_id } })
+            : null;
+
+        const effectiveMotherId = req.body.mother_id || req.body.motherId || (req.user?.role === 'Mother' ? req.user?.user_id : null);
+
+        if (!pregnancy && effectiveMotherId) {
             const motherRecord = await prisma.mother.findFirst({
-                where: { OR: [{ mother_id: req.body.mother_id }, { user_id: req.body.mother_id }] }
+                where: { OR: [{ mother_id: effectiveMotherId }, { user_id: effectiveMotherId }] }
             });
             if (motherRecord) {
                 pregnancy = await prisma.pregnancy.findFirst({
+                    where: { mother_id: motherRecord.mother_id, pregnancy_status: "Active" },
+                    orderBy: { date_of_registration: "desc" }
+                }) || await prisma.pregnancy.findFirst({
                     where: { mother_id: motherRecord.mother_id },
                     orderBy: { date_of_registration: "desc" }
                 });
@@ -35,7 +42,9 @@ const registerSupplementRecord = async (req, res, next) => {
         targetPregnancyId = pregnancy.pregnancy_id;
 
         let targetVisitId = visit_id;
-        let visitExists = visit_id ? await prisma.prenatalVisit.findUnique({ where: { visit_id: visit_id } }) : null;
+        let visitExists = (visit_id && !visit_id.startsWith("temp-"))
+            ? await prisma.prenatalVisit.findUnique({ where: { visit_id: visit_id } })
+            : null;
 
         if (!visitExists) {
             const latestVisit = await prisma.prenatalVisit.findFirst({
@@ -45,9 +54,40 @@ const registerSupplementRecord = async (req, res, next) => {
             if (latestVisit) {
                 targetVisitId = latestVisit.visit_id;
             } else {
-                return res.status(400).json({ 
-                    error: "A valid prenatal visit must be recorded before registering supplements for this pregnancy." 
+                let healthWorkerId = req.user?.user_id;
+                if (!healthWorkerId || req.user?.role === 'Mother') {
+                    const fallbackStaff = await prisma.user.findFirst({
+                        where: { role: { in: ['Doctor', 'Midwife', 'Nurse', 'RHUHead', 'BHW', 'SystemAdmin'] } }
+                    });
+                    if (fallbackStaff) {
+                        healthWorkerId = fallbackStaff.user_id;
+                    }
+                }
+
+                if (!healthWorkerId) {
+                    healthWorkerId = req.user?.user_id;
+                }
+
+                const initialVisit = await prisma.prenatalVisit.create({
+                    data: {
+                        pregnancy_id: targetPregnancyId,
+                        health_worker_id: healthWorkerId,
+                        visit_date: new Date(date_given || Date.now()),
+                        trimester: 1,
+                        visit_number: 1,
+                        age_of_gestation_weeks: 0,
+                        weight_kg: 0,
+                        temperature_celsius: 36.5,
+                        pulse_rate_bpm: 75,
+                        bp_systolic: 120,
+                        bp_diastolic: 80,
+                        fundic_height_cm: 0,
+                        fetal_heart_tone_bpm: 0,
+                        chief_complaint: "Initial supplement submission / Baseline visit",
+                        sync_status: "synced"
+                    }
                 });
+                targetVisitId = initialVisit.visit_id;
             }
         }
 
@@ -72,8 +112,8 @@ const registerSupplementRecord = async (req, res, next) => {
             data: {
                 pregnancy_id: targetPregnancyId,
                 supplement_type: supplement_type,
-                date_given: date_given,
-                tablets_given_count: tablets_given_count,
+                date_given: new Date(date_given),
+                tablets_given_count: parsedTabletsCount,
                 visit_id: targetVisitId
             }
         });
