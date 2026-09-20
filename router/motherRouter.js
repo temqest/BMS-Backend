@@ -16,12 +16,14 @@ const {
     assignFacilityByCode,
     getCompositeMotherProfile,
     enrollMotherInFacility,
-    getMotherFacilities
+    getMotherFacilities,
+    assignStaffToMother
 } = require("../controllers/motherController");
 const { verifyToken, checkUserRole } = require("../middleware/authMiddleware");
 const { upload } = require("../util/storage");
 
 const sysAdminOnly = ['SystemAdmin'];
+const adminRoles = ['SystemAdmin', 'Admin'];
 const staffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff'];
 const allUserRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff', 'Mother'];
 const motherOnly = ['Mother'];
@@ -40,6 +42,8 @@ router.post('/self-register', selfRegisterMother);
 router.post('/assign-facility', verifyToken, checkUserRole(staffRoles), assignFacilityByCode);
 router.post('/avatar/upload', verifyToken, checkUserRole(allUserRoles), upload.single('file'), uploadAvatar);
 
+router.put('/assign-staff/:mother_id', verifyToken, checkUserRole(adminRoles), assignStaffToMother);
+router.put('/:mother_id/assign-staff', verifyToken, checkUserRole(adminRoles), assignStaffToMother);
 router.put('/update/:mother_id', verifyToken, checkUserRole(staffRoles), updateMother);
 router.put('/deactivate/:mother_id', verifyToken, checkUserRole(staffRoles), softDeleteMother);
 router.delete('/delete/soft/:mother_id', verifyToken, checkUserRole(staffRoles), softDeleteMother);

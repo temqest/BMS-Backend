@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 
 const checkOtp = require('../services/otpServices');
+const { logAuditTrail } = require('../services/auditService');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -30,6 +31,18 @@ const SAFE_USER_SELECT = {
     sync_status: true,
     version: true,
     updated_at: true,
+};
+
+const SAFE_WORKER_SELECT = {
+    user_id: true,
+    facility_id: true,
+    first_name: true,
+    middle_name: true,
+    last_name: true,
+    role: true,
+    phone_number: true,
+    email: true,
+    profile_url: true,
 };
 
 const SAFE_IMAGE_MIMES = {
@@ -196,6 +209,10 @@ const registerMother = async (req, res, next) => {
             });
         }
 
+        const creatorId = req.user?.user_id || null;
+        const isHealthcareStaff = req.user?.role && !['Mother', 'Admin', 'SystemAdmin'].includes(req.user.role);
+        const assignedWorkerId = req.body.assigned_worker_id || (isHealthcareStaff ? req.user.user_id : null);
+
         const result = await prisma.$transaction(async (prismaClient) => {
             const user = await prismaClient.user.create({
                 data: {
@@ -219,6 +236,8 @@ const registerMother = async (req, res, next) => {
                     age: calculateAge(birth_date),
                     civil_status: civil_status,
                     blood_type: blood_type,
+                    assigned_worker_id: assignedWorkerId,
+                    created_by_id: creatorId,
                     sync_status: "synced",
                 }
             });
@@ -586,14 +605,116 @@ const hardDeleteMother = async (req, res, next) => {
     }
 };
 
+const assignStaffToMother = async (req, res, next) => {
+    try {
+        const { mother_id } = req.params;
+        const { assigned_worker_id, notes } = req.body;
+
+        if (!mother_id) {
+            return res.status(400).json({ error: "Mother ID is required" });
+        }
+
+        const isSysAdmin = req.user?.role === 'SystemAdmin';
+        const isAdmin = req.user?.role === 'Admin';
+
+        if (!isSysAdmin && !isAdmin) {
+            return res.status(403).json({ error: "Only administrators can assign healthcare staff to mothers" });
+        }
+
+        const motherRecord = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            },
+            include: { user: true, assignedWorker: true }
+        });
+
+        if (!motherRecord) {
+            return res.status(404).json({ error: "Mother record not found" });
+        }
+
+        if (!isSysAdmin && motherRecord.user?.facility_id && motherRecord.user.facility_id !== req.user?.facility_id) {
+            return res.status(403).json({ error: "Cannot assign staff for mothers belonging to another facility" });
+        }
+
+        let assignedStaffUser = null;
+        if (assigned_worker_id) {
+            assignedStaffUser = await prisma.user.findUnique({
+                where: { user_id: assigned_worker_id }
+            });
+
+            if (!assignedStaffUser) {
+                return res.status(404).json({ error: "Assigned staff member not found" });
+            }
+
+            if (assignedStaffUser.role === 'Mother') {
+                return res.status(400).json({ error: "Cannot assign a patient/mother account as a healthcare staff worker" });
+            }
+
+            if (!isSysAdmin && assignedStaffUser.facility_id && assignedStaffUser.facility_id !== req.user?.facility_id) {
+                return res.status(403).json({ error: "Staff member does not belong to your facility" });
+            }
+        }
+
+        const previousAssignedWorkerId = motherRecord.assigned_worker_id;
+
+        const updatedMother = await prisma.mother.update({
+            where: { mother_id: motherRecord.mother_id },
+            data: {
+                assigned_worker_id: assigned_worker_id || null,
+                updated_at: new Date()
+            },
+            include: {
+                user: { select: SAFE_USER_SELECT },
+                assignedWorker: { select: SAFE_WORKER_SELECT },
+                creator: { select: SAFE_WORKER_SELECT }
+            }
+        });
+
+        await logAuditTrail({
+            userId: req.user.user_id,
+            tableName: 'Mother',
+            actionType: 'ASSIGN_STAFF',
+            previousState: { assigned_worker_id: previousAssignedWorkerId },
+            newState: { assigned_worker_id: assigned_worker_id || null, notes }
+        });
+
+        if (assigned_worker_id && assignedStaffUser) {
+            const motherName = `${motherRecord.user?.first_name || ''} ${motherRecord.user?.last_name || ''}`.trim() || 'Patient';
+            await prisma.notification.create({
+                data: {
+                    user_id: assigned_worker_id,
+                    notification_type: 'PATIENT_ASSIGNMENT',
+                    notification_message: `You have been assigned as primary care provider for ${motherName}.`,
+                    notification_date: new Date()
+                }
+            }).catch(() => null);
+        }
+
+        return res.status(200).json({
+            message: assigned_worker_id ? "Healthcare staff assigned successfully" : "Assigned staff cleared successfully",
+            result: updatedMother
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
 const getAllActiveMother = async (req, res, next) => {
     try {
         const staffFacilityId = req.user?.facility_id;
         const isSysAdmin = req.user?.role === 'SystemAdmin';
+        const isAdmin = req.user?.role === 'Admin';
+        const currentUserId = req.user?.user_id;
 
-        const whereCondition = isSysAdmin
-            ? { user: { role: "Mother", is_active: true } }
-            : {
+        let whereCondition;
+        if (isSysAdmin) {
+            whereCondition = { user: { role: "Mother", is_active: true } };
+        } else if (isAdmin) {
+            whereCondition = {
                 user: { role: "Mother", is_active: true },
                 OR: [
                     { user: { facility_id: staffFacilityId } },
@@ -607,11 +728,39 @@ const getAllActiveMother = async (req, res, next) => {
                     }
                 ]
             };
+        } else {
+            whereCondition = {
+                user: { role: "Mother", is_active: true },
+                AND: [
+                    {
+                        OR: [
+                            { user: { facility_id: staffFacilityId } },
+                            {
+                                facilityEnrollments: {
+                                    some: {
+                                        facility_id: staffFacilityId,
+                                        status: "Active"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        OR: [
+                            { assigned_worker_id: currentUserId },
+                            { created_by_id: currentUserId }
+                        ]
+                    }
+                ]
+            };
+        }
 
         const allActiveMothers = await prisma.mother.findMany({
             where: whereCondition,
             include: {
                 user: { select: SAFE_USER_SELECT },
+                assignedWorker: { select: SAFE_WORKER_SELECT },
+                creator: { select: SAFE_WORKER_SELECT },
                 facilityEnrollments: {
                     include: {
                         facility: {
@@ -676,6 +825,8 @@ const searchMotherByID = async (req, res, next) => {
             },
             include: {
                 user: { select: SAFE_USER_SELECT },
+                assignedWorker: { select: SAFE_WORKER_SELECT },
+                creator: { select: SAFE_WORKER_SELECT },
                 facilityEnrollments: {
                     include: {
                         facility: {
@@ -727,6 +878,15 @@ const searchMotherByID = async (req, res, next) => {
             }
         }
 
+        if (req.user?.role !== 'SystemAdmin' && req.user?.role !== 'Admin') {
+            const isAssigned = searchMotherResult.assigned_worker_id === req.user?.user_id;
+            const isCreator = searchMotherResult.created_by_id === req.user?.user_id;
+            const isSelf = searchMotherResult.user_id === req.user?.user_id;
+            if (!isAssigned && !isCreator && !isSelf) {
+                return res.status(403).json({ error: "Access denied. You can only view mothers assigned to your care." });
+            }
+        }
+
         return res.status(200).json({
             message: "Mother found",
             result: searchMotherResult
@@ -764,6 +924,8 @@ const getCompositeMotherProfile = async (req, res, next) => {
                         }
                     }
                 },
+                assignedWorker: { select: SAFE_WORKER_SELECT },
+                creator: { select: SAFE_WORKER_SELECT },
                 facilityEnrollments: {
                     include: {
                         facility: {
@@ -828,6 +990,15 @@ const getCompositeMotherProfile = async (req, res, next) => {
             }
         }
 
+        if (req.user?.role !== 'SystemAdmin' && req.user?.role !== 'Admin') {
+            const isAssigned = motherProfile.assigned_worker_id === req.user?.user_id;
+            const isCreator = motherProfile.created_by_id === req.user?.user_id;
+            const isSelf = motherProfile.user_id === req.user?.user_id;
+            if (!isAssigned && !isCreator && !isSelf) {
+                return res.status(403).json({ error: "Access denied. You can only view details of mothers assigned to your care." });
+            }
+        }
+
         const canonicalMotherId = motherProfile.mother_id;
         const allPregnancies = motherProfile.pregnancies || [];
         const allVisits = allPregnancies.flatMap(p => (p.prenatalVisits || []).map(v => ({ ...v, mother_id: canonicalMotherId })));
@@ -856,10 +1027,14 @@ const getAllMother = async (req, res, next) => {
     try {
         const staffFacilityId = req.user?.facility_id;
         const isSysAdmin = req.user?.role === 'SystemAdmin';
+        const isAdmin = req.user?.role === 'Admin';
+        const currentUserId = req.user?.user_id;
 
-        const whereCondition = isSysAdmin
-            ? { user: { role: "Mother" } }
-            : {
+        let whereCondition;
+        if (isSysAdmin) {
+            whereCondition = { user: { role: "Mother" } };
+        } else if (isAdmin) {
+            whereCondition = {
                 user: { role: "Mother" },
                 OR: [
                     { user: { facility_id: staffFacilityId } },
@@ -873,11 +1048,39 @@ const getAllMother = async (req, res, next) => {
                     }
                 ]
             };
+        } else {
+            whereCondition = {
+                user: { role: "Mother" },
+                AND: [
+                    {
+                        OR: [
+                            { user: { facility_id: staffFacilityId } },
+                            {
+                                facilityEnrollments: {
+                                    some: {
+                                        facility_id: staffFacilityId,
+                                        status: "Active"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        OR: [
+                            { assigned_worker_id: currentUserId },
+                            { created_by_id: currentUserId }
+                        ]
+                    }
+                ]
+            };
+        }
 
         const allMothers = await prisma.mother.findMany({
             where: whereCondition,
             include: {
                 user: { select: SAFE_USER_SELECT },
+                assignedWorker: { select: SAFE_WORKER_SELECT },
+                creator: { select: SAFE_WORKER_SELECT },
                 facilityEnrollments: {
                     include: {
                         facility: {
@@ -922,8 +1125,13 @@ const getAllActiveMotherByFacility = async (req, res, next) => {
             return res.status(403).json({ error: "Cannot view mothers from another facility." });
         }
 
-        const facilityMothers = await prisma.mother.findMany({
-            where: {
+        const isSysAdmin = req.user?.role === 'SystemAdmin';
+        const isAdmin = req.user?.role === 'Admin';
+        const currentUserId = req.user?.user_id;
+
+        let whereCondition;
+        if (isSysAdmin || isAdmin) {
+            whereCondition = {
                 user: {
                     role: "Mother",
                     is_active: true
@@ -939,9 +1147,43 @@ const getAllActiveMotherByFacility = async (req, res, next) => {
                         }
                     }
                 ]
-            },
+            };
+        } else {
+            whereCondition = {
+                user: {
+                    role: "Mother",
+                    is_active: true
+                },
+                AND: [
+                    {
+                        OR: [
+                            { user: { facility_id: facility_id } },
+                            {
+                                facilityEnrollments: {
+                                    some: {
+                                        facility_id: facility_id,
+                                        status: "Active"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        OR: [
+                            { assigned_worker_id: currentUserId },
+                            { created_by_id: currentUserId }
+                        ]
+                    }
+                ]
+            };
+        }
+
+        const facilityMothers = await prisma.mother.findMany({
+            where: whereCondition,
             include: {
                 user: { select: SAFE_USER_SELECT },
+                assignedWorker: { select: SAFE_WORKER_SELECT },
+                creator: { select: SAFE_WORKER_SELECT },
                 facilityEnrollments: {
                     include: {
                         facility: {
@@ -983,6 +1225,12 @@ const getProfile = async (req, res, next) => {
                         ...SAFE_USER_SELECT,
                         facility: true
                     }
+                },
+                assignedWorker: {
+                    select: SAFE_WORKER_SELECT
+                },
+                creator: {
+                    select: SAFE_WORKER_SELECT
                 },
                 pregnancies: {
                     orderBy: { date_of_registration: "desc" },
@@ -1370,5 +1618,6 @@ module.exports = {
     assignFacilityByCode,
     getCompositeMotherProfile,
     enrollMotherInFacility,
-    getMotherFacilities
+    getMotherFacilities,
+    assignStaffToMother
 };

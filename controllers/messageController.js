@@ -28,7 +28,49 @@ const createMessage = async (req, res, next) => {
         message_type = message_type || "text";
         message_date = message_date ? new Date(message_date) : new Date();
 
-        if (!receiver_id) {
+        if (senderUser.role === 'Mother') {
+            const motherRecord = await prisma.mother.findUnique({
+                where: { user_id: sender_id },
+                include: { assignedWorker: true }
+            });
+
+            if (motherRecord?.assigned_worker_id) {
+                receiver_id = motherRecord.assigned_worker_id;
+            } else if (!receiver_id) {
+                if (!senderUser.facility_id) {
+                    return res.status(400).json({ error: "NOT_AFFILIATED", message: "You are not affiliated with any facility yet" });
+                }
+
+                const staffUser = await prisma.user.findFirst({
+                    where: {
+                        facility_id: senderUser.facility_id,
+                        role: { in: ['Admin', 'HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Staff'] },
+                        is_active: true,
+                    }
+                });
+
+                if (staffUser) {
+                    receiver_id = staffUser.user_id;
+                } else {
+                    return res.status(400).json({ error: "NOT_AFFILIATED", message: "No active staff members found for this facility" });
+                }
+            }
+        } else if (senderUser.role !== 'SystemAdmin' && senderUser.role !== 'Admin') {
+            if (receiver_id) {
+                const receiverUser = await prisma.user.findUnique({
+                    where: { user_id: receiver_id },
+                    include: { mother: true }
+                });
+
+                if (receiverUser?.role === 'Mother' && receiverUser.mother) {
+                    const motherRec = receiverUser.mother;
+                    const isAssigned = motherRec.assigned_worker_id === sender_id || motherRec.created_by_id === sender_id;
+                    if (!isAssigned) {
+                        return res.status(403).json({ error: "Access denied. You can only message mothers assigned to your care." });
+                    }
+                }
+            }
+        } else if (!receiver_id) {
             if (!senderUser.facility_id) {
                 return res.status(400).json({ error: "NOT_AFFILIATED", message: "You are not affiliated with any facility yet" });
             }
@@ -257,7 +299,7 @@ const getAllMessageForUser = async (req, res, next) => {
             };
         }
 
-        const allMessages = await prisma.in_App_Message.findMany({
+        let allMessages = await prisma.in_App_Message.findMany({
             where: whereClause,
             include: {
                 sender: { select: { user_id: true, first_name: true, last_name: true, role: true, profile_url: true, facility_id: true } },
@@ -271,7 +313,18 @@ const getAllMessageForUser = async (req, res, next) => {
         let contactUser = null;
 
         if (currentUser.role === 'Mother') {
-            if (allMessages.length > 0) {
+            const motherRecord = await prisma.mother.findUnique({
+                where: { user_id: user_id },
+                include: {
+                    assignedWorker: {
+                        select: { user_id: true, first_name: true, last_name: true, role: true, profile_url: true }
+                    }
+                }
+            });
+
+            if (motherRecord?.assignedWorker) {
+                contactUser = motherRecord.assignedWorker;
+            } else if (allMessages.length > 0) {
                 const staffMsg = allMessages.slice().reverse().find(m => m.sender?.role !== 'Mother' || m.receiver?.role !== 'Mother');
                 if (staffMsg) {
                     contactUser = staffMsg.sender?.role !== 'Mother' ? staffMsg.sender : staffMsg.receiver;
@@ -282,12 +335,32 @@ const getAllMessageForUser = async (req, res, next) => {
                 contactUser = await prisma.user.findFirst({
                     where: {
                         facility_id: currentUser.facility_id,
-                        role: { in: ['HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Staff', 'Admin'] },
+                        role: { in: ['Admin', 'HealthWorker', 'Doctor', 'Nurse', 'Midwife', 'Staff'] },
                         is_active: true,
                     },
                     select: { user_id: true, first_name: true, last_name: true, role: true, profile_url: true }
                 });
             }
+        } else if (currentUser.role !== 'SystemAdmin' && currentUser.role !== 'Admin') {
+            const myAssignedMothers = await prisma.mother.findMany({
+                where: {
+                    OR: [
+                        { assigned_worker_id: user_id },
+                        { created_by_id: user_id }
+                    ]
+                },
+                select: { user_id: true }
+            });
+            const validMotherUserIds = new Set(myAssignedMothers.map(m => m.user_id).filter(Boolean));
+
+            allMessages = allMessages.filter(msg => {
+                const otherPartyRole = msg.sender_id === user_id ? msg.receiver?.role : msg.sender?.role;
+                const otherPartyId = msg.sender_id === user_id ? msg.receiver_id : msg.sender_id;
+                if (otherPartyRole === 'Mother') {
+                    return validMotherUserIds.has(otherPartyId);
+                }
+                return true;
+            });
         }
 
         const hasFacility = Boolean(currentUser.facility_id);

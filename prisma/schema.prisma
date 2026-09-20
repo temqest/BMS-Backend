@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 //Facility schema
@@ -49,6 +50,8 @@ model User {
 
   facility          Facility?            @relation(fields: [facility_id], references: [facility_id])
   mother            Mother?
+  assignedMothers   Mother[]             @relation("AssignedWorkerMothers")
+  createdMothers    Mother[]             @relation("CreatedMothers")
   visitsHandled     PrenatalVisit[]
   sentMessages      In_App_Message[]     @relation("MessageSender")
   receivedMessages  In_App_Message[]     @relation("MessageReceiver")
@@ -62,22 +65,29 @@ model User {
 
 //Mother Schema
 model Mother {
-  mother_id        String   @id @default(uuid())
-  user_id          String?  @unique
-  family_serial_no String?
-  birth_date       DateTime
-  age              Int?
-  civil_status     String
-  blood_type       String
-  sync_status      String?  @default("synced")
-  version          Int      @default(1)
-  updated_at       DateTime @default(now()) @updatedAt
+  mother_id          String   @id @default(uuid())
+  user_id            String?  @unique
+  assigned_worker_id String?
+  created_by_id      String?
+  family_serial_no   String?
+  birth_date         DateTime
+  age                Int?
+  civil_status       String
+  blood_type         String
+  sync_status        String?  @default("synced")
+  version            Int      @default(1)
+  updated_at         DateTime @default(now()) @updatedAt
 
   user                User?                        @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  assignedWorker      User?                        @relation("AssignedWorkerMothers", fields: [assigned_worker_id], references: [user_id], onDelete: SetNull)
+  creator             User?                        @relation("CreatedMothers", fields: [created_by_id], references: [user_id], onDelete: SetNull)
   pregnancies         Pregnancy[]
   shareLinks          Mother_Share_Link[]
   facilityEnrollments Mother_Facility_Enrollment[]
   facilityDocuments   Facility_Document[]
+
+  @@index([assigned_worker_id])
+  @@index([created_by_id])
 }
 
 //Mother-Facility Enrollment Schema (Many-to-Many Multi-Facility Care)
