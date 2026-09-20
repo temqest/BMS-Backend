@@ -218,11 +218,28 @@ const registerEhrDocument = async (req, res, next) => {
 const getAllEhrDocuments = async (req, res, next) => {
     try {
         const facilityId = req.query.facility_id || req.user?.facility_id;
+        const requestedMotherId = req.query.mother_id;
         const isSystemAdmin = req.user?.role === 'SystemAdmin';
+        const isMother = req.user?.role === 'Mother';
 
-        const filter = isSystemAdmin && !facilityId
-            ? {}
-            : { facility_id: facilityId };
+        let filter = {};
+
+        if (isMother) {
+            const motherRecord = await prisma.mother.findFirst({
+                where: { user_id: req.user?.user_id }
+            });
+            if (!motherRecord) {
+                return res.status(200).json({ message: "EHR documents loaded", data: [] });
+            }
+            filter = { mother_id: motherRecord.mother_id };
+        } else if (requestedMotherId) {
+            const motherRecord = await prisma.mother.findFirst({
+                where: { OR: [{ mother_id: requestedMotherId }, { user_id: requestedMotherId }] }
+            });
+            filter = motherRecord ? { mother_id: motherRecord.mother_id } : { mother_id: requestedMotherId };
+        } else if (!isSystemAdmin && facilityId) {
+            filter = { facility_id: facilityId };
+        }
 
         const documents = await prisma.facility_Document.findMany({
             where: filter,

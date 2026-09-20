@@ -14,11 +14,12 @@ const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 const { upload } = require('../util/storage');
 
 const clinicalStaffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife'];
+const writeRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
 const viewRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
 
-router.post('/upload', verifyToken, checkUserRole(clinicalStaffRoles), upload.single('file'), uploadLabFile);
+router.post('/upload', verifyToken, checkUserRole(writeRoles), upload.single('file'), uploadLabFile);
 
-router.post('/register', verifyToken, checkUserRole(clinicalStaffRoles), registerLabScreening);
+router.post('/register', verifyToken, checkUserRole(writeRoles), registerLabScreening);
 
 router.put('/update/:screening_id', verifyToken, checkUserRole(clinicalStaffRoles), updateLabScreening);
 
