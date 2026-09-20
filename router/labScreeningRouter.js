@@ -23,7 +23,7 @@ router.post('/register', verifyToken, checkUserRole(writeRoles), registerLabScre
 
 router.put('/update/:screening_id', verifyToken, checkUserRole(clinicalStaffRoles), updateLabScreening);
 
-router.delete('/delete/:screening_id', verifyToken, checkUserRole(clinicalStaffRoles), deleteLabScreening);
+router.delete('/delete/:screening_id', verifyToken, checkUserRole(writeRoles), deleteLabScreening);
 
 router.get('/get/:screening_id', verifyToken, checkUserRole(viewRoles), getLabScreeningById);
 

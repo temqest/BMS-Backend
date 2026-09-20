@@ -384,6 +384,16 @@ const deleteLabScreening = async (req, res, next) => {
 
         screening_id = resolvedId;
 
+        if (req.user?.role === 'Mother') {
+            const screeningWithMother = await prisma.lab_Screening.findUnique({
+                where: { screening_id: screening_id },
+                include: { pregnancy: { include: { mother: true } } }
+            });
+            if (screeningWithMother && screeningWithMother.pregnancy?.mother?.user_id && screeningWithMother.pregnancy.mother.user_id !== req.user.user_id) {
+                return res.status(403).json({ error: "You don't have permission to delete this lab screening." });
+            }
+        }
+
         await prisma.lab_Screening.delete({
             where: { screening_id: screening_id }
         });

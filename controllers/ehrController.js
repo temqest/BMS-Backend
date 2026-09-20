@@ -268,11 +268,18 @@ const deleteEhrDocument = async (req, res, next) => {
         const { id } = req.params;
 
         const doc = await prisma.facility_Document.findUnique({
-            where: { document_id: id }
+            where: { document_id: id },
+            include: { mother: true }
         });
 
         if (!doc) {
             return res.status(200).json({ message: "Document already deleted" });
+        }
+
+        if (req.user?.role === 'Mother') {
+            if (doc.mother && doc.mother.user_id !== req.user?.user_id) {
+                return res.status(403).json({ error: "You don't have permission to delete this document." });
+            }
         }
 
         await prisma.facility_Document.delete({
