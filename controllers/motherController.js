@@ -628,6 +628,21 @@ const getAllActiveMother = async (req, res, next) => {
                     include: {
                         prenatalVisits: {
                             orderBy: { visit_date: "desc" }
+                        },
+                        labScreenings: {
+                            orderBy: { date_of_screening: "desc" }
+                        },
+                        supplementationRecords: {
+                            orderBy: { date_given: "desc" }
+                        },
+                        deliveryOutcomes: {
+                            orderBy: { delivery_date: "desc" },
+                            include: {
+                                newbornRecords: true,
+                                postpartumVisits: {
+                                    orderBy: { visit_date: "desc" }
+                                }
+                            }
                         }
                     }
                 }
@@ -673,8 +688,26 @@ const searchMotherByID = async (req, res, next) => {
                     }
                 },
                 pregnancies: {
+                    orderBy: { created_at: "desc" },
                     include: {
-                        prenatalVisits: true 
+                        prenatalVisits: {
+                            orderBy: { visit_date: "desc" }
+                        },
+                        labScreenings: {
+                            orderBy: { date_of_screening: "desc" }
+                        },
+                        supplementationRecords: {
+                            orderBy: { date_given: "desc" }
+                        },
+                        deliveryOutcomes: {
+                            orderBy: { delivery_date: "desc" },
+                            include: {
+                                newbornRecords: true,
+                                postpartumVisits: {
+                                    orderBy: { visit_date: "desc" }
+                                }
+                            }
+                        }
                     }
                 }
             }
