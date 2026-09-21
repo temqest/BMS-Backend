@@ -95,7 +95,17 @@ const createReferral = async (req, res, next) => {
         }
 
         const [pregnancy, fromFacility, toFacility] = await Promise.all([
-            prisma.pregnancy.findUnique({ where: { pregnancy_id } }),
+            prisma.pregnancy.findUnique({
+                where: { pregnancy_id },
+                include: {
+                    mother: {
+                        include: {
+                            user: true,
+                            facilityEnrollments: true,
+                        }
+                    }
+                }
+            }),
             prisma.facility.findUnique({ where: { facility_id: from_facility_id } }),
             to_facility_id ? prisma.facility.findUnique({ where: { facility_id: to_facility_id } }) : Promise.resolve(true),
         ]);
@@ -110,6 +120,19 @@ const createReferral = async (req, res, next) => {
 
         if (to_facility_id && !toFacility) {
             return res.status(404).json({ error: "Destination facility not found" });
+        }
+
+        if (req.user?.role !== 'SystemAdmin') {
+            const mother = pregnancy.mother;
+            const isHomeFacility = mother?.user?.facility_id === from_facility_id;
+            const isEnrolled = Array.isArray(mother?.facilityEnrollments) && mother.facilityEnrollments.some(
+                e => e.facility_id === from_facility_id && (e.status === 'Active' || !e.status)
+            );
+            const isAssignedOrCreatedByStaff = mother?.assigned_worker_id === req.user?.user_id || mother?.created_by_id === req.user?.user_id;
+
+            if (!isHomeFacility && !isEnrolled && !isAssignedOrCreatedByStaff) {
+                return res.status(403).json({ error: "Access denied. Patient is not registered or enrolled in your facility." });
+            }
         }
 
         const secure_link = await createSecuredLink.generateLink();
@@ -353,16 +376,21 @@ const deleteReferral = async (req, res, next) => {
             return res.status(400).json({ error: "Missing referral ID" });
         }
 
-        try {
-            await prisma.online_Referral.delete({
-                where: { referral_id: referral_id },
-            });
-        } catch (err) {
-            if (err.code === 'P2025') {
-                return res.status(404).json({ error: "Referral record not found" });
-            }
-            throw err;
+        const existing = await prisma.online_Referral.findUnique({
+            where: { referral_id: referral_id },
+        });
+
+        if (!existing) {
+            return res.status(404).json({ error: "Referral record not found" });
         }
+
+        if (req.user?.role !== 'SystemAdmin' && existing.from_facility_id !== req.user?.facility_id) {
+            return res.status(403).json({ error: "Access denied. You can only delete referrals originating from your facility." });
+        }
+
+        await prisma.online_Referral.delete({
+            where: { referral_id: referral_id },
+        });
 
         return res.status(200).json({
             message: "Referral deleted",
@@ -379,6 +407,10 @@ const getReferralByFacility = async (req, res, next) => {
 
         if (!facility_id) {
             return res.status(400).json({ error: "Missing facility ID" });
+        }
+
+        if (req.user?.role !== 'SystemAdmin' && req.user?.facility_id !== facility_id) {
+            return res.status(403).json({ error: "Access denied. Cannot view referrals for another facility." });
         }
 
         if (!(await validate.isFacilityExist(facility_id))) {
