@@ -162,12 +162,43 @@ const createReferral = async (req, res, next) => {
 
 const getAllReferrals = async (req, res, next) => {
     try {
-        const facilityFilter = req.user?.role === 'SystemAdmin' ? {} : {
-            OR: [
-                { from_facility_id: req.user?.facility_id },
-                { to_facility_id: req.user?.facility_id },
-            ]
-        };
+        const userRole = req.user?.role;
+        const currentUserId = req.user?.user_id || req.user?.id;
+        const staffFacilityId = req.user?.facility_id;
+        const isSystemAdmin = userRole === 'SystemAdmin';
+        const isAdmin = ['Admin', 'Administrator', 'FacilityAdmin'].includes(userRole);
+
+        let facilityFilter = {};
+
+        if (isSystemAdmin) {
+            facilityFilter = {};
+        } else if (isAdmin) {
+            facilityFilter = {
+                OR: [
+                    { from_facility_id: staffFacilityId },
+                    { to_facility_id: staffFacilityId },
+                ]
+            };
+        } else {
+            // Non-admin clinical staff (Doctor, HealthWorker, Nurse, Midwife, Staff)
+            facilityFilter = {
+                AND: [
+                    {
+                        OR: [
+                            { from_facility_id: staffFacilityId },
+                            { to_facility_id: staffFacilityId },
+                        ]
+                    },
+                    {
+                        OR: [
+                            { pregnancy: { mother: { assigned_worker_id: currentUserId } } },
+                            { pregnancy: { mother: { created_by_id: currentUserId } } },
+                            { pregnancy: { mother: { user_id: currentUserId } } },
+                        ]
+                    }
+                ]
+            };
+        }
 
         const referrals = await prisma.online_Referral.findMany({
             where: facilityFilter,
@@ -409,7 +440,12 @@ const getReferralByFacility = async (req, res, next) => {
             return res.status(400).json({ error: "Missing facility ID" });
         }
 
-        if (req.user?.role !== 'SystemAdmin' && req.user?.facility_id !== facility_id) {
+        const userRole = req.user?.role;
+        const currentUserId = req.user?.user_id || req.user?.id;
+        const isSystemAdmin = userRole === 'SystemAdmin';
+        const isAdmin = ['Admin', 'Administrator', 'FacilityAdmin'].includes(userRole);
+
+        if (!isSystemAdmin && req.user?.facility_id !== facility_id) {
             return res.status(403).json({ error: "Access denied. Cannot view referrals for another facility." });
         }
 
@@ -417,13 +453,35 @@ const getReferralByFacility = async (req, res, next) => {
             return res.status(404).json({ error: "Facility not found" });
         }
 
-        const referralList = await prisma.online_Referral.findMany({
-            where: {
-                OR: [
-                    { from_facility_id: facility_id },
-                    { to_facility_id: facility_id }
+        let whereCondition = {
+            OR: [
+                { from_facility_id: facility_id },
+                { to_facility_id: facility_id }
+            ]
+        };
+
+        if (!isSystemAdmin && !isAdmin && currentUserId) {
+            whereCondition = {
+                AND: [
+                    {
+                        OR: [
+                            { from_facility_id: facility_id },
+                            { to_facility_id: facility_id }
+                        ]
+                    },
+                    {
+                        OR: [
+                            { pregnancy: { mother: { assigned_worker_id: currentUserId } } },
+                            { pregnancy: { mother: { created_by_id: currentUserId } } },
+                            { pregnancy: { mother: { user_id: currentUserId } } },
+                        ]
+                    }
                 ]
-            },
+            };
+        }
+
+        const referralList = await prisma.online_Referral.findMany({
+            where: whereCondition,
             include: {
                 pregnancy: {
                     include: {
