@@ -1,6 +1,54 @@
 const prisma = require('../util/db');
 const bcrypt = require('bcryptjs');
 const { logAuditTrail } = require('../services/auditService');
+const path = require('path');
+const fs = require('fs');
+
+const SAFE_IMAGE_MIMES = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+};
+
+function saveBase64ToFile(fileUrl) {
+    if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.startsWith('data:')) {
+        return fileUrl;
+    }
+
+    try {
+        const matches = fileUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+
+        if (matches && matches.length === 3) {
+            const mimeType = matches[1].toLowerCase();
+            const ext = SAFE_IMAGE_MIMES[mimeType];
+
+            if (!ext) {
+                console.warn(`[Security] Rejected unsupported avatar MIME type: ${mimeType}`);
+                return null;
+            }
+
+            const base64Data = matches[2];
+            const buffer = Buffer.from(base64Data, 'base64');
+            const fileName = `avatar_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
+            const uploadsDir = path.join(__dirname, '../public/uploads');
+
+            if (!fs.existsSync(uploadsDir)) {
+                fs.mkdirSync(uploadsDir, { recursive: true });
+            }
+
+            const localFilePath = path.join(uploadsDir, fileName);
+            fs.writeFileSync(localFilePath, buffer);
+
+            const baseUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 6700}`;
+            return `${baseUrl}/uploads/${fileName}`;
+        }
+    } catch (err) {
+        console.warn("Failed to convert base64 profile_url to file on server:", err);
+    }
+
+    return fileUrl;
+}
 
 const getStaffByFacility = async (req, res, next) => {
     try {
@@ -619,6 +667,65 @@ const savePushToken = async (req, res, next) => {
     }
 };
 
+const updateStaffProfilePhoto = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const rawPhoto = req.body.profile_url || req.body.photo_url;
+        const requestingUser = req.user;
+
+        if (!id) {
+            return res.status(400).json({ error: "Staff User ID is required" });
+        }
+
+        const isSuperAdmin = requestingUser?.role === 'SystemAdmin';
+        const isAdmin = requestingUser?.role === 'Admin';
+        const isSelf = requestingUser?.user_id === id;
+
+        if (!isSuperAdmin && !isAdmin && !isSelf) {
+            return res.status(403).json({ error: "You are not authorized to update this user's profile photo." });
+        }
+
+        const targetUser = await prisma.user.findUnique({
+            where: { user_id: id }
+        });
+
+        if (!targetUser) {
+            return res.status(404).json({ error: "Staff member not found" });
+        }
+
+        if (!isSuperAdmin && !isSelf && targetUser.facility_id !== requestingUser?.facility_id) {
+            return res.status(403).json({ error: "Cannot modify staff from another facility." });
+        }
+
+        let profile_url = rawPhoto ? saveBase64ToFile(rawPhoto) : null;
+
+        const updatedUser = await prisma.user.update({
+            where: { user_id: id },
+            data: {
+                profile_url: profile_url,
+                updated_at: new Date()
+            },
+            select: {
+                user_id: true,
+                first_name: true,
+                last_name: true,
+                role: true,
+                profile_url: true,
+                updated_at: true,
+                facility_id: true
+            }
+        });
+
+        return res.status(200).json({
+            message: "Staff profile photo updated successfully",
+            result: updatedUser,
+            user: updatedUser
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 module.exports = {
     getStaffByFacility,
     getStaffById,
@@ -627,5 +734,7 @@ module.exports = {
     updateUserProfile,
     adminResetStaffPassword,
     getStaffActivities,
-    savePushToken
+    savePushToken,
+    updateStaffProfilePhoto
 };
+
