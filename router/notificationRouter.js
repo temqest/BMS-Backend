@@ -11,7 +11,7 @@ const {
 } = require('../controllers/notificationController');
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
+const allowedRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff', 'Mother'];
 
 router.post('/send', verifyToken, checkUserRole(allowedRoles), sendNotificationToUser);
 

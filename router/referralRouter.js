@@ -14,7 +14,7 @@ const {
 } = require('../controllers/referralController');
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife'];
+const allowedRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff'];
 const externalRoles = ['External-Hospital'];
 const allRolesWithExternal = [...allowedRoles, ...externalRoles];
 

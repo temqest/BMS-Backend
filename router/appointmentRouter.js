@@ -12,8 +12,8 @@ const {
 } = require('../controllers/appointmentController');
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-const clinicalStaffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife'];
-const allowedRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
+const clinicalStaffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff'];
+const allowedRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff', 'Mother'];
 
 router.post('/register', verifyToken, checkUserRole(allowedRoles), createAppointment);
 

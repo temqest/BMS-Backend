@@ -9,8 +9,8 @@ const {
 } = require('../controllers/deliveryOutcomeController');
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-const clinicalStaffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife'];
-const viewRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
+const clinicalStaffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff'];
+const viewRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff', 'Mother'];
 
 router.post('/register', verifyToken, checkUserRole(clinicalStaffRoles), registerDeliveryOutcome);
 

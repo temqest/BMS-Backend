@@ -9,7 +9,7 @@ const {
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
 const adminRolesOnly = ['SystemAdmin', 'Admin'];
-const allUserRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife', 'Mother'];
+const allUserRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff', 'Mother'];
 
 router.post('/create', verifyToken, checkUserRole(allUserRoles), createAuditTrail);
 

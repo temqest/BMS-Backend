@@ -8,7 +8,7 @@ const {
 } = require('../controllers/cdssController');
 const { verifyToken, checkUserRole } = require('../middleware/authMiddleware');
 
-const allowedRoles = ['SystemAdmin', 'Admin', 'HealthWorker', 'Nurse', 'Midwife'];
+const allowedRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff'];
 
 router.post('/evaluate/:visit_id', verifyToken, checkUserRole(allowedRoles), evaluateVisitRisk);
 router.get('/get/pregnancy/:pregnancy_id', verifyToken, checkUserRole(allowedRoles), getAlertsByPregnancy);
