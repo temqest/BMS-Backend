@@ -164,7 +164,7 @@ const registerLabScreening = async (req, res, next) => {
     try {
         const { pregnancy_id, visit_id, screening_type, result, file_url, date_of_screening, remarks } = req.body;
 
-        if (!screening_type || !result || !date_of_screening) {
+        if (!screening_type || !date_of_screening) {
             return res.status(400).json({ error: "Required fields are missing" });
         }
 
@@ -271,7 +271,7 @@ const registerLabScreening = async (req, res, next) => {
                 pregnancy_id: targetPregnancyId,
                 visit_id: targetVisitId,
                 screening_type: screening_type,
-                result: result,
+                result: (result && String(result).trim()) ? String(result).trim() : "Pending",
                 file_url: finalFileUrl,
                 date_of_screening: date_of_screening,
                 remarks: remarks,

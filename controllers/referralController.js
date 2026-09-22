@@ -180,7 +180,6 @@ const getAllReferrals = async (req, res, next) => {
                 ]
             };
         } else {
-            // Non-admin clinical staff (Doctor, HealthWorker, Nurse, Midwife, Staff)
             facilityFilter = {
                 AND: [
                     {
