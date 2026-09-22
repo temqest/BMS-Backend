@@ -6,9 +6,9 @@ const { registerSupplementRecord, updateSupplementRecord, deleteSupplementRecord
 const staffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff'];
 const allUserRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff', 'Mother'];
 
-router.post('/register', verifyToken, checkUserRole(staffRoles), registerSupplementRecord);
+router.post('/register', verifyToken, checkUserRole(allUserRoles), registerSupplementRecord);
 
-router.put('/update', verifyToken, checkUserRole(staffRoles), updateSupplementRecord);
+router.put('/update', verifyToken, checkUserRole(allUserRoles), updateSupplementRecord);
 
 router.delete('/delete/:supplement_id', verifyToken, checkUserRole(staffRoles), deleteSupplementRecord);
 

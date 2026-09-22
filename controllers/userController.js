@@ -68,6 +68,92 @@ const getStaffByFacility = async (req, res, next) => {
                 result: []
             });
         }
+
+        // Security & Scoping: If caller is a Mother, only return her assigned care provider or direct message contacts
+        if (req.user?.role === 'Mother') {
+            const motherRecord = await prisma.mother.findUnique({
+                where: { user_id: req.user.user_id },
+                include: { assignedWorker: true, creator: true }
+            });
+
+            const allowedWorkerId = motherRecord?.assigned_worker_id || motherRecord?.assignedWorker?.user_id || motherRecord?.created_by_id || motherRecord?.creator?.user_id;
+
+            if (allowedWorkerId) {
+                const assignedStaff = await prisma.user.findMany({
+                    where: { user_id: allowedWorkerId, is_active: true },
+                    select: {
+                        user_id: true,
+                        facility_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        phone_number: true,
+                        email: true,
+                        address: true,
+                        profile_url: true,
+                        is_active: true,
+                        updated_at: true,
+                        facility: {
+                            select: {
+                                facility_id: true,
+                                facility_name: true,
+                                type: true
+                            }
+                        }
+                    }
+                });
+                return res.status(200).json({
+                    message: "Assigned staff retrieved successfully",
+                    result: assignedStaff
+                });
+            } else {
+                const messagedStaff = await prisma.in_App_Message.findMany({
+                    where: {
+                        OR: [
+                            { sender_id: req.user.user_id },
+                            { receiver_id: req.user.user_id }
+                        ]
+                    },
+                    select: { sender_id: true, receiver_id: true }
+                });
+                const contactIds = [...new Set(messagedStaff.flatMap(m => [m.sender_id, m.receiver_id]).filter(id => id !== req.user.user_id))];
+                if (contactIds.length > 0) {
+                    const contacts = await prisma.user.findMany({
+                        where: { user_id: { in: contactIds }, is_active: true },
+                        select: {
+                            user_id: true,
+                            facility_id: true,
+                            first_name: true,
+                            middle_name: true,
+                            last_name: true,
+                            role: true,
+                            phone_number: true,
+                            email: true,
+                            address: true,
+                            profile_url: true,
+                            is_active: true,
+                            updated_at: true,
+                            facility: {
+                                select: {
+                                    facility_id: true,
+                                    facility_name: true,
+                                    type: true
+                                }
+                            }
+                        }
+                    });
+                    return res.status(200).json({
+                        message: "Contact staff retrieved successfully",
+                        result: contacts
+                    });
+                }
+                return res.status(200).json({
+                    message: "No assigned staff for this mother",
+                    result: []
+                });
+            }
+        }
         
         const whereCondition = {
             facility_id: facility_id,

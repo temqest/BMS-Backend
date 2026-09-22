@@ -50,6 +50,6 @@ router.delete('/delete/soft/:mother_id', verifyToken, checkUserRole(staffRoles),
 router.delete('/delete/:mother_id', verifyToken, checkUserRole(sysAdminOnly), hardDeleteMother);
 
 router.get('/profile', verifyToken, checkUserRole(allUserRoles), getProfile);
-router.put('/profile/update', verifyToken, checkUserRole(motherOnly), updateMyProfile);
+router.put('/profile/update', verifyToken, checkUserRole(allUserRoles), updateMyProfile);
 
 module.exports = router;
