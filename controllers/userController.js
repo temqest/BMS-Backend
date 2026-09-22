@@ -432,8 +432,12 @@ const updateUserProfile = async (req, res, next) => {
         if (first_name !== undefined) updateData.first_name = first_name;
         if (middle_name !== undefined) updateData.middle_name = middle_name;
         if (last_name !== undefined) updateData.last_name = last_name;
-        if (phone_number !== undefined) updateData.phone_number = phone_number;
-        if (email !== undefined) updateData.email = email;
+        if (phone_number !== undefined) {
+            updateData.phone_number = phone_number && typeof phone_number === 'string' && phone_number.trim() !== '' ? phone_number.trim() : null;
+        }
+        if (email !== undefined && typeof email === 'string' && email.trim() !== '') {
+            updateData.email = email.trim().toLowerCase();
+        }
         if (address !== undefined) updateData.address = address;
         if (profile_url !== undefined) updateData.profile_url = profile_url;
 
@@ -794,9 +798,14 @@ const updateStaffProfilePhoto = async (req, res, next) => {
             select: {
                 user_id: true,
                 first_name: true,
+                middle_name: true,
                 last_name: true,
                 role: true,
+                phone_number: true,
+                email: true,
+                address: true,
                 profile_url: true,
+                is_active: true,
                 updated_at: true,
                 facility_id: true
             }

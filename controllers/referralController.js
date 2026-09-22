@@ -172,29 +172,20 @@ const getAllReferrals = async (req, res, next) => {
 
         if (isSystemAdmin) {
             facilityFilter = {};
-        } else if (isAdmin) {
+        } else if (staffFacilityId) {
             facilityFilter = {
                 OR: [
                     { from_facility_id: staffFacilityId },
                     { to_facility_id: staffFacilityId },
+                    { pregnancy: { mother: { assigned_worker_id: currentUserId } } },
+                    { pregnancy: { mother: { created_by_id: currentUserId } } },
                 ]
             };
         } else {
             facilityFilter = {
-                AND: [
-                    {
-                        OR: [
-                            { from_facility_id: staffFacilityId },
-                            { to_facility_id: staffFacilityId },
-                        ]
-                    },
-                    {
-                        OR: [
-                            { pregnancy: { mother: { assigned_worker_id: currentUserId } } },
-                            { pregnancy: { mother: { created_by_id: currentUserId } } },
-                            { pregnancy: { mother: { user_id: currentUserId } } },
-                        ]
-                    }
+                OR: [
+                    { pregnancy: { mother: { assigned_worker_id: currentUserId } } },
+                    { pregnancy: { mother: { created_by_id: currentUserId } } },
                 ]
             };
         }

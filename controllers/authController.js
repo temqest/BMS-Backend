@@ -352,12 +352,15 @@ const createStaff = async (req, res, next) => {
             return res.status(403).json({ error: "Only Admin can create another Admin" });
         }
 
-        if (phone_number || email) {
+        const sanitizedPhone = phone_number && typeof phone_number === 'string' && phone_number.trim() !== '' ? phone_number.trim() : null;
+        const sanitizedEmail = email && typeof email === 'string' && email.trim() !== '' ? email.trim().toLowerCase() : null;
+
+        if (sanitizedPhone || sanitizedEmail) {
             const existingUser = await prisma.user.findFirst({
                 where: {
                     OR: [
-                        phone_number ? { phone_number } : undefined,
-                        email ? { email } : undefined,
+                        sanitizedPhone ? { phone_number: sanitizedPhone } : undefined,
+                        sanitizedEmail ? { email: sanitizedEmail } : undefined,
                     ].filter(Boolean)
                 }
             });
@@ -380,12 +383,12 @@ const createStaff = async (req, res, next) => {
 
         const staffUser = await prisma.user.create({
             data: {
-                first_name,
-                middle_name,
-                last_name,
+                first_name: first_name.trim(),
+                middle_name: middle_name ? middle_name.trim() : null,
+                last_name: last_name.trim(),
                 role,
-                phone_number,
-                email,
+                phone_number: sanitizedPhone,
+                email: sanitizedEmail,
                 password: hashedPassword,
                 address: address || '',
                 facility_id: targetFacilityId,
