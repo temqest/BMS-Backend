@@ -153,6 +153,10 @@ app.use((err, req, res, next) => {
     });
 });
 
+const { initScheduler } = require('./services/schedulerService');
+
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`)
-})
+    console.log(`Server is running on http://localhost:${PORT}`);
+    // Start periodic background tasks (appointment alerts, etc.)
+    initScheduler();
+});
