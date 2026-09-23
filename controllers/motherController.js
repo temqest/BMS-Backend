@@ -52,7 +52,7 @@ const SAFE_IMAGE_MIMES = {
     'image/webp': 'webp',
 };
 
-function saveBase64ToFile(fileUrl) {
+async function saveBase64ToFile(fileUrl, req) {
     if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.startsWith('data:')) {
         return fileUrl;
     }
@@ -62,9 +62,9 @@ function saveBase64ToFile(fileUrl) {
 
         if (matches && matches.length === 3) {
             const mimeType = matches[1].toLowerCase();
-            const ext = SAFE_IMAGE_MIMES[mimeType];
+            const ext = SAFE_IMAGE_MIMES[mimeType] || 'jpg';
 
-            if (!ext) {
+            if (!SAFE_IMAGE_MIMES[mimeType]) {
                 console.warn(`[Security] Rejected unsupported avatar MIME type: ${mimeType}`);
                 return null;
             }
@@ -72,6 +72,45 @@ function saveBase64ToFile(fileUrl) {
             const base64Data = matches[2];
             const buffer = Buffer.from(base64Data, 'base64');
             const fileName = `avatar_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`;
+
+            try {
+                const { supabase } = require('../util/storage');
+                if (supabase && supabase.storage) {
+                    const filePath = `profiles/${fileName}`;
+                    let bucketName = 'documents';
+                    let { data, error } = await supabase.storage
+                        .from(bucketName)
+                        .upload(filePath, buffer, {
+                            contentType: mimeType,
+                            upsert: true
+                        });
+
+                    if (error && (error.message?.includes('Bucket not found') || error.statusCode === '404' || error.code === 'NoSuchBucket')) {
+                        bucketName = 'avatars';
+                        const retry = await supabase.storage
+                            .from(bucketName)
+                            .upload(filePath, buffer, {
+                                contentType: mimeType,
+                                upsert: true
+                            });
+                        data = retry.data;
+                        error = retry.error;
+                    }
+
+                    if (!error && data) {
+                        const { data: signedData } = await supabase.storage.from(bucketName).createSignedUrl(filePath, 60 * 60 * 24 * 365);
+                        const secureUrl = signedData?.signedUrl || (supabase.storage.from(bucketName).getPublicUrl(filePath)).data?.publicUrl;
+                        if (secureUrl) {
+                            return secureUrl;
+                        }
+                    } else if (error) {
+                        console.warn("Supabase avatar upload skipped/failed:", error.message || error);
+                    }
+                }
+            } catch (supErr) {
+                console.warn("Supabase avatar upload error:", supErr.message);
+            }
+
             const uploadsDir = path.join(__dirname, '../public/uploads');
 
             if (!fs.existsSync(uploadsDir)) {
@@ -81,7 +120,10 @@ function saveBase64ToFile(fileUrl) {
             const localFilePath = path.join(uploadsDir, fileName);
             fs.writeFileSync(localFilePath, buffer);
 
-            const baseUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 6700}`;
+            const isHttps = req?.secure || req?.headers?.['x-forwarded-proto'] === 'https' || (req?.headers?.referer && req.headers.referer.startsWith('https'));
+            const protocol = isHttps ? 'https' : (req?.protocol || 'https');
+            const host = req?.get ? (req.get('host') || req.headers?.host) : (req?.headers?.host || null);
+            const baseUrl = process.env.BACKEND_URL || (host ? `${protocol}://${host}` : `http://localhost:${process.env.PORT || 6700}`);
             return `${baseUrl}/uploads/${fileName}`;
         }
     } catch (err) {
@@ -212,6 +254,8 @@ const registerMother = async (req, res, next) => {
         const creatorId = req.user?.user_id || null;
         const isHealthcareStaff = req.user?.role && !['Mother', 'Admin', 'SystemAdmin'].includes(req.user.role);
         const assignedWorkerId = req.body.assigned_worker_id || (isHealthcareStaff ? req.user.user_id : null);
+        const rawProfileUrl = req.body.profile_url || req.body.photo_url;
+        const profile_url = rawProfileUrl ? await saveBase64ToFile(rawProfileUrl, req) : undefined;
 
         const result = await prisma.$transaction(async (prismaClient) => {
             const user = await prismaClient.user.create({
@@ -224,6 +268,7 @@ const registerMother = async (req, res, next) => {
                     phone_number: phone_number,
                     facility_id: facility_id,
                     role: "Mother",
+                    profile_url: profile_url || null,
                     sync_status: "synced",
                 }
             });
@@ -454,7 +499,7 @@ const updateMother = async (req, res, next) => {
         } = req.body;
 
         const rawProfileUrl = req.body.profile_url || req.body.photo_url;
-        const profile_url = rawProfileUrl ? saveBase64ToFile(rawProfileUrl) : undefined;
+        const profile_url = rawProfileUrl ? await saveBase64ToFile(rawProfileUrl, req) : undefined;
         const userUpdateData = {};
 
         if (first_name !== undefined) userUpdateData.first_name = first_name;
@@ -1278,6 +1323,7 @@ const updateMyProfile = async (req, res, next) => {
 
         const { first_name, middle_name, last_name, address, phone_number, email, birth_date, civil_status, blood_type, profile_url, photo_url } = req.body;
         const rawPhoto = profile_url || photo_url;
+        const finalPhotoUrl = rawPhoto ? await saveBase64ToFile(rawPhoto, req) : undefined;
 
         const updatedProfile = await prisma.$transaction(async (prismaClient) => {
             const userData = {};
@@ -1287,7 +1333,7 @@ const updateMyProfile = async (req, res, next) => {
             if (address !== undefined) userData.address = address;
             if (phone_number !== undefined) userData.phone_number = phone_number;
             if (email !== undefined) userData.email = email;
-            if (rawPhoto !== undefined) userData.profile_url = rawPhoto;
+            if (finalPhotoUrl !== undefined) userData.profile_url = finalPhotoUrl;
 
             const user = await prismaClient.user.update({
                 where: { user_id: my_user_id },
