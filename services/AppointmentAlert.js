@@ -87,7 +87,6 @@ async function sendAppointmentAlert(appointments) {
                     await send.sendSMS(user.phone_number, message);
                 }
 
-                // Send push notification to target user's device
                 if (app.user_id) {
                     sendPush.sendNotificationToUser(app.user_id, subject, message, {
                         appointment_id: app.appointment_id,

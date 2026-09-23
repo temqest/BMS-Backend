@@ -7,44 +7,29 @@ const PORT = process.env.PORT || 6700
 
 app.set('trust proxy', 1);
 
-const authRouter = require('./router/authRouter');
-
-const faciliityRouter = require('./router/facilityRouter');
-
-const motherRouter = require('./router/motherRouter');
-const shareRouter = require('./router/shareRouter');
-
-const pregnancyRouter = require('./router/pregnancyRouter');
-
-const prenatalVisitRouter = require('./router/prenatalVisitRouter')
-
-const supplementRouter = require('./router/supplementRouter')
-
-const labScreeningRouter = require('./router/labScreeningRouter');
-
-const deliveryOutcomeRouter = require('./router/deliveryOutcomeRouter');
-
-const newbornRecordRouter = require('./router/newbornRecordRouter');
-
-const postpartumVisitRouter = require('./router/postpartumVisitRouter');
-
-const notificationRouter = require('./router/notificationRouter');
-
-const messageRouter = require('./router/messageRouter');
-
-const auditTrailRouter = require('./router/auditTrailRouter');
-
-const referralRouter = require('./router/referralRouter');
-
-const cdssRouter = require('./router/cdssRouter');
-
-const appointmentRouter = require('./router/appointmentRouter');
+const authRouter = require('./router/auth/authRouter');
+const faciliityRouter = require('./router/facility/facilityRouter');
+const motherRouter = require('./router/patient/motherRouter');
+const shareRouter = require('./router/patient/shareRouter');
+const pregnancyRouter = require('./router/clinical/pregnancyRouter');
+const prenatalVisitRouter = require('./router/clinical/prenatalVisitRouter');
+const supplementRouter = require('./router/clinical/supplementRouter');
+const labScreeningRouter = require('./router/clinical/labScreeningRouter');
+const deliveryOutcomeRouter = require('./router/clinical/deliveryOutcomeRouter');
+const newbornRecordRouter = require('./router/clinical/newbornRecordRouter');
+const postpartumVisitRouter = require('./router/clinical/postpartumVisitRouter');
+const notificationRouter = require('./router/communications/notificationRouter');
+const messageRouter = require('./router/communications/messageRouter');
+const auditTrailRouter = require('./router/communications/auditTrailRouter');
+const referralRouter = require('./router/facility/referralRouter');
+const cdssRouter = require('./router/clinical/cdssRouter');
+const appointmentRouter = require('./router/scheduling/appointmentRouter');
 
 const { apiLimiter } = require('./middleware/rateLimmiter');
 
-const sendRouter = require('./router/sendRouter');
-const userRouter = require('./router/userRouter');
-const ehrRouter = require('./router/ehrRouter');
+const sendRouter = require('./router/communications/sendRouter');
+const userRouter = require('./router/auth/userRouter');
+const ehrRouter = require('./router/clinical/ehrRouter');
 
 const path = require('path');
 

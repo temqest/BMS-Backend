@@ -1,0 +1,524 @@
+const prisma = require('../../util/db');
+const validate = require('../../util/validation');
+const { evaluate_clinical_vitals, calculateTewsScore } = require('../../services/cdssRiskServices');
+const { updateWithMVCC } = require('../../services/conflicResolution');
+const { logAuditTrail } = require('../../services/auditService');
+const { resolveEntityId } = require('../../middleware/idResolver');
+
+const registerPrenatalVisit = async (req, res, next) => {
+    try {
+        const {
+            pregnancy_id,
+            health_worker_id,
+            trimester,
+            visit_number,
+            age_of_gestation_weeks,
+            weight_kg,
+            temperature_celsius,
+            pulse_rate_bpm,
+            bp_diastolic,
+            bp_systolic,
+            fundic_height_cm,
+            fetal_heart_tone_bpm,
+            chief_complaint,
+            danger_signs_observed,
+            risk_level_assessed,
+        } = req.body;
+
+        let effectiveHealthWorkerId = health_worker_id || req.user?.user_id;
+        if (!effectiveHealthWorkerId || req.user?.role === 'Mother') {
+            const fallbackStaff = await prisma.user.findFirst({
+                where: { role: { in: ['Doctor', 'Midwife', 'Nurse', 'RHUHead', 'BHW', 'SystemAdmin'] } }
+            });
+            if (fallbackStaff) {
+                effectiveHealthWorkerId = fallbackStaff.user_id;
+            }
+        }
+
+        if (
+            !effectiveHealthWorkerId ||
+            trimester === undefined ||
+            visit_number === undefined ||
+            age_of_gestation_weeks === undefined ||
+            weight_kg === undefined ||
+            temperature_celsius === undefined ||
+            pulse_rate_bpm === undefined ||
+            bp_diastolic === undefined ||
+            bp_systolic === undefined
+        ) {
+            return res.status(400).json({ error: "Required fields are missing" });
+        }
+
+        const vitalsValidationErrors = validate.validateClinicalVitals(req.body);
+        if (vitalsValidationErrors.length > 0) {
+            return res.status(400).json({ error: "Invalid medical data provided", details: vitalsValidationErrors });
+        }
+
+        let targetPregnancyId = pregnancy_id;
+        let pregnancy = (pregnancy_id && !pregnancy_id.startsWith("temp-"))
+            ? await prisma.pregnancy.findUnique({
+                where: { pregnancy_id: pregnancy_id },
+                include: { mother: true }
+            })
+            : null;
+
+        const effectiveMotherId = req.body.mother_id || req.body.motherId || (req.user?.role === 'Mother' ? req.user?.user_id : null);
+
+        if (!pregnancy && effectiveMotherId) {
+            const motherRecord = await prisma.mother.findFirst({
+                where: { OR: [{ mother_id: effectiveMotherId }, { user_id: effectiveMotherId }] }
+            });
+            if (motherRecord) {
+                pregnancy = await prisma.pregnancy.findFirst({
+                    where: { mother_id: motherRecord.mother_id, pregnancy_status: "Active" },
+                    orderBy: { date_of_registration: "desc" },
+                    include: { mother: true }
+                }) || await prisma.pregnancy.findFirst({
+                    where: { mother_id: motherRecord.mother_id },
+                    orderBy: { date_of_registration: "desc" },
+                    include: { mother: true }
+                });
+            }
+        }
+
+        if (!pregnancy) {
+            return res.status(404).json({ error: "Pregnancy not found" });
+        }
+
+        targetPregnancyId = pregnancy.pregnancy_id;
+
+        let healthWorkerIdToUse = health_worker_id;
+        let health_worker = health_worker_id
+            ? await prisma.user.findUnique({ where: { user_id: health_worker_id } })
+            : null;
+
+        if (!health_worker) {
+            const fallbackUser = req.user?.user_id
+                ? await prisma.user.findUnique({ where: { user_id: req.user.user_id } })
+                : await prisma.user.findFirst({ where: { is_active: true } });
+
+            if (fallbackUser) {
+                health_worker = fallbackUser;
+                healthWorkerIdToUse = fallbackUser.user_id;
+            } else {
+                return res.status(404).json({ error: "Health worker not found" });
+            }
+        }
+
+        const baselineVisit = await prisma.prenatalVisit.findFirst({
+            where: {
+                pregnancy_id: targetPregnancyId,
+                trimester: 1,
+            },
+            orderBy: { visit_date: 'asc' },
+        });
+
+        const assessment = calculateTewsScore({
+            vitals: req.body,
+            mother: pregnancy.mother,
+            pregnancy: pregnancy,
+            baselineVisit: baselineVisit,
+        });
+
+        const finalRiskLevel = risk_level_assessed || assessment.risk_level;
+
+        const newPrenatalVisit = await prisma.prenatalVisit.create({
+            data: {
+                pregnancy_id: targetPregnancyId,
+                health_worker_id: healthWorkerIdToUse,
+                trimester: trimester,
+                visit_number: visit_number,
+                age_of_gestation_weeks: age_of_gestation_weeks,
+                weight_kg: weight_kg,
+                temperature_celsius: temperature_celsius,
+                pulse_rate_bpm: pulse_rate_bpm,
+                bp_diastolic: bp_diastolic,
+                bp_systolic: bp_systolic,
+                fundic_height_cm: fundic_height_cm,
+                fetal_heart_tone_bpm: fetal_heart_tone_bpm,
+                chief_complaint: chief_complaint,
+                danger_signs_observed: danger_signs_observed,
+                risk_level_assessed: finalRiskLevel,
+                sync_status: "synced",
+            }
+        });
+
+        let alertRecord = null;
+        if (assessment.risk_level === "HIGH" || assessment.risk_level === "MODERATE") {
+            alertRecord = await prisma.cDSS_Alert.create({
+                data: {
+                    pregnancy_id: targetPregnancyId,
+                    visit_id: newPrenatalVisit.visit_id,
+                    alert_type: assessment.risk_level === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
+                    alert_message: `TEWS Score: ${assessment.tews_score}. Triggered by ${assessment.risk_level} risk physiological vitals or history.`,
+                    severity: assessment.risk_level,
+                },
+            });
+        }
+
+        const cdssAssessment = {
+            visit_id: newPrenatalVisit.visit_id,
+            ...assessment,
+            alert: alertRecord,
+        };
+
+        await logAuditTrail({
+            userId: health_worker_id,
+            tableName: 'prenatalVisit',
+            actionType: 'CREATE',
+            newState: newPrenatalVisit
+        });
+
+        return res.status(200).json({
+            message: "Prenatal visit registered successfully",
+            prenatalVisit: newPrenatalVisit,
+            cdssAssessment: cdssAssessment,
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const updatePrenatalVisit = async (req, res, next) => {
+    try {
+        let { visit_id } = req.params;
+
+        if (!visit_id) {
+            return res.status(400).json({ error: "Visit ID is required" });
+        }
+
+        const { resolvedId, record: existing } = await resolveEntityId('prenatalVisit', visit_id, req.body);
+
+        if (!resolvedId || !existing) {
+            return res.status(404).json({ error: "Prenatal visit not found" });
+        }
+
+        visit_id = resolvedId;
+
+        const vitalsValidationErrors = validate.validateClinicalVitals(req.body);
+        if (vitalsValidationErrors.length > 0) {
+            return res.status(400).json({ error: "Invalid medical data provided", details: vitalsValidationErrors });
+        }
+
+        const { strategy, version, ...clientData } = req.body;
+        const mvccResult = await updateWithMVCC('prenatalVisit', visit_id, { version, ...clientData }, {
+            strategy,
+            userId: req.user?.user_id || req.user?.id
+        });
+
+        if (!mvccResult.resolved) {
+            return res.status(409).json({
+                error: "Conflict detected requiring manual review",
+                details: mvccResult
+            });
+        }
+
+        const updatedVisit = mvccResult.record;
+        const cdssAssessment = await evaluate_clinical_vitals(updatedVisit.visit_id);
+
+        return res.status(200).json({
+            message: "Prenatal visit successfully updated!",
+            result: updatedVisit,
+            strategyUsed: mvccResult.strategyUsed,
+            cdssAssessment: cdssAssessment,
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const deletePrenatalVisit = async (req, res, next) => {
+    try {
+        let { visit_id } = req.params;
+
+        if (!visit_id) {
+            return res.status(400).json({ error: "Visit ID is required" });
+        }
+
+        const { resolvedId, record: existingVisit } = await resolveEntityId('prenatalVisit', visit_id, req.query || req.body);
+
+        if (!resolvedId || !existingVisit) {
+            return res.status(200).json({ message: "Prenatal visit already deleted" });
+        }
+
+        visit_id = resolvedId;
+
+        await prisma.prenatalVisit.delete({
+            where: { visit_id: visit_id }
+        });
+
+        await logAuditTrail({
+            userId: req.user?.user_id || req.user?.id || 'system',
+            tableName: 'prenatalVisit',
+            actionType: 'DELETE',
+            previousState: existingVisit
+        });
+
+        return res.status(200).json({
+            message: "Prenatal visit deleted successfully!",
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const getAllPrenatalVisits = async (req, res, next) => {
+    try {
+        const prenatalVisits = await prisma.prenatalVisit.findMany({
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
+                    }
+                }
+            }
+        });
+
+        return res.status(200).json({
+            message: "All prenatal visit data retrieved successfully!",
+            result: prenatalVisits,
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const getPrenatalVisitById = async (req, res, next) => {
+    try {
+        const { visit_id } = req.params;
+
+        if (!visit_id) {
+            return res.status(400).json({ error: "Visit ID is required" });
+        }
+
+        const isVisitExist = await prisma.prenatalVisit.findUnique({
+            where: {
+                visit_id: visit_id
+            }
+        });
+
+        if (!isVisitExist) {
+            return res.status(404).json({ error: "Prenatal visit not found" });
+        }
+
+        const visitResult = await prisma.prenatalVisit.findUnique({
+            where: {
+                visit_id: visit_id
+            },
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
+                    }
+                }
+            }
+        });
+
+        return res.status(200).json({
+            message: "Prenatal visit data retrieved successfully",
+            result: visitResult
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const getPrentalVisitByPregnancy = async (req, res, next) => {
+    try {
+        const { pregnancy_id } = req.params;
+
+        if (!pregnancy_id) {
+            return res.status(400).json({ error: "Pregnancy ID is required" });
+        }
+
+        if (!(await validate.isPregnancyExist(pregnancy_id))) {
+            return res.status(404).json({ error: "Pregnancy not found" });
+        }
+
+        const visit = await prisma.prenatalVisit.findMany({
+            where: {
+                pregnancy_id: pregnancy_id
+            },
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
+                    }
+                }
+            }
+        });
+
+        return res.status(200).json({
+            message: "Prenatal visit data retrieved successfully",
+            result: visit
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const getAllPrenatalVisitsByMother = async (req, res, next) => {
+    try {
+        const { mother_id } = req.params;
+
+        if (!mother_id) {
+            return res.status(400).json({ error: "Mother ID is required" });
+        }
+
+        const motherRecord = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: mother_id },
+                    { user_id: mother_id }
+                ]
+            }
+        });
+
+        if (!motherRecord) {
+            return res.status(404).json({ error: "Mother not found" });
+        }
+
+        const visits = await prisma.prenatalVisit.findMany({
+            where: {
+                pregnancy: {
+                    mother_id: motherRecord.mother_id
+                }
+            },
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
+                    }
+                }
+            }
+        });
+
+        return res.status(200).json({
+            message: "Prenatal visit data retrieved successfully",
+            result: visits
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const getAllPrenatalVisitsByHealthWorker = async (req, res, next) => {
+    try {
+        const { health_worker_id } = req.params;
+
+        if (!health_worker_id) {
+            return res.status(400).json({ error: "Health Worker ID is required" });
+        }
+
+        if (!(await validate.isUserExist(health_worker_id))) {
+            return res.status(404).json({ error: "Health worker not found" });
+        }
+
+        const visits = await prisma.prenatalVisit.findMany({
+            where: {
+                health_worker_id: health_worker_id
+            },
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
+                    }
+                }
+            }
+        });
+
+        return res.status(200).json({
+            message: "Prenatal visit data retrieved successfully",
+            result: visits
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const getAllPrenatalVisitByFacility = async (req, res, next) => {
+    try {
+        const { facility_id } = req.params;
+
+        if (!facility_id) {
+            return res.status(400).json({ error: "Facility ID is required" });
+        }
+
+        if (!(await validate.isFacilityExist(facility_id))) {
+            return res.status(404).json({ error: "Facility not found" });
+        }
+
+        const visits = await prisma.prenatalVisit.findMany({
+            where: {
+                healthWorker: {
+                    facility_id: facility_id
+                }
+            },
+            include: {
+                healthWorker: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        facility: true,
+                    }
+                }
+            }
+        });
+
+        return res.status(200).json({
+            message: "Prenatal visit data retrieved successfully",
+            result: visits
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+module.exports = {
+    registerPrenatalVisit,
+    updatePrenatalVisit,
+    deletePrenatalVisit,
+    getAllPrenatalVisits,
+    getPrentalVisitByPregnancy,
+    getAllPrenatalVisitsByMother,
+    getAllPrenatalVisitsByHealthWorker,
+    getAllPrenatalVisitByFacility,
+    getPrenatalVisitById
+};
