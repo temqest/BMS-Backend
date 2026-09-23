@@ -75,14 +75,15 @@ const createSecuredLink = {
 const createReferral = async (req, res, next) => {
     try {
         const {
-            pregnancy_id,
+            pregnancy_id: rawPregnancyId,
+            mother_id,
             from_facility_id,
             to_facility_id,
             external_facility_name,
             reason,
         } = req.body;
 
-        if (!pregnancy_id || !from_facility_id || !reason) {
+        if ((!rawPregnancyId && !mother_id) || !from_facility_id || !reason) {
             return res.status(400).json({ error: "Missing required fields, please check your input" });
         }
 
@@ -94,9 +95,12 @@ const createReferral = async (req, res, next) => {
             return res.status(403).json({ error: "Access denied. Referrals must originate from your facility." });
         }
 
-        const [pregnancy, fromFacility, toFacility] = await Promise.all([
-            prisma.pregnancy.findUnique({
-                where: { pregnancy_id },
+        let pregnancy = null;
+        let resolvedPregnancyId = rawPregnancyId;
+
+        if (resolvedPregnancyId && !resolvedPregnancyId.startsWith("temp-") && !resolvedPregnancyId.startsWith("mock-")) {
+            pregnancy = await prisma.pregnancy.findUnique({
+                where: { pregnancy_id: resolvedPregnancyId },
                 include: {
                     mother: {
                         include: {
@@ -105,7 +109,29 @@ const createReferral = async (req, res, next) => {
                         }
                     }
                 }
-            }),
+            });
+        }
+
+        // Fallback: If pregnancy not found by pregnancy_id, find the latest pregnancy by mother_id
+        if (!pregnancy && mother_id) {
+            pregnancy = await prisma.pregnancy.findFirst({
+                where: { mother_id: mother_id },
+                orderBy: { created_at: 'desc' },
+                include: {
+                    mother: {
+                        include: {
+                            user: true,
+                            facilityEnrollments: true,
+                        }
+                    }
+                }
+            });
+            if (pregnancy) {
+                resolvedPregnancyId = pregnancy.pregnancy_id;
+            }
+        }
+
+        const [fromFacility, toFacility] = await Promise.all([
             prisma.facility.findUnique({ where: { facility_id: from_facility_id } }),
             to_facility_id ? prisma.facility.findUnique({ where: { facility_id: to_facility_id } }) : Promise.resolve(true),
         ]);
@@ -140,7 +166,7 @@ const createReferral = async (req, res, next) => {
 
         const newReferral = await prisma.online_Referral.create({
             data: {
-                pregnancy_id: pregnancy_id,
+                pregnancy_id: resolvedPregnancyId,
                 from_facility_id: from_facility_id,
                 to_facility_id: to_facility_id ? to_facility_id : null,
                 external_facility_name: external_facility_name ? external_facility_name : null,
