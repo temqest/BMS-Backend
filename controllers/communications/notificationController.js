@@ -444,6 +444,35 @@ const markAllNotificationAsRead = async (req, res, next) => {
     }
 };
 
+const triggerDailyCheck = async (req, res, next) => {
+    try {
+        const cronSecret = process.env.CRON_SECRET || process.env.BYPASSCODE;
+        const authHeader = req.headers['x-cron-secret'] || req.headers.authorization;
+        const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+
+        if (!cronSecret || !token || token !== cronSecret) {
+            return res.status(401).json({
+                error: "Unauthorized",
+                message: "Invalid or missing cron secret authorization header."
+            });
+        }
+
+        console.log('[Cron] External trigger received for daily appointment alerts check...');
+        const { scheduledSendAppointmentAlert } = require('../../services/AppointmentAlert');
+        
+        await scheduledSendAppointmentAlert(1);
+        await scheduledSendAppointmentAlert(3);
+
+        return res.status(200).json({
+            success: true,
+            message: "Daily appointment alerts check executed successfully."
+        });
+    } catch (error) {
+        console.error('[Cron] Error executing daily check from endpoint:', error);
+        return next(error);
+    }
+};
+
 module.exports = {
     sendNotificationToUser,
     getNotificationByID,
@@ -451,5 +480,6 @@ module.exports = {
     deleteNotification,
     updateNotification,
     getUnreadNotificationCount,
-    markAllNotificationAsRead
+    markAllNotificationAsRead,
+    triggerDailyCheck
 };

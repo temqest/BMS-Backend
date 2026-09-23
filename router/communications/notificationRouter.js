@@ -7,11 +7,16 @@ const {
     deleteNotification,
     updateNotification,
     getUnreadNotificationCount,
-    markAllNotificationAsRead
+    markAllNotificationAsRead,
+    triggerDailyCheck
 } = require('../../controllers/communications/notificationController');
 const { verifyToken, checkUserRole } = require('../../middleware/authMiddleware');
 
 const allowedRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff', 'Mother'];
+
+// Webhook / External Cron Trigger (FastCron, cron-job.org, Cloud Scheduler)
+router.post('/cron/daily-check', triggerDailyCheck);
+router.get('/cron/daily-check', triggerDailyCheck);
 
 router.post('/send', verifyToken, checkUserRole(allowedRoles), sendNotificationToUser);
 
