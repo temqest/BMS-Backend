@@ -57,6 +57,8 @@ async function sendNotificationToUser(userId, title, body, dataPayload = {}) {
           channelId: 'bms_high_priority_channel',
           sound: 'default',
           priority: 'high',
+          icon: 'ic_launcher',
+          color: '#3c32fa',
         },
       },
       apns: {
