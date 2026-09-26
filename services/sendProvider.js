@@ -35,7 +35,7 @@ async function sendEmail(identifier, message, subject = "Notification from Birth
     
     try {
         const { data, error } = await resend.emails.send({
-            from: options.from || "Birth Monitoring System <mail.pkov.online>",
+            from: options.from || "Birth Monitoring System <noreply@mail.pkov.online>",
             to: Array.isArray(identifier) ? identifier : [identifier],
             subject: subject,
             html: options.html || `

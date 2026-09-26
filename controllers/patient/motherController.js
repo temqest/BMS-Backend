@@ -386,6 +386,54 @@ const selfRegisterMother = async (req, res, next) => {
         });
 
         if (isMotherExist) {
+            if (isMotherExist.role === 'Mother' && !isMotherExist.password) {
+                const purpose = 'registration';
+                const identifier = email ? email : phone_number;
+
+                const isValidOtp = await checkOtp.verifyOTP(identifier, otp, purpose);
+
+                if (!isValidOtp) {
+                    return res.status(400).json({ error: "Invalid OTP code" });
+                }
+
+                const salt = await bcrypt.genSalt(12);
+                const hashedPassword = await bcrypt.hash(password, salt);
+
+                const updatedUser = await prisma.user.update({
+                    where: { user_id: isMotherExist.user_id },
+                    data: {
+                        first_name: first_name || isMotherExist.first_name,
+                        last_name: last_name || isMotherExist.last_name,
+                        phone_number: phone_number || isMotherExist.phone_number,
+                        email: email || isMotherExist.email,
+                        address: address || isMotherExist.address,
+                        password: hashedPassword,
+                    }
+                });
+
+                const token = jwt.sign({
+                    user_id: updatedUser.user_id,
+                    role: updatedUser.role,
+                    email: updatedUser.email,
+                    phone_number: updatedUser.phone_number,
+                }, JWT_SECRET, { expiresIn: "30d" });
+
+                return res.status(200).json({
+                    message: "Mother account setup completed successfully",
+                    token: token,
+                    user: {
+                        user_id: updatedUser.user_id,
+                        first_name: updatedUser.first_name,
+                        middle_name: updatedUser.middle_name,
+                        last_name: updatedUser.last_name,
+                        address: updatedUser.address,
+                        phone_number: updatedUser.phone_number,
+                        email: updatedUser.email,
+                        role: updatedUser.role,
+                    }
+                });
+            }
+
             return res.status(400).json({ error: "Account with these credentials already exist" });
         }
 

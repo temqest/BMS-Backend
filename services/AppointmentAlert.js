@@ -50,7 +50,7 @@ async function checkForUpcomingAppointment(days_before_appointment) {
     }
 }
 
-async function sendAppointmentAlert(appointments) {
+async function sendAppointmentAlert(appointments, days_before = null) {
 
     try {
 
@@ -69,32 +69,44 @@ async function sendAppointmentAlert(appointments) {
                 day : 'numeric'
             });  
 
-            const formattedTime = dateObj.toLocaleTimeString('en-US', {
+            const timeString = app.appointment_time || (dateObj.toLocaleTimeString('en-US', {
                 hour : '2-digit',
                 minute : '2-digit',
                 hour12 : true
-            }); 
+            }));
 
             const facility_name = app.facility?.facility_name || 'your assigned healthcare facility';
 
-            const message = `Dear ${user.first_name} ${user.last_name}, you have an upcoming appointment at ${facility_name} on ${formattedDate} at ${formattedTime}.`;
-            const subject = "Upcoming Appointment Notification";
+            let timingText = `on ${formattedDate} at ${timeString}`;
+            let subject = "Upcoming Appointment Notification";
+
+            if (days_before === 0) {
+                timingText = `TODAY (${formattedDate}) at ${timeString}`;
+                subject = "Reminder: You Have an Appointment Today!";
+            } else if (days_before === 1) {
+                timingText = `TOMORROW (${formattedDate}) at ${timeString}`;
+                subject = "Reminder: You Have an Appointment Tomorrow!";
+            } else if (days_before !== null && days_before > 1) {
+                subject = `Reminder: Appointment in ${days_before} Days`;
+            }
+
+            const message = `Dear ${user.first_name} ${user.last_name}, this is a reminder for your ${app.appointment_type || 'appointment'} at ${facility_name} scheduled for ${timingText}.`;
             
+            if (app.user_id) {
+                sendPush.sendNotificationToUser(app.user_id, subject, message, {
+                    appointment_id: app.appointment_id,
+                    type: 'appointment_reminder'
+                }).catch(pushErr => console.error(`[AppointmentAlert] Failed to send push alert:`, pushErr));
+            }
+
             try {
                 if (user.email) {
                     await send.sendEmail(user.email, message, subject);
                 } else if (user.phone_number) {
                     await send.sendSMS(user.phone_number, message);
                 }
-
-                if (app.user_id) {
-                    sendPush.sendNotificationToUser(app.user_id, subject, message, {
-                        appointment_id: app.appointment_id,
-                        type: 'appointment_reminder'
-                    }).catch(pushErr => console.error(`[AppointmentAlert] Failed to send push alert:`, pushErr));
-                }
             } catch (sendError) {
-                console.error(`Failed to send alert for user ${user.first_name} ${user.last_name}:`, sendError);
+                console.error(`Failed to send email/SMS alert for user ${user.first_name} ${user.last_name}:`, sendError);
             }
         }
 
@@ -110,13 +122,15 @@ async function scheduledSendAppointmentAlert(days_before_appointment) {
         const upcomingAppointment = await checkForUpcomingAppointment(days_before_appointment);
 
         if (upcomingAppointment.length === 0) {
-            console.log(`No upcoming appointments found for ${days_before_appointment} day(s) ahead.`);
+            const dayLabel = days_before_appointment === 0 ? 'today' : `${days_before_appointment} day(s) ahead`;
+            console.log(`No upcoming appointments found for ${dayLabel}.`);
             return;
         }
 
-        await sendAppointmentAlert(upcomingAppointment);
+        await sendAppointmentAlert(upcomingAppointment, days_before_appointment);
 
-        console.log(`Appointment alerts sent successfully for ${days_before_appointment} day(s) ahead.`);
+        const dayLabel = days_before_appointment === 0 ? 'today' : `${days_before_appointment} day(s) ahead`;
+        console.log(`Appointment alerts sent successfully for ${dayLabel}.`);
 
     } catch (error) {
         throw error;

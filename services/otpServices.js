@@ -153,6 +153,25 @@ const verifyOTP = async (identifier, code, purpose) => {
             }
         }
 
+        const recentlyVerifiedOtp = await prisma.otp.findFirst({
+            where: {
+                identifier: identifier,
+                code: cleanCode,
+                purpose: purpose,
+                is_used: true,
+                created_at: {
+                    gt: new Date(Date.now() - 15 * 60 * 1000)
+                }
+            },
+            orderBy: {
+                created_at: 'desc'
+            }
+        });
+
+        if (recentlyVerifiedOtp) {
+            return true;
+        }
+
         return false;
 
     } catch (error) {

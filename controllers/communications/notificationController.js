@@ -460,6 +460,7 @@ const triggerDailyCheck = async (req, res, next) => {
         console.log('[Cron] External trigger received for daily appointment alerts check...');
         const { scheduledSendAppointmentAlert } = require('../../services/AppointmentAlert');
         
+        await scheduledSendAppointmentAlert(0);
         await scheduledSendAppointmentAlert(1);
         await scheduledSendAppointmentAlert(3);
 

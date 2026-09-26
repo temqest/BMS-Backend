@@ -6,8 +6,9 @@ function initScheduler() {
     cron.schedule('0 8 * * *', async () => {
         console.log('[Scheduler] Running daily appointment reminder check (08:00 AM)...');
         try {
-            await scheduledSendAppointmentAlert(1);
-            await scheduledSendAppointmentAlert(3);
+            await scheduledSendAppointmentAlert(0); // Today's appointments
+            await scheduledSendAppointmentAlert(1); // Tomorrow (1 day ahead)
+            await scheduledSendAppointmentAlert(3); // 3 days ahead
         } catch (error) {
             console.error('[Scheduler] Error executing scheduled appointment alerts:', error);
         }
