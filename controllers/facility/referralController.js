@@ -234,6 +234,15 @@ const getAllReferrals = async (req, res, next) => {
                             where: { is_resolved: false },
                             orderBy: { updated_at: 'desc' },
                         },
+                        deliveryOutcomes: {
+                            include: {
+                                newbornRecords: true,
+                                postpartumVisits: {
+                                    orderBy: { visit_date: 'desc' },
+                                },
+                            },
+                            orderBy: { delivery_date: 'desc' },
+                        },
                     },
                 },
                 fromFacility: true,
@@ -273,6 +282,15 @@ const getReferralById = async (req, res, next) => {
                         cdssAlerts: {
                             where: { is_resolved: false },
                             orderBy: { updated_at: 'desc' },
+                        },
+                        deliveryOutcomes: {
+                            include: {
+                                newbornRecords: true,
+                                postpartumVisits: {
+                                    orderBy: { visit_date: 'desc' },
+                                },
+                            },
+                            orderBy: { delivery_date: 'desc' },
                         },
                     },
                 },
@@ -514,6 +532,15 @@ const getReferralByFacility = async (req, res, next) => {
                             where: { is_resolved: false },
                             orderBy: { updated_at: 'desc' },
                         },
+                        deliveryOutcomes: {
+                            include: {
+                                newbornRecords: true,
+                                postpartumVisits: {
+                                    orderBy: { visit_date: 'desc' },
+                                },
+                            },
+                            orderBy: { delivery_date: 'desc' },
+                        },
                     },
                 },
                 fromFacility: true,
@@ -562,6 +589,15 @@ const getAllReferralByPregnancy = async (req, res, next) => {
                             where: { is_resolved: false },
                             orderBy: { updated_at: 'desc' },
                         },
+                        deliveryOutcomes: {
+                            include: {
+                                newbornRecords: true,
+                                postpartumVisits: {
+                                    orderBy: { visit_date: 'desc' },
+                                },
+                            },
+                            orderBy: { delivery_date: 'desc' },
+                        },
                     },
                 },
                 fromFacility: true,
@@ -603,6 +639,7 @@ const getPublicReferral = async (req, res, next) => {
                             include: {
                                 user: {
                                     select: {
+                                        user_id: true,
                                         first_name: true,
                                         middle_name: true,
                                         last_name: true,
@@ -635,7 +672,15 @@ const getPublicReferral = async (req, res, next) => {
                         cdssAlerts: {
                             orderBy: { updated_at: 'desc' },
                         },
-                        deliveryOutcomes: true,
+                        deliveryOutcomes: {
+                            include: {
+                                newbornRecords: true,
+                                postpartumVisits: {
+                                    orderBy: { visit_date: 'desc' },
+                                },
+                            },
+                            orderBy: { delivery_date: 'desc' },
+                        },
                     }
                 },
                 fromFacility: true,
@@ -747,6 +792,36 @@ const getPublicReferral = async (req, res, next) => {
             publicData.lab_screenings = referral.pregnancy?.labScreenings || [];
             publicData.supplements = referral.pregnancy?.supplementationRecords || [];
             publicData.cdss_alerts = referral.pregnancy?.cdssAlerts || [];
+
+            let deliveryOutcomes = referral.pregnancy?.deliveryOutcomes || [];
+
+            if (deliveryOutcomes.length === 0 && referral.pregnancy?.mother_id) {
+                const motherId = referral.pregnancy.mother_id;
+                const motherUser = referral.pregnancy?.mother?.user;
+
+                const motherDeliveries = await prisma.delivery_Outcome.findMany({
+                    where: {
+                        OR: [
+                            { pregnancy: { mother_id: motherId } },
+                            ...(motherUser?.user_id ? [{ pregnancy: { mother: { user_id: motherUser.user_id } } }] : []),
+                            ...(motherUser?.last_name ? [{ pregnancy: { mother: { user: { last_name: { equals: motherUser.last_name, mode: 'insensitive' } } } } }] : []),
+                        ]
+                    },
+                    include: {
+                        newbornRecords: true,
+                        postpartumVisits: {
+                            orderBy: { visit_date: 'desc' }
+                        }
+                    },
+                    orderBy: { delivery_date: 'desc' }
+                });
+
+                if (motherDeliveries && motherDeliveries.length > 0) {
+                    deliveryOutcomes = motherDeliveries;
+                }
+            }
+
+            publicData.delivery_outcomes = deliveryOutcomes;
         }
 
         return res.status(200).json({

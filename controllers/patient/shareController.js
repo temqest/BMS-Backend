@@ -363,7 +363,12 @@ const getPublicSharedJourney = async (req, res, next) => {
         orderBy: { date_given: "desc" },
       }),
       prisma.delivery_Outcome.findMany({
-        where: { pregnancy: { mother_id: targetMotherId } },
+        where: {
+          OR: [
+            { pregnancy: { mother_id: targetMotherId } },
+            ...(user?.user_id ? [{ pregnancy: { mother: { user_id: user.user_id } } }] : []),
+          ]
+        },
         orderBy: { delivery_date: "desc" },
         include: {
           newbornRecords: true,
