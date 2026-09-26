@@ -3,6 +3,44 @@ const validate = require('../../util/validation');
 const { updateWithMVCC } = require('../../services/conflicResolution');
 const { resolveEntityId } = require('../../middleware/idResolver');
 
+const sortAppointments = (appointments) => {
+    if (!Array.isArray(appointments)) return appointments;
+
+    return [...appointments].sort((a, b) => {
+        const getPriority = (status) => {
+            const s = (status || '').toLowerCase().trim();
+            if (s === 'confirmed' || s === 'scheduled' || s === 'active' || s === 'pending') {
+                return 1;
+            }
+            if (s === 'completed') {
+                return 2;
+            }
+            if (s === 'cancelled' || s === 'canceled' || s === 'missed' || s === 'rejected') {
+                return 3;
+            }
+            return 1;
+        };
+
+        const priorityA = getPriority(a.status);
+        const priorityB = getPriority(b.status);
+
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+        }
+
+        const dateA = a.appointment_date ? new Date(a.appointment_date).getTime() : 0;
+        const dateB = b.appointment_date ? new Date(b.appointment_date).getTime() : 0;
+
+        if (dateA !== dateB) {
+            return dateA - dateB;
+        }
+
+        const timeA = (a.appointment_time || '').toString();
+        const timeB = (b.appointment_time || '').toString();
+        return timeA.localeCompare(timeB);
+    });
+};
+
 const createAppointment = async (req, res, next) => {
     try {
         const {
@@ -128,9 +166,11 @@ const getAllAppointments = async (req, res, next) => {
             orderBy: { appointment_date: 'asc' },
         });
 
+        const sortedAppointments = sortAppointments(appointments);
+
         return res.status(200).json({
             message: "Appointments retrieved successfully",
-            data: appointments,
+            data: sortedAppointments,
         });
 
     } catch (error) {
@@ -210,9 +250,11 @@ const getAppointmentsByUser = async (req, res, next) => {
             orderBy: { appointment_date: 'asc' },
         });
 
+        const sortedAppointments = sortAppointments(appointments);
+
         return res.status(200).json({
             message: "User appointments retrieved successfully",
-            data: appointments,
+            data: sortedAppointments,
         });
 
     } catch (error) {
@@ -258,9 +300,11 @@ const getAppointmentsByFacility = async (req, res, next) => {
             orderBy: { appointment_date: 'asc' },
         });
 
+        const sortedAppointments = sortAppointments(appointments);
+
         return res.status(200).json({
             message: "Facility appointments retrieved successfully",
-            data: appointments,
+            data: sortedAppointments,
         });
 
     } catch (error) {
