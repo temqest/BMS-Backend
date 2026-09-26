@@ -822,6 +822,48 @@ const getPublicReferral = async (req, res, next) => {
             }
 
             publicData.delivery_outcomes = deliveryOutcomes;
+
+            // Fetch recent appointments for patient if available
+            try {
+                if (motherUser?.user_id) {
+                    const appointments = await prisma.appointment.findMany({
+                        where: { user_id: motherUser.user_id },
+                        orderBy: { appointment_date: 'desc' },
+                        take: 5
+                    });
+                    publicData.appointments = appointments || [];
+                } else {
+                    publicData.appointments = [];
+                }
+            } catch (appErr) {
+                console.warn("[getPublicReferral] Appointments fetch notice:", appErr.message);
+                publicData.appointments = [];
+            }
+
+            // Fetch previous referrals for the same pregnancy/mother for continuity of care
+            try {
+                const prevReferrals = await prisma.online_Referral.findMany({
+                    where: {
+                        pregnancy_id: referral.pregnancy_id,
+                        referral_id: { not: referral.referral_id }
+                    },
+                    select: {
+                        referral_id: true,
+                        date_referred: true,
+                        status: true,
+                        reason: true,
+                        fromFacility: { select: { facility_name: true } },
+                        toFacility: { select: { facility_name: true } },
+                        external_facility_name: true,
+                    },
+                    orderBy: { date_referred: 'desc' },
+                    take: 3
+                });
+                publicData.previous_referrals = prevReferrals || [];
+            } catch (prevErr) {
+                console.warn("[getPublicReferral] Previous referrals fetch notice:", prevErr.message);
+                publicData.previous_referrals = [];
+            }
         }
 
         return res.status(200).json({
@@ -843,9 +885,22 @@ const respondPublicReferral = async (req, res, next) => {
             return res.status(400).json({ error: "Missing required fields, status is required" });
         }
 
-        const validStatuses = ["pending", "accepted", "rejected", "completed", "transferred"];
+        const validStatuses = [
+            "pending",
+            "acknowledged",
+            "accepted",
+            "in_progress",
+            "in progress",
+            "completed",
+            "transferred",
+            "rejected",
+            "declined",
+            "cancelled"
+        ];
 
-        if (!validStatuses.includes(status.toLowerCase())) {
+        const normalizedStatus = status.toLowerCase().replace(/\s+/g, '_');
+
+        if (!validStatuses.includes(status.toLowerCase()) && !validStatuses.includes(normalizedStatus)) {
             return res.status(400).json({ error: `Invalid status option. Must be one of: ${validStatuses.join(", ")}` });
         }
 
@@ -868,20 +923,103 @@ const respondPublicReferral = async (req, res, next) => {
             }
         }
 
+        const standardStatus = normalizedStatus === "declined" ? "rejected" : normalizedStatus;
+
         const updated = await prisma.online_Referral.update({
             where: { referral_id: referral.referral_id },
             data: {
-                status: status.toLowerCase(),
+                status: standardStatus,
                 ...(response_notes !== undefined && { response_notes: response_notes }),
                 ...(outcome !== undefined && { outcome: outcome }),
-                is_completed: status.toLowerCase() === "completed" || status.toLowerCase() === "accepted",
+                is_completed: standardStatus === "completed" || standardStatus === "accepted",
                 date_responded: new Date(),
                 version: { increment: 1 },
             }
         });
 
         return res.status(200).json({
-            message: `Referral status updated to ${status}`,
+            message: `Referral status updated to ${standardStatus}`,
+            data: updated
+        });
+
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const clarifyPublicReferral = async (req, res, next) => {
+    try {
+        const { identifier } = req.params;
+        const { pin, topic, priority, message, sender_name, sender_contact } = req.body;
+
+        if (!identifier || !message || !message.trim()) {
+            return res.status(400).json({ error: "Missing required fields: message is required" });
+        }
+
+        let referral = await prisma.online_Referral.findFirst({
+            where: {
+                OR: [
+                    { referral_id: identifier },
+                    { secure_link: { endsWith: identifier } }
+                ]
+            },
+            include: {
+                fromFacility: true,
+                pregnancy: {
+                    include: {
+                        mother: {
+                            include: { user: true }
+                        }
+                    }
+                }
+            }
+        });
+
+        if (!referral) {
+            return res.status(404).json({ error: "Referral record not found" });
+        }
+
+        if (referral.shared_pin) {
+            if (!pin || pin.toString().trim() !== referral.shared_pin.toString().trim()) {
+                return res.status(403).json({ error: "Invalid security PIN, action unauthorized" });
+            }
+        }
+
+        const patientName = referral.pregnancy?.mother?.user 
+            ? `${referral.pregnancy.mother.user.first_name} ${referral.pregnancy.mother.user.last_name}`
+            : "Referred Patient";
+
+        const logTimestamp = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+        const senderInfo = sender_name ? ` (from ${sender_name}${sender_contact ? ' - ' + sender_contact : ''})` : "";
+        const clarificationEntry = `\n[${logTimestamp}] INQUIRY [${(priority || 'urgent').toUpperCase()} - ${topic || 'General'}]${senderInfo}: ${message.trim()}`;
+        
+        const updatedResponseNotes = referral.response_notes 
+            ? `${referral.response_notes}\n${clarificationEntry}`
+            : clarificationEntry;
+
+        const updated = await prisma.online_Referral.update({
+            where: { referral_id: referral.referral_id },
+            data: {
+                response_notes: updatedResponseNotes,
+                updated_at: new Date()
+            }
+        });
+
+        // Dispatch in-app notification if referring facility user exists
+        const recipientUserId = referral.pregnancy?.mother?.assigned_worker_id || referral.pregnancy?.mother?.created_by_id;
+        if (recipientUserId) {
+            await prisma.notification.create({
+                data: {
+                    user_id: recipientUserId,
+                    title: `Referral Inquiry: ${patientName}`,
+                    message: `[${(priority || 'urgent').toUpperCase()}] ${topic ? topic + ': ' : ''}${message.trim()}`,
+                    type: 'referral_clarification',
+                }
+            }).catch(e => console.warn("[clarifyPublicReferral] Notification create notice:", e.message));
+        }
+
+        return res.status(200).json({
+            message: "Clinical inquiry recorded and dispatched to referring facility.",
             data: updated
         });
 
@@ -903,4 +1041,5 @@ module.exports = {
     getAllReferralByPregnancy,
     getPublicReferral,
     respondPublicReferral,
+    clarifyPublicReferral,
 };

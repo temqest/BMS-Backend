@@ -11,6 +11,7 @@ const {
     deleteReferral,
     getPublicReferral,
     respondPublicReferral,
+    clarifyPublicReferral,
 } = require('../../controllers/facility/referralController');
 const { verifyToken, checkUserRole } = require('../../middleware/authMiddleware');
 
@@ -20,6 +21,7 @@ const allRolesWithExternal = [...allowedRoles, ...externalRoles];
 
 router.get('/public/:identifier', getPublicReferral);
 router.post('/public/:identifier/respond', respondPublicReferral);
+router.post('/public/:identifier/clarify', clarifyPublicReferral);
 
 router.post('/register', verifyToken, checkUserRole(allowedRoles), createReferral);
 
