@@ -99,6 +99,10 @@ const getAllNotificationByUser = async (req, res, next) => {
                         facility_id: true,
                         facility_name: true
                     }
+                },
+                notifications: {
+                    orderBy: { notification_date: "desc" },
+                    take: 50
                 }
             }
         });
@@ -107,10 +111,7 @@ const getAllNotificationByUser = async (req, res, next) => {
             return res.status(404).json({ error: "User not found" });
         }
 
-        const directNotifications = await prisma.notification.findMany({
-            where: { user_id: user_id },
-            orderBy: { notification_date: "desc" }
-        });
+        const directNotifications = user.notifications || [];
 
         const readNotificationIds = new Set(
             directNotifications.filter(n => n.is_read).map(n => n.notification_id)

@@ -53,34 +53,20 @@ const createAppointment = async (req, res, next) => {
             reason,
         } = req.body;
 
-        let targetUserId = user_id;
+        const lookupId = user_id || mother_id;
         let userRecord = null;
+        let targetUserId = null;
 
-        if (user_id) {
-            userRecord = await prisma.user.findUnique({ where: { user_id } });
-        }
-
-        if (!userRecord) {
-            const lookupId = user_id || mother_id;
-            if (lookupId) {
-                const motherRecord = await prisma.mother.findFirst({
-                    where: { OR: [{ mother_id: lookupId }, { user_id: lookupId }] }
-                });
-                if (motherRecord && motherRecord.user_id) {
-                    targetUserId = motherRecord.user_id;
-                    userRecord = await prisma.user.findUnique({ where: { user_id: motherRecord.user_id } });
+        if (lookupId) {
+            userRecord = await prisma.user.findFirst({
+                where: {
+                    OR: [
+                        { user_id: lookupId },
+                        { mother: { mother_id: lookupId } }
+                    ]
                 }
-            }
-        }
-
-        if (!userRecord && mother_id && mother_id !== user_id) {
-            const motherRecord = await prisma.mother.findFirst({
-                where: { OR: [{ mother_id: mother_id }, { user_id: mother_id }] }
             });
-            if (motherRecord && motherRecord.user_id) {
-                targetUserId = motherRecord.user_id;
-                userRecord = await prisma.user.findUnique({ where: { user_id: motherRecord.user_id } });
-            }
+            targetUserId = userRecord?.user_id;
         }
 
         if (!userRecord) {

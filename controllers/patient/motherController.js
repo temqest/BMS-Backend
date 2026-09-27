@@ -257,52 +257,54 @@ const registerMother = async (req, res, next) => {
         const rawProfileUrl = req.body.profile_url || req.body.photo_url;
         const profile_url = rawProfileUrl ? await saveBase64ToFile(rawProfileUrl, req) : undefined;
 
-        const result = await prisma.$transaction(async (prismaClient) => {
-            const user = await prismaClient.user.create({
-                data: {
-                    first_name: first_name,
-                    middle_name: middle_name,
-                    last_name: last_name,
-                    address: address,
-                    email: email,
-                    phone_number: phone_number,
-                    facility_id: facility_id,
-                    role: "Mother",
-                    profile_url: profile_url || null,
-                    sync_status: "synced",
-                }
-            });
-
-            const mother = await prismaClient.mother.create({
-                data: {
-                    user_id: user.user_id,
-                    family_serial_no: family_serial_no,
-                    birth_date: new Date(birth_date),
-                    age: calculateAge(birth_date),
-                    civil_status: civil_status,
-                    blood_type: blood_type,
-                    assigned_worker_id: assignedWorkerId,
-                    created_by_id: creatorId,
-                    sync_status: "synced",
-                }
-            });
-
-            if (user.facility_id && mother.mother_id) {
-                await prismaClient.mother_Facility_Enrollment.create({
-                    data: {
-                        mother_id: mother.mother_id,
-                        facility_id: user.facility_id,
-                        status: "Active"
+        const createdUser = await prisma.user.create({
+            data: {
+                first_name: first_name,
+                middle_name: middle_name,
+                last_name: last_name,
+                address: address,
+                email: email,
+                phone_number: phone_number,
+                facility_id: facility_id,
+                role: "Mother",
+                profile_url: profile_url || null,
+                sync_status: "synced",
+                mother: {
+                    create: {
+                        family_serial_no: family_serial_no,
+                        birth_date: new Date(birth_date),
+                        age: calculateAge(birth_date),
+                        civil_status: civil_status,
+                        blood_type: blood_type,
+                        assigned_worker_id: assignedWorkerId,
+                        created_by_id: creatorId,
+                        sync_status: "synced",
+                        ...(facility_id ? {
+                            facilityEnrollments: {
+                                create: {
+                                    facility_id: facility_id,
+                                    status: "Active"
+                                }
+                            }
+                        } : {})
                     }
-                }).catch(() => null);
+                }
+            },
+            include: {
+                mother: {
+                    include: {
+                        facilityEnrollments: true
+                    }
+                }
             }
-
-            return { user, mother };
         });
 
         return res.status(200).json({
             message: "Mother registered successfully!",
-            result: result
+            result: {
+                user: createdUser,
+                mother: createdUser.mother
+            }
         });
 
     } catch (error) {
