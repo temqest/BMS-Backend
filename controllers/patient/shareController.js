@@ -128,7 +128,12 @@ const getOrCreateMotherShareToken = async (req, res, next) => {
       });
     }
 
-    const siteUrl = process.env.SITE_URL || "http://localhost:5173";
+    const getNormalizedSiteUrl = () => {
+      const raw = process.env.SITE_URL || process.env.FRONTEND_URL || "http://localhost:5173";
+      return (raw.startsWith("http://") || raw.startsWith("https://")) ? raw : `https://${raw}`;
+    };
+
+    const siteUrl = getNormalizedSiteUrl();
     const webUrl = `${siteUrl}/shared-journey/${shareLink.share_token}`;
 
     return res.status(200).json({
@@ -206,7 +211,12 @@ const regenerateShareToken = async (req, res, next) => {
       },
     });
 
-    const siteUrl = process.env.SITE_URL || "http://localhost:5173";
+    const getNormalizedSiteUrl = () => {
+      const raw = process.env.SITE_URL || process.env.FRONTEND_URL || "http://localhost:5173";
+      return (raw.startsWith("http://") || raw.startsWith("https://")) ? raw : `https://${raw}`;
+    };
+
+    const siteUrl = getNormalizedSiteUrl();
     const webUrl = `${siteUrl}/shared-journey/${newShareLink.share_token}`;
 
     return res.status(200).json({
