@@ -35,6 +35,9 @@ const path = require('path');
 
 const compression = require('compression');
 
+const requestLogger = require('./middleware/requestLogger');
+const logger = require('./util/logger');
+
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
     contentSecurityPolicy: false,
@@ -67,6 +70,7 @@ app.use(cors({
 }));
 
 app.use(compression({ threshold: 1024 }));
+app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads'), {
@@ -128,7 +132,7 @@ app.use('/api/users', userRouter)
 app.use('/api/user', userRouter)
 
 app.use((err, req, res, next) => {
-    console.error("Unhandled Server Error:", err);
+    logger.serverError(err, req);
     const isProd = process.env.NODE_ENV === 'production';
     res.status(err.status || 500).json({
         error: "InternalServerError",
@@ -141,7 +145,7 @@ app.use((err, req, res, next) => {
 const { initScheduler } = require('./services/schedulerService');
 
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    logger.success('STARTUP', `Server running on http://localhost:${PORT}`);
     // Start periodic background tasks (appointment alerts, etc.)
     initScheduler();
 });

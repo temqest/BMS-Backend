@@ -7,3 +7,4 @@ google-services*.json
 serviceAccountKey*.json
 public/uploads/*
 !public/uploads/.gitkeep
+controllers/public/
