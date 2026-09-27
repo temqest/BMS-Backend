@@ -189,6 +189,8 @@ const registerEhrDocument = async (req, res, next) => {
 
         const finalFileUrl = await saveBase64ToFile(file_url, req);
 
+        const effectiveUploadedBy = uploaded_by || req.body.uploadedBy || (req.user?.first_name ? `${req.user.first_name} ${req.user.last_name || ""}`.trim() + (req.user.role ? ` (${req.user.role})` : "") : "Healthcare Staff");
+
         const newDoc = await prisma.facility_Document.create({
             data: {
                 facility_id: facilityId,
@@ -200,7 +202,7 @@ const registerEhrDocument = async (req, res, next) => {
                 format: format || "PDF",
                 size: size || "1.0 MB",
                 file_url: finalFileUrl,
-                uploaded_by: uploaded_by || `${req.user?.first_name || "Healthcare"} ${req.user?.last_name || "Staff"}`.trim(),
+                uploaded_by: effectiveUploadedBy,
                 sync_status: "synced"
             }
         });

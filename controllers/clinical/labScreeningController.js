@@ -177,7 +177,8 @@ const registerLabScreening = async (req, res, next) => {
 
         if (!pregnancy && effectiveMotherId) {
             const motherRecord = await prisma.mother.findFirst({
-                where: { OR: [{ mother_id: effectiveMotherId }, { user_id: effectiveMotherId }] }
+                where: { OR: [{ mother_id: effectiveMotherId }, { user_id: effectiveMotherId }] },
+                include: { user: true }
             });
             if (motherRecord) {
                 pregnancy = await prisma.pregnancy.findFirst({
@@ -187,6 +188,20 @@ const registerLabScreening = async (req, res, next) => {
                     where: { mother_id: motherRecord.mother_id },
                     orderBy: { date_of_registration: "desc" }
                 });
+
+                if (!pregnancy) {
+                    pregnancy = await prisma.pregnancy.create({
+                        data: {
+                            mother_id: motherRecord.mother_id,
+                            date_of_registration: new Date(date_of_screening || Date.now()),
+                            lmp_date: new Date(date_of_screening || Date.now()),
+                            gravida: 1,
+                            parity: 0,
+                            pregnancy_status: "Active",
+                            sync_status: "synced"
+                        }
+                    });
+                }
             }
         }
 
@@ -298,6 +313,15 @@ const registerLabScreening = async (req, res, next) => {
                             ? `${motherData.mother.user.first_name || ""} ${motherData.mother.user.last_name || ""}`.trim()
                             : "Patient";
 
+                        let uploaderLabel = "Healthcare Staff";
+                        if (req.user?.role === 'Mother') {
+                            uploaderLabel = `${motherName} (Patient Upload)`;
+                        } else if (req.user?.first_name || req.user?.last_name) {
+                            uploaderLabel = `${req.user.first_name || ""} ${req.user.last_name || ""}`.trim() + (req.user.role ? ` (${req.user.role})` : "");
+                        } else if (req.user?.role) {
+                            uploaderLabel = req.user.role;
+                        }
+
                         await prisma.facility_Document.create({
                             data: {
                                 facility_id: facilityId,
@@ -309,7 +333,7 @@ const registerLabScreening = async (req, res, next) => {
                                 format: finalFileUrl.endsWith(".pdf") ? "PDF" : "Image",
                                 size: "1.0 MB",
                                 file_url: finalFileUrl,
-                                uploaded_by: motherName || "Patient (Mobile Upload)",
+                                uploaded_by: uploaderLabel,
                                 sync_status: "synced"
                             }
                         }).catch((docErr) => {
