@@ -108,6 +108,10 @@ const createMessage = async (req, res, next) => {
             }
         });
 
+        const socketService = req.socketService || require('../../services/socketService');
+        socketService.emitToUser(receiver_id, 'message:new', newMessage);
+        socketService.emitToUser(sender_id, 'message:new', newMessage);
+
         return res.status(200).json({
             message: "Message sent successfully",
             data: newMessage
@@ -215,6 +219,14 @@ const markMessageAsRead = async (req, res, next) => {
             }
         });
 
+        const socketService = req.socketService || require('../../services/socketService');
+        if (existingMessage.sender_id) {
+            socketService.emitToUser(existingMessage.sender_id, 'message:read', {
+                message_id: message_id,
+                reader_id: req.user?.user_id
+            });
+        }
+
         return res.status(200).json({
             message: "Message marked as read",
             data: markAsRead
@@ -256,6 +268,13 @@ const markAllAsRead = async (req, res, next) => {
                 is_read: true
             }
         });
+
+        const socketService = req.socketService || require('../../services/socketService');
+        if (sender_id) {
+            socketService.emitToUser(sender_id, 'message:read_all', {
+                reader_id: current_user_id || receiver_id
+            });
+        }
 
         return res.status(200).json({
             message: "Messages marked as read",

@@ -69,6 +69,25 @@ app.use(cors({
     credentials: true,
 }));
 
+const http = require('http');
+const { initSocket, getIO, emitToUser, emitToUsers, emitToFacility, emitToRole, emitGlobal } = require('./services/socketService');
+
+const httpServer = http.createServer(app);
+const io = initSocket(httpServer, allowedOrigins);
+
+app.use((req, res, next) => {
+    req.io = io;
+    req.socketService = {
+        getIO,
+        emitToUser,
+        emitToUsers,
+        emitToFacility,
+        emitToRole,
+        emitGlobal
+    };
+    next();
+});
+
 app.use(compression({ threshold: 1024 }));
 app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));
@@ -144,8 +163,10 @@ app.use((err, req, res, next) => {
 
 const { initScheduler } = require('./services/schedulerService');
 
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
     logger.success('STARTUP', `Server running on http://localhost:${PORT}`);
+    logger.success('STARTUP', `Socket.IO initialized and listening for connections`);
     // Start periodic background tasks (appointment alerts, etc.)
     initScheduler();
 });
+

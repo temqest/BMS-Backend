@@ -23,6 +23,9 @@ const sendNotificationToUser = async (req, res, next) => {
             }
         });
 
+        const socketService = req.socketService || require('../../services/socketService');
+        socketService.emitToUser(user_id, 'notification:new', newNotification);
+
         sendPushToUser(
             user_id,
             notification_type,
@@ -331,6 +334,11 @@ const updateNotification = async (req, res, next) => {
             }
         }
 
+        if (user_id) {
+            const socketService = req.socketService || require('../../services/socketService');
+            socketService.emitToUser(user_id, 'notification:updated', updatedNotification);
+        }
+
         return res.status(200).json({
             message: "Notification updated",
             notification: updatedNotification
@@ -437,6 +445,9 @@ const markAllNotificationAsRead = async (req, res, next) => {
                 });
             }
         }
+
+        const socketService = req.socketService || require('../../services/socketService');
+        socketService.emitToUser(user_id, 'notification:read_all', { user_id });
 
         return res.status(200).json({ message: "All notifications marked as read" });
 
