@@ -9,6 +9,9 @@ const registerDeliveryOutcome = async (req, res, next) => {
             delivery_date, 
             place_of_delivery, 
             mode_of_delivery, 
+            birth_attendant,
+            maternal_outcome,
+            immediate_breastfeeding,
             duration_of_labor_hours, 
             blood_loss_ml, 
             delivery_complications,
@@ -31,6 +34,9 @@ const registerDeliveryOutcome = async (req, res, next) => {
                     delivery_date: delivery_date ? new Date(delivery_date) : new Date(),
                     place_of_delivery,
                     mode_of_delivery,
+                    birth_attendant: birth_attendant || null,
+                    maternal_outcome: maternal_outcome || "Alive",
+                    immediate_breastfeeding: Boolean(immediate_breastfeeding),
                     duration_of_labor_hours: duration_of_labor_hours ? parseFloat(duration_of_labor_hours) : null,
                     blood_loss_ml: blood_loss_ml ? parseInt(blood_loss_ml, 10) : null,
                     delivery_complications: delivery_complications || null,
@@ -68,6 +74,7 @@ const registerDeliveryOutcome = async (req, res, next) => {
                 await tx.postpartum_visit.create({
                     data: {
                         delivery_id: deliveryOutcome.delivery_id,
+                        visit_timing: postpartum_visit.visit_timing || null,
                         visit_date: postpartum_visit.visit_date ? new Date(postpartum_visit.visit_date) : new Date(),
                         visit_number: postpartum_visit.visit_number || 1,
                         weight_kg: postpartum_visit.weight_kg ? parseFloat(postpartum_visit.weight_kg) : 55,
@@ -79,8 +86,13 @@ const registerDeliveryOutcome = async (req, res, next) => {
                         chief_complaint: postpartum_visit.chief_complaint || null,
                         danger_signs_observed: postpartum_visit.danger_signs_observed || null,
                         risk_level_assessed: postpartum_visit.risk_level_assessed || "Low Risk",
+                        foul_smelling_discharge: Boolean(postpartum_visit.foul_smelling_discharge),
+                        cord_condition_normal: postpartum_visit.cord_condition_normal !== undefined ? Boolean(postpartum_visit.cord_condition_normal) : true,
                         vitamin_a_given: Boolean(postpartum_visit.vitamin_a_given),
                         iron_supplement_given: Boolean(postpartum_visit.iron_supplement_given),
+                        fp_method_accepted: postpartum_visit.fp_method_accepted || null,
+                        fp_quantity_given: (postpartum_visit.fp_quantity_given !== undefined && postpartum_visit.fp_quantity_given !== null && postpartum_visit.fp_quantity_given !== '') ? parseInt(postpartum_visit.fp_quantity_given, 10) : null,
+                        fp_follow_up_date: postpartum_visit.fp_follow_up_date ? new Date(postpartum_visit.fp_follow_up_date) : null,
                         sync_status: "synced"
                     }
                 });
@@ -119,7 +131,21 @@ const updateDeliveryOutcome = async (req, res, next) => {
             return res.status(404).json({ error: "Delivery outcome not found" });
         }
 
-        const mvccResult = await updateWithMVCC('delivery_Outcome', delivery_id, { version, ...clientData }, {
+        const formattedData = { ...clientData };
+        if (formattedData.immediate_breastfeeding !== undefined) {
+            formattedData.immediate_breastfeeding = Boolean(formattedData.immediate_breastfeeding);
+        }
+        if (formattedData.delivery_date !== undefined) {
+            formattedData.delivery_date = formattedData.delivery_date ? new Date(formattedData.delivery_date) : null;
+        }
+        if (formattedData.duration_of_labor_hours !== undefined) {
+            formattedData.duration_of_labor_hours = (formattedData.duration_of_labor_hours !== null && formattedData.duration_of_labor_hours !== '') ? parseFloat(formattedData.duration_of_labor_hours) : null;
+        }
+        if (formattedData.blood_loss_ml !== undefined) {
+            formattedData.blood_loss_ml = (formattedData.blood_loss_ml !== null && formattedData.blood_loss_ml !== '') ? parseInt(formattedData.blood_loss_ml, 10) : null;
+        }
+
+        const mvccResult = await updateWithMVCC('delivery_Outcome', delivery_id, { version, ...formattedData }, {
             strategy,
             userId: req.user?.user_id || req.user?.id
         });

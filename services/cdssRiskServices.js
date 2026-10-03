@@ -36,8 +36,15 @@ const scoreTemperature = (temp) => {
     return 3;
 };
 
-const scoreDangerSigns = (danger_signs) => {
-    if (!danger_signs) return 0;
+const scoreDangerSigns = (danger_signs, vitals = {}) => {
+    let score = 0;
+    if (vitals.has_vaginal_bleeding) {
+        return 3;
+    }
+    if (vitals.has_fever || vitals.has_pallor || vitals.has_edema) {
+        score = 2;
+    }
+    if (!danger_signs) return score;
     const lower = danger_signs.toLowerCase();
     if (
         lower.includes("bleeding") ||
@@ -49,7 +56,7 @@ const scoreDangerSigns = (danger_signs) => {
     ) {
         return 3;
     }
-    return 1;
+    return Math.max(score, 1);
 };
 
 const calculateDemographicWeights = (mother, pregnancy) => {
@@ -63,8 +70,32 @@ const calculateDemographicWeights = (mother, pregnancy) => {
         if (pregnancy.parity >= 5) {
             weight += 2;
         }
-        if (pregnancy.previous_delivery_history && pregnancy.previous_delivery_history.toLowerCase().includes("cesarean")) {
+        if (pregnancy.prev_caesarean || (pregnancy.previous_delivery_history && pregnancy.previous_delivery_history.toLowerCase().includes("cesarean"))) {
             weight += 3;
+        }
+        if (pregnancy.pph_history) {
+            weight += 3;
+        }
+        if (pregnancy.stillbirth_history) {
+            weight += 2;
+        }
+        if (pregnancy.consecutive_miscarriages) {
+            weight += 2;
+        }
+        if (pregnancy.has_heart_disease) {
+            weight += 3;
+        }
+        if (pregnancy.has_diabetes) {
+            weight += 2;
+        }
+        if (pregnancy.has_tb) {
+            weight += 2;
+        }
+        if (pregnancy.has_asthma) {
+            weight += 1;
+        }
+        if (pregnancy.has_goiter) {
+            weight += 1;
         }
     }
     return weight;
@@ -75,7 +106,7 @@ const calculateTewsScore = ({ vitals, mother, pregnancy, baselineVisit }) => {
     const diaScore = scoreDiastolic(vitals.bp_diastolic);
     const hrScore = scoreHeartRate(vitals.pulse_rate_bpm);
     const tempScore = scoreTemperature(vitals.temperature_celsius);
-    const dangerScore = scoreDangerSigns(vitals.danger_signs_observed);
+    const dangerScore = scoreDangerSigns(vitals.danger_signs_observed, vitals);
 
     const vitalScores = [sysScore, diaScore, hrScore, tempScore, dangerScore];
     

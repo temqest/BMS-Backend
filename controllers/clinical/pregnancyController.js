@@ -9,14 +9,28 @@ const registerPregnancy = async (req, res, next) => {
         const {
             motherId,
             lmp_date, 
+            edd_date,
             gravida, 
             parity, 
             previous_delivery_history,
             co_morbidities,
             age_group,
+            height_cm,
             bmi_1st_trimester,
             bmi_category,
-            pregnancy_status
+            pregnancy_status,
+            deworming_given,
+            deworming_date,
+            completed_8anc,
+            prev_caesarean,
+            consecutive_miscarriages,
+            stillbirth_history,
+            pph_history,
+            has_tb,
+            has_heart_disease,
+            has_diabetes,
+            has_asthma,
+            has_goiter
         } = req.body;
 
         let targetMotherId = motherId || req.body.mother_id;
@@ -58,19 +72,37 @@ const registerPregnancy = async (req, res, next) => {
             });
         }
 
+        const parsedEddDate = edd_date ? new Date(edd_date) : new Date(Lmp_Date.getTime() + 280 * 24 * 60 * 60 * 1000);
+        const parsedHeightCm = (height_cm !== undefined && height_cm !== null && height_cm !== '') ? parseFloat(height_cm) : null;
+        const parsedBmi = (bmi_1st_trimester !== undefined && bmi_1st_trimester !== null && bmi_1st_trimester !== '') ? parseFloat(bmi_1st_trimester) : null;
+
         const pregnancy = await prisma.pregnancy.create({
             data: {
                 mother_id: targetMotherId,
                 date_of_registration: today,
                 lmp_date: Lmp_Date,
+                edd_date: parsedEddDate,
                 gravida: Number(gravida),
                 parity: Number(parity),
-                previous_delivery_history,
-                co_morbidities,
+                previous_delivery_history: previous_delivery_history || null,
+                co_morbidities: co_morbidities || null,
                 age_group,
-                bmi_1st_trimester: bmi_1st_trimester ? Number(bmi_1st_trimester) : null,
-                bmi_category,
+                height_cm: parsedHeightCm,
+                bmi_1st_trimester: parsedBmi,
+                bmi_category: bmi_category || null,
                 pregnancy_status,
+                deworming_given: Boolean(deworming_given),
+                deworming_date: deworming_date ? new Date(deworming_date) : null,
+                completed_8anc: Boolean(completed_8anc),
+                prev_caesarean: Boolean(prev_caesarean),
+                consecutive_miscarriages: Boolean(consecutive_miscarriages),
+                stillbirth_history: Boolean(stillbirth_history),
+                pph_history: Boolean(pph_history),
+                has_tb: Boolean(has_tb),
+                has_heart_disease: Boolean(has_heart_disease),
+                has_diabetes: Boolean(has_diabetes),
+                has_asthma: Boolean(has_asthma),
+                has_goiter: Boolean(has_goiter),
                 sync_status: "synced",
             }
         });
@@ -103,7 +135,42 @@ const updatePregnancy = async (req, res, next) => {
             pregnancy_id = resolvedId;
         }
 
-        const mvccResult = await updateWithMVCC('pregnancy', pregnancy_id, { version, ...clientData }, {
+        const formattedData = { ...clientData };
+        if (formattedData.edd_date !== undefined) {
+            formattedData.edd_date = formattedData.edd_date ? new Date(formattedData.edd_date) : null;
+        }
+        if (formattedData.lmp_date !== undefined) {
+            formattedData.lmp_date = formattedData.lmp_date ? new Date(formattedData.lmp_date) : null;
+        }
+        if (formattedData.deworming_date !== undefined) {
+            formattedData.deworming_date = formattedData.deworming_date ? new Date(formattedData.deworming_date) : null;
+        }
+        if (formattedData.height_cm !== undefined) {
+            formattedData.height_cm = (formattedData.height_cm !== null && formattedData.height_cm !== '') ? parseFloat(formattedData.height_cm) : null;
+        }
+        if (formattedData.bmi_1st_trimester !== undefined) {
+            formattedData.bmi_1st_trimester = (formattedData.bmi_1st_trimester !== null && formattedData.bmi_1st_trimester !== '') ? parseFloat(formattedData.bmi_1st_trimester) : null;
+        }
+        const booleanFields = [
+            'deworming_given',
+            'completed_8anc',
+            'prev_caesarean',
+            'consecutive_miscarriages',
+            'stillbirth_history',
+            'pph_history',
+            'has_tb',
+            'has_heart_disease',
+            'has_diabetes',
+            'has_asthma',
+            'has_goiter'
+        ];
+        for (const field of booleanFields) {
+            if (formattedData[field] !== undefined) {
+                formattedData[field] = Boolean(formattedData[field]);
+            }
+        }
+
+        const mvccResult = await updateWithMVCC('pregnancy', pregnancy_id, { version, ...formattedData }, {
             strategy,
             userId: req.user?.user_id || req.user?.id
         });

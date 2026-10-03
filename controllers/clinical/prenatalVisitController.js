@@ -20,9 +20,14 @@ const registerPrenatalVisit = async (req, res, next) => {
             bp_systolic,
             fundic_height_cm,
             fetal_heart_tone_bpm,
+            fetal_presentation,
             chief_complaint,
             danger_signs_observed,
             risk_level_assessed,
+            has_vaginal_bleeding,
+            has_pallor,
+            has_edema,
+            has_fever,
         } = req.body;
 
         let effectiveHealthWorkerId = health_worker_id || req.user?.user_id;
@@ -136,12 +141,24 @@ const registerPrenatalVisit = async (req, res, next) => {
                 bp_systolic: bp_systolic,
                 fundic_height_cm: fundic_height_cm,
                 fetal_heart_tone_bpm: fetal_heart_tone_bpm,
+                fetal_presentation: fetal_presentation || null,
                 chief_complaint: chief_complaint,
                 danger_signs_observed: danger_signs_observed,
                 risk_level_assessed: finalRiskLevel,
+                has_vaginal_bleeding: Boolean(has_vaginal_bleeding),
+                has_pallor: Boolean(has_pallor),
+                has_edema: Boolean(has_edema),
+                has_fever: Boolean(has_fever),
                 sync_status: "synced",
             }
         });
+
+        if (Number(visit_number) >= 8) {
+            await prisma.pregnancy.update({
+                where: { pregnancy_id: targetPregnancyId },
+                data: { completed_8anc: true }
+            });
+        }
 
         let alertRecord = null;
         if (assessment.risk_level === "HIGH" || assessment.risk_level === "MODERATE") {
@@ -202,7 +219,31 @@ const updatePrenatalVisit = async (req, res, next) => {
         }
 
         const { strategy, version, ...clientData } = req.body;
-        const mvccResult = await updateWithMVCC('prenatalVisit', visit_id, { version, ...clientData }, {
+        const formattedData = { ...clientData };
+
+        if (formattedData.visit_number !== undefined) {
+            formattedData.visit_number = parseInt(formattedData.visit_number, 10);
+            if (formattedData.visit_number >= 8 && existing.pregnancy_id) {
+                await prisma.pregnancy.update({
+                    where: { pregnancy_id: existing.pregnancy_id },
+                    data: { completed_8anc: true }
+                });
+            }
+        }
+        if (formattedData.has_vaginal_bleeding !== undefined) {
+            formattedData.has_vaginal_bleeding = Boolean(formattedData.has_vaginal_bleeding);
+        }
+        if (formattedData.has_pallor !== undefined) {
+            formattedData.has_pallor = Boolean(formattedData.has_pallor);
+        }
+        if (formattedData.has_edema !== undefined) {
+            formattedData.has_edema = Boolean(formattedData.has_edema);
+        }
+        if (formattedData.has_fever !== undefined) {
+            formattedData.has_fever = Boolean(formattedData.has_fever);
+        }
+
+        const mvccResult = await updateWithMVCC('prenatalVisit', visit_id, { version, ...formattedData }, {
             strategy,
             userId: req.user?.user_id || req.user?.id
         });

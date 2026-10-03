@@ -115,16 +115,31 @@ model Pregnancy {
   mother_id                 String
   date_of_registration      DateTime  @default(now())
   lmp_date                  DateTime
+  edd_date                  DateTime?
   gravida                   Int
   parity                    Int
   previous_delivery_history String?
   co_morbidities            String?
   age_group                 String
+  height_cm                 Decimal?
   bmi_1st_trimester         Decimal?
   bmi_category              String?
   pregnancy_status          String
   deworming_given           Boolean   @default(false)
   deworming_date            DateTime?
+  completed_8anc            Boolean   @default(false)
+
+  prev_caesarean            Boolean   @default(false)
+  consecutive_miscarriages  Boolean   @default(false)
+  stillbirth_history        Boolean   @default(false)
+  pph_history               Boolean   @default(false)
+
+  has_tb                    Boolean   @default(false)
+  has_heart_disease         Boolean   @default(false)
+  has_diabetes              Boolean   @default(false)
+  has_asthma                Boolean   @default(false)
+  has_goiter                Boolean   @default(false)
+
   sync_status               String?   @default("synced")
   version                   Int       @default(1)
   updated_at                DateTime  @default(now()) @updatedAt
@@ -158,9 +173,17 @@ model PrenatalVisit {
   bp_systolic            Int
   fundic_height_cm       Decimal?
   fetal_heart_tone_bpm   Int?
+  fetal_presentation     String?  // e.g. "Cephalic", "Breech", "Transverse"
   chief_complaint        String?
   danger_signs_observed  String?
   risk_level_assessed    String?
+
+  // Structured Clinical Danger Signs (HBMR / TCL)
+  has_vaginal_bleeding   Boolean  @default(false)
+  has_pallor             Boolean  @default(false)
+  has_edema              Boolean  @default(false)
+  has_fever              Boolean  @default(false)
+
   sync_status            String?  @default("synced")
   version                Int      @default(1)
   updated_at             DateTime @default(now()) @updatedAt
@@ -279,6 +302,9 @@ model Delivery_Outcome {
   delivery_date           DateTime @default(now())
   place_of_delivery       String
   mode_of_delivery        String
+  birth_attendant         String?  // e.g. "MD", "RN", "RMW", "TBA"
+  maternal_outcome        String?  @default("Alive") // e.g. "Alive", "Complicated", "Deceased"
+  immediate_breastfeeding Boolean  @default(false)
   duration_of_labor_hours Decimal?
   blood_loss_ml           Int?
   delivery_complications  String?
@@ -312,24 +338,35 @@ model Newborn_Record {
 
 //Postpartum Visit Schema
 model postpartum_visit {
-  postpartum_visit_id   String   @id @default(uuid())
-  delivery_id           String
-  visit_date            DateTime @default(now())
-  visit_number          Int
-  weight_kg             Decimal
-  temperature_celsius   Decimal
-  pulse_rate_bpm        Int
-  bp_diastolic          Int
-  bp_systolic           Int
-  fundic_height_cm      Decimal?
-  chief_complaint       String?
-  danger_signs_observed String?
-  risk_level_assessed   String?
-  vitamin_a_given       Boolean  @default(false)
-  iron_supplement_given Boolean  @default(false)
-  sync_status           String   @default("synced")
-  version               Int      @default(1)
-  updated_at            DateTime @default(now()) @updatedAt
+  postpartum_visit_id     String    @id @default(uuid())
+  delivery_id             String
+  visit_timing            String? 
+  visit_date              DateTime  @default(now())
+  visit_number            Int
+  weight_kg               Decimal
+  temperature_celsius     Decimal
+  pulse_rate_bpm          Int
+  bp_diastolic            Int
+  bp_systolic             Int
+  fundic_height_cm        Decimal?
+  chief_complaint         String?
+  danger_signs_observed   String?
+  risk_level_assessed     String?
+
+  // Clinical & Baby Observation
+  foul_smelling_discharge Boolean   @default(false)
+  cord_condition_normal   Boolean   @default(true)
+  vitamin_a_given         Boolean   @default(false)
+  iron_supplement_given   Boolean   @default(false)
+
+  // Postpartum Family Planning (HBMR / TCL)
+  fp_method_accepted      String?   // e.g. "Pills", "DMPA", "Implant", "IUD", "BTL", "Condom", "None"
+  fp_quantity_given       Int?
+  fp_follow_up_date       DateTime?
+
+  sync_status             String    @default("synced")
+  version                 Int       @default(1)
+  updated_at              DateTime  @default(now()) @updatedAt
 
   delivery Delivery_Outcome @relation(fields: [delivery_id], references: [delivery_id], onDelete: Cascade)
 
