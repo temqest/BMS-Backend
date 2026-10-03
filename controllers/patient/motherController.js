@@ -868,7 +868,7 @@ const getAllActiveMother = async (req, res, next) => {
                     }
                 },
                 pregnancies: {
-                    orderBy: { created_at: "desc" },
+                    orderBy: { date_of_registration: "desc" },
                     include: {
                         prenatalVisits: {
                             orderBy: { visit_date: "desc" }
@@ -934,7 +934,7 @@ const searchMotherByID = async (req, res, next) => {
                     }
                 },
                 pregnancies: {
-                    orderBy: { created_at: "desc" },
+                    orderBy: { date_of_registration: "desc" },
                     include: {
                         prenatalVisits: {
                             orderBy: { visit_date: "desc" }
@@ -1188,7 +1188,7 @@ const getAllMother = async (req, res, next) => {
                     }
                 },
                 pregnancies: {
-                    orderBy: { created_at: "desc" },
+                    orderBy: { date_of_registration: "desc" },
                     include: {
                         prenatalVisits: {
                             orderBy: { visit_date: "desc" }

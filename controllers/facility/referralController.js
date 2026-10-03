@@ -116,7 +116,7 @@ const createReferral = async (req, res, next) => {
         if (!pregnancy && mother_id) {
             pregnancy = await prisma.pregnancy.findFirst({
                 where: { mother_id: mother_id },
-                orderBy: { created_at: 'desc' },
+                orderBy: { date_of_registration: 'desc' },
                 include: {
                     mother: {
                         include: {
