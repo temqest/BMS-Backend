@@ -5,6 +5,7 @@ const CONFLICT_STRATEGIES = {
     SERVER_WINS: 'SERVER_WINS',
     CLIENT_WINS: 'CLIENT_WINS',
     FIELD_MERGE: 'FIELD_MERGE',
+    CUSTOM: 'CUSTOM',
     MANUAL_REVIEW: 'MANUAL_REVIEW'
 };
 
@@ -21,6 +22,27 @@ function isConflict(serverRecord, clientRecord) {
     }
 
     return false;
+}
+
+function getConflictingFields(serverRecord, clientRecord) {
+    const ignoredFields = ['version', 'created_at', 'updated_at', 'sync_status', 'user', 'mother', 'pregnancy', 'assignedWorker', 'creator'];
+    const fields = [];
+    if (!serverRecord || !clientRecord) return fields;
+
+    for (const key of Object.keys(clientRecord)) {
+        if (ignoredFields.includes(key)) continue;
+        const serverVal = serverRecord[key];
+        const clientVal = clientRecord[key];
+
+        if (clientVal !== undefined && clientVal !== null) {
+            const sVal = serverVal instanceof Date ? serverVal.toISOString() : serverVal;
+            const cVal = clientVal instanceof Date ? clientVal.toISOString() : clientVal;
+            if (sVal !== cVal && JSON.stringify(sVal) !== JSON.stringify(cVal)) {
+                fields.push(key);
+            }
+        }
+    }
+    return fields;
 }
 
 function mergeFieldLevel(serverRecord, clientRecord) {
@@ -114,6 +136,16 @@ async function resolveConflict({ tableName, recordId, serverRecord, clientRecord
 
         actionLabel = 'CLIENT_WINS_OVERWRITTEN';
     }
+    else if (chosenStrategy === CONFLICT_STRATEGIES.CUSTOM) {
+        dataToSave = Object.assign({}, clientRecord);
+        delete dataToSave.version;
+        
+        dataToSave.version = newVersion;
+        dataToSave.sync_status = 'synced';
+        dataToSave.updated_at = new Date();
+
+        actionLabel = 'CUSTOM_FIELD_RESOLVED';
+    }
     else if (chosenStrategy === CONFLICT_STRATEGIES.FIELD_MERGE) {
         const mergedData = mergeFieldLevel(serverRecord, clientRecord);
         delete mergedData.version;
@@ -137,11 +169,18 @@ async function resolveConflict({ tableName, recordId, serverRecord, clientRecord
             });
         }
 
+        const conflictingFields = getConflictingFields(serverRecord, clientRecord);
+
         return {
             resolved: false,
             strategyUsed: CONFLICT_STRATEGIES.MANUAL_REVIEW,
+            tableName: tableName,
+            recordId: recordId,
+            serverVersion: serverVersion,
+            clientVersion: clientRecord.version || 1,
             record: serverRecord,
             conflictPayload: clientRecord,
+            conflictingFields: conflictingFields,
             message: 'Conflict flagged for manual resolution.'
         };
     }
@@ -271,6 +310,8 @@ function getPrimaryKeyField(modelName) {
 module.exports = {
     CONFLICT_STRATEGIES,
     isConflict,
+    getConflictingFields,
+    getPrimaryKeyField,
     resolveConflict,
     updateWithMVCC,
     mergeFieldLevel

@@ -30,6 +30,7 @@ const { apiLimiter } = require('./middleware/rateLimmiter');
 const sendRouter = require('./router/communications/sendRouter');
 const userRouter = require('./router/auth/userRouter');
 const ehrRouter = require('./router/clinical/ehrRouter');
+const syncRouter = require('./router/sync/syncRouter');
 
 const path = require('path');
 
@@ -143,6 +144,8 @@ app.use('/api/v1/referral', referralRouter)
 app.use('/api/v1/cdss', cdssRouter)
 
 app.use('/api/v1/appointment', appointmentRouter)
+
+app.use('/api/v1/sync', syncRouter)
 
 app.use('/api/v1/send', sendRouter)
 
