@@ -91,6 +91,10 @@ const createReferral = async (req, res, next) => {
             return res.status(400).json({ error: "Please specify where this referral is going (select facility or enter external name)" });
         }
 
+        if (to_facility_id && to_facility_id === from_facility_id) {
+            return res.status(400).json({ error: "Destination facility cannot be the same as the originating facility" });
+        }
+
         if (req.user?.role !== 'SystemAdmin' && from_facility_id !== req.user?.facility_id) {
             return res.status(403).json({ error: "Access denied. Referrals must originate from your facility." });
         }
@@ -112,7 +116,6 @@ const createReferral = async (req, res, next) => {
             });
         }
 
-        // Fallback: If pregnancy not found by pregnancy_id, find the latest pregnancy by mother_id
         if (!pregnancy && mother_id) {
             pregnancy = await prisma.pregnancy.findFirst({
                 where: { mother_id: mother_id },
@@ -175,6 +178,35 @@ const createReferral = async (req, res, next) => {
                 shared_pin: shared_pin,
             },
         });
+
+        if (to_facility_id) {
+            try {
+                const destStaff = await prisma.user.findMany({
+                    where: {
+                        facility_id: to_facility_id,
+                        role: { in: ['Admin', 'Doctor', 'Midwife', 'Nurse', 'HealthcareStaff', 'FacilityAdmin', 'Worker'] }
+                    },
+                    select: { user_id: true }
+                });
+
+                if (destStaff.length > 0) {
+                    const fromName = fromFacility.facility_name || "A health facility";
+                    const notifPromises = destStaff.map(staff =>
+                        prisma.notification.create({
+                            data: {
+                                user_id: staff.user_id,
+                                notification_type: 'Referral',
+                                notification_message: `Inbound referral received from ${fromName}. PIN: ${shared_pin}`,
+                                notification_date: new Date()
+                            }
+                        }).catch(() => {})
+                    );
+                    await Promise.allSettled(notifPromises);
+                }
+            } catch (notifErr) {
+                console.warn('[Referral] Destination staff notification notice:', notifErr?.message || notifErr);
+            }
+        }
 
         return res.status(201).json({
             message: "Referral created successfully",

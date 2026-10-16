@@ -9,7 +9,8 @@ router.post('/register', verifyToken, checkUserRole(staffRoles), registerPrenata
 
 router.put('/update/:visit_id', verifyToken, checkUserRole(staffRoles), updatePrenatalVisit);
 
-router.put('/override-risk/:visit_id?', verifyToken, checkUserRole(staffRoles), overrideRiskLevel);
+router.put('/override-risk', verifyToken, checkUserRole(staffRoles), overrideRiskLevel);
+router.put('/override-risk/:visit_id', verifyToken, checkUserRole(staffRoles), overrideRiskLevel);
 
 router.delete('/delete/:visit_id', verifyToken, checkUserRole(staffRoles), deletePrenatalVisit);
 
