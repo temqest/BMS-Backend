@@ -152,7 +152,7 @@ const calculateTewsScore = ({ vitals, mother, pregnancy, baselineVisit }) => {
     };
 };
 
-const evaluate_clinical_vitals = async (visit_id) => {
+const evaluate_clinical_vitals = async (visit_id, options = {}) => {
     
     const visit = await prisma.prenatalVisit.findUnique({
         where: { visit_id: visit_id },
@@ -184,20 +184,26 @@ const evaluate_clinical_vitals = async (visit_id) => {
         baselineVisit,
     });
 
+    const finalRisk = (options.preserveExistingRisk && (options.overrideRiskLevel || visit.risk_level_assessed))
+        ? (options.overrideRiskLevel || visit.risk_level_assessed)
+        : assessment.risk_level;
+
     await prisma.prenatalVisit.update({
         where: { visit_id: visit_id },
-        data: { risk_level_assessed: assessment.risk_level },
+        data: { risk_level_assessed: finalRisk },
     });
 
     let alertRecord = null;
-    if (assessment.risk_level === "HIGH" || assessment.risk_level === "MODERATE") {
+    const effectiveSeverity = String(finalRisk).toUpperCase();
+    if (effectiveSeverity.includes("HIGH") || effectiveSeverity.includes("MODERATE")) {
+        const severity = effectiveSeverity.includes("HIGH") ? "HIGH" : "MODERATE";
         alertRecord = await prisma.cDSS_Alert.create({
             data: {
                 pregnancy_id: visit.pregnancy_id,
                 visit_id: visit.visit_id,
-                alert_type: assessment.risk_level === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
-                alert_message: `TEWS Score: ${assessment.tews_score}. Triggered by ${assessment.risk_level} risk physiological vitals or history.`,
-                severity: assessment.risk_level,
+                alert_type: severity === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
+                alert_message: `TEWS Score: ${assessment.tews_score}. Risk level assessed as ${finalRisk}.`,
+                severity: severity,
             },
         });
     }
@@ -205,6 +211,7 @@ const evaluate_clinical_vitals = async (visit_id) => {
     return {
         visit_id: visit_id,
         ...assessment,
+        risk_level: finalRisk,
         alert: alertRecord,
     };
 };

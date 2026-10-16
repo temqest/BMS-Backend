@@ -161,14 +161,16 @@ const registerPrenatalVisit = async (req, res, next) => {
         }
 
         let alertRecord = null;
-        if (assessment.risk_level === "HIGH" || assessment.risk_level === "MODERATE") {
+        const normalizedFinalRisk = String(finalRiskLevel).toUpperCase();
+        if (normalizedFinalRisk.includes("HIGH") || normalizedFinalRisk.includes("MODERATE")) {
+            const severity = normalizedFinalRisk.includes("HIGH") ? "HIGH" : "MODERATE";
             alertRecord = await prisma.cDSS_Alert.create({
                 data: {
                     pregnancy_id: targetPregnancyId,
                     visit_id: newPrenatalVisit.visit_id,
-                    alert_type: assessment.risk_level === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
-                    alert_message: `TEWS Score: ${assessment.tews_score}. Triggered by ${assessment.risk_level} risk physiological vitals or history.`,
-                    severity: assessment.risk_level,
+                    alert_type: severity === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
+                    alert_message: `TEWS Score: ${assessment.tews_score}. Risk level assessed as ${finalRiskLevel}.${req.body.override_reason ? ` Clinical override: ${req.body.override_reason}` : ''}`,
+                    severity: severity,
                 },
             });
         }
@@ -185,6 +187,43 @@ const registerPrenatalVisit = async (req, res, next) => {
             actionType: 'CREATE',
             newState: newPrenatalVisit
         });
+
+        try {
+            const patientUserId = pregnancy?.mother?.user_id || (effectiveMotherId ? (await prisma.mother.findFirst({ where: { OR: [{ mother_id: effectiveMotherId }, { user_id: effectiveMotherId }] } }))?.user_id : null);
+            const visitDate = req.body.visit_date ? new Date(req.body.visit_date) : new Date();
+            const startOfDay = new Date(visitDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(visitDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            if (patientUserId) {
+                const pendingAppts = await prisma.appointment.findMany({
+                    where: {
+                        user_id: patientUserId,
+                        appointment_date: {
+                            gte: startOfDay,
+                            lte: endOfDay,
+                        },
+                        status: {
+                            notIn: ['completed', 'Completed', 'cancelled', 'Cancelled', 'rejected']
+                        }
+                    }
+                });
+
+                if (pendingAppts.length > 0) {
+                    await prisma.appointment.updateMany({
+                        where: {
+                            appointment_id: { in: pendingAppts.map(a => a.appointment_id) }
+                        },
+                        data: {
+                            status: 'completed',
+                            sync_status: 'synced',
+                            updated_at: new Date()
+                        }
+                    });
+                }
+            }
+        } catch (autoApptErr) {}
 
         return res.status(200).json({
             message: "Prenatal visit registered successfully",
@@ -256,7 +295,11 @@ const updatePrenatalVisit = async (req, res, next) => {
         }
 
         const updatedVisit = mvccResult.record;
-        const cdssAssessment = await evaluate_clinical_vitals(updatedVisit.visit_id);
+        const isExplicitRisk = clientData.risk_level_assessed !== undefined && clientData.risk_level_assessed !== null;
+        const cdssAssessment = await evaluate_clinical_vitals(updatedVisit.visit_id, {
+            preserveExistingRisk: isExplicitRisk,
+            overrideRiskLevel: clientData.risk_level_assessed,
+        });
 
         return res.status(200).json({
             message: "Prenatal visit successfully updated!",
@@ -552,6 +595,140 @@ const getAllPrenatalVisitByFacility = async (req, res, next) => {
     }
 };
 
+const overrideRiskLevel = async (req, res, next) => {
+    try {
+        let { visit_id } = req.params;
+        const { risk_level, override_reason, pregnancy_id, mother_id } = req.body;
+
+        if (!risk_level) {
+            return res.status(400).json({ error: "Risk level is required" });
+        }
+
+        const normalizedInput = String(risk_level).trim().toLowerCase();
+        let canonicalRisk = "LOW";
+        if (normalizedInput.includes("high") || normalizedInput.includes("critical")) {
+            canonicalRisk = "HIGH";
+        } else if (normalizedInput.includes("mod") || normalizedInput.includes("med")) {
+            canonicalRisk = "MODERATE";
+        } else if (normalizedInput.includes("low")) {
+            canonicalRisk = "LOW";
+        }
+
+        let targetVisit = null;
+        if (visit_id) {
+            const { resolvedId, record } = await resolveEntityId('prenatalVisit', visit_id, req.body);
+            if (resolvedId && record) {
+                targetVisit = record;
+                visit_id = resolvedId;
+            }
+        }
+
+        if (!targetVisit && (pregnancy_id || mother_id)) {
+            let targetPregId = pregnancy_id;
+            if (!targetPregId && mother_id) {
+                const preg = await prisma.pregnancy.findFirst({
+                    where: { mother_id, pregnancy_status: "Active" },
+                    orderBy: { date_of_registration: "desc" }
+                });
+                if (preg) targetPregId = preg.pregnancy_id;
+            }
+
+            if (targetPregId) {
+                targetVisit = await prisma.prenatalVisit.findFirst({
+                    where: { pregnancy_id: targetPregId },
+                    orderBy: { visit_date: "desc" }
+                });
+                if (targetVisit) visit_id = targetVisit.visit_id;
+            }
+        }
+
+        if (!targetVisit && visit_id) {
+            targetVisit = await prisma.prenatalVisit.findUnique({
+                where: { visit_id: visit_id }
+            });
+        }
+
+        if (!targetVisit) {
+            return res.status(404).json({ error: "Prenatal visit not found for risk override" });
+        }
+
+        const currentObservation = targetVisit.danger_signs_observed || "";
+        const updatedObservation = override_reason
+            ? (currentObservation ? `${currentObservation} | Override: ${override_reason}` : `Clinical Override: ${override_reason}`)
+            : currentObservation;
+
+        const updatedVisit = await prisma.prenatalVisit.update({
+            where: { visit_id: targetVisit.visit_id },
+            data: {
+                risk_level_assessed: canonicalRisk,
+                danger_signs_observed: updatedObservation || null,
+                updated_at: new Date()
+            }
+        });
+
+        if (canonicalRisk === "HIGH" || canonicalRisk === "MODERATE") {
+            const existingAlert = await prisma.cDSS_Alert.findFirst({
+                where: {
+                    visit_id: targetVisit.visit_id,
+                    is_resolved: false
+                }
+            });
+
+            if (existingAlert) {
+                await prisma.cDSS_Alert.update({
+                    where: { alert_id: existingAlert.alert_id },
+                    data: {
+                        severity: canonicalRisk,
+                        alert_type: canonicalRisk === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
+                        alert_message: `Clinical override to ${canonicalRisk} risk: ${override_reason || 'Staff assessment'}`
+                    }
+                });
+            } else {
+                await prisma.cDSS_Alert.create({
+                    data: {
+                        pregnancy_id: targetVisit.pregnancy_id,
+                        visit_id: targetVisit.visit_id,
+                        alert_type: canonicalRisk === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
+                        alert_message: `Clinical override to ${canonicalRisk} risk: ${override_reason || 'Staff assessment'}`,
+                        severity: canonicalRisk
+                    }
+                });
+            }
+        } else if (canonicalRisk === "LOW") {
+            await prisma.cDSS_Alert.updateMany({
+                where: {
+                    visit_id: targetVisit.visit_id,
+                    is_resolved: false
+                },
+                data: {
+                    is_resolved: true,
+                    resolved_by: req.user?.user_id || 'Clinical Staff',
+                    resolved_at: new Date()
+                }
+            });
+        }
+
+        await logAuditTrail({
+            userId: req.user?.user_id,
+            tableName: 'prenatalVisit',
+            actionType: 'OVERRIDE_RISK',
+            newState: {
+                visit_id: targetVisit.visit_id,
+                risk_level_assessed: canonicalRisk,
+                override_reason: override_reason || null
+            }
+        });
+
+        return res.status(200).json({
+            message: `Risk level successfully overridden to ${canonicalRisk}`,
+            prenatalVisit: updatedVisit,
+            risk_level: canonicalRisk
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 module.exports = {
     registerPrenatalVisit,
     updatePrenatalVisit,
@@ -561,5 +738,6 @@ module.exports = {
     getAllPrenatalVisitsByMother,
     getAllPrenatalVisitsByHealthWorker,
     getAllPrenatalVisitByFacility,
-    getPrenatalVisitById
+    getPrenatalVisitById,
+    overrideRiskLevel
 };

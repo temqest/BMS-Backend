@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, checkUserRole } = require('../../middleware/authMiddleware');
-const { registerPrenatalVisit, updatePrenatalVisit, deletePrenatalVisit, getAllPrenatalVisits, getPrentalVisitByPregnancy, getAllPrenatalVisitsByMother, getAllPrenatalVisitsByHealthWorker, getAllPrenatalVisitByFacility, getPrenatalVisitById } = require('../../controllers/clinical/prenatalVisitController');
+const { registerPrenatalVisit, updatePrenatalVisit, deletePrenatalVisit, getAllPrenatalVisits, getPrentalVisitByPregnancy, getAllPrenatalVisitsByMother, getAllPrenatalVisitsByHealthWorker, getAllPrenatalVisitByFacility, getPrenatalVisitById, overrideRiskLevel } = require('../../controllers/clinical/prenatalVisitController');
 
 const staffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff'];
 
 router.post('/register', verifyToken, checkUserRole(staffRoles), registerPrenatalVisit);
 
 router.put('/update/:visit_id', verifyToken, checkUserRole(staffRoles), updatePrenatalVisit);
+
+router.put('/override-risk/:visit_id?', verifyToken, checkUserRole(staffRoles), overrideRiskLevel);
 
 router.delete('/delete/:visit_id', verifyToken, checkUserRole(staffRoles), deletePrenatalVisit);
 
