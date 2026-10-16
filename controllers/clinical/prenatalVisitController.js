@@ -169,7 +169,7 @@ const registerPrenatalVisit = async (req, res, next) => {
                     pregnancy_id: targetPregnancyId,
                     visit_id: newPrenatalVisit.visit_id,
                     alert_type: severity === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
-                    alert_message: `TEWS Score: ${assessment.tews_score}. Risk level assessed as ${finalRiskLevel}.${req.body.override_reason ? ` Clinical override: ${req.body.override_reason}` : ''}`,
+                    alert_message: `TEWS Score: ${assessment.tews_score}. Risk level: ${finalRiskLevel}.${assessment.triggers?.length ? ` Triggers: ${assessment.triggers.slice(0, 3).join("; ")}.` : ""}${req.body.override_reason ? ` Clinical override: ${req.body.override_reason}` : ''}`,
                     severity: severity,
                 },
             });
