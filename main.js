@@ -44,7 +44,13 @@ app.use(helmet({
     contentSecurityPolicy: false,
 }));
 
+const envOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
 const allowedOrigins = [
+    ...envOrigins,
     process.env.FRONTEND_URL,
     process.env.SITE_URL,
     'http://localhost:5173',
@@ -52,20 +58,19 @@ const allowedOrigins = [
     'http://localhost:4173',
     'http://localhost:8081',
     'http://127.0.0.1:5173',
-].filter(Boolean);
+].map((origin) => typeof origin === 'string' ? origin.trim().replace(/\/+$/, '') : origin).filter(Boolean);
 
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin) return callback(null, true);
         if (
             allowedOrigins.includes(origin) ||
-            origin.endsWith('.vercel.app') ||
-            origin.endsWith('.online') ||
-            /^http:\/\/localhost:\d+$/.test(origin)
+            process.env.NODE_ENV === 'development' ||
+            process.env.NODE_ENV !== 'production'
         ) {
             return callback(null, true);
         }
-        return callback(null, true);
+        return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
 }));

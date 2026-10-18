@@ -13,12 +13,19 @@ const getJwtSecret = () => {
 };
 
 const initSocket = (httpServer, allowedOrigins = []) => {
+    const envOrigins = (process.env.ALLOWED_ORIGINS || '')
+        .split(',')
+        .map((origin) => origin.trim().replace(/\/+$/, ''))
+        .filter(Boolean);
+
+    const origins = Array.from(new Set([...allowedOrigins, ...envOrigins]));
+
     io = new Server(httpServer, {
         cors: {
             origin: (origin, callback) => {
                 if (!origin) return callback(null, true);
                 if (
-                    allowedOrigins.includes(origin) ||
+                    origins.includes(origin) ||
                     process.env.NODE_ENV === 'development' ||
                     process.env.NODE_ENV !== 'production'
                 ) {
