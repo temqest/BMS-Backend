@@ -31,6 +31,7 @@ const initSocket = (httpServer, allowedOrigins = []) => {
                 ) {
                     return callback(null, true);
                 }
+                logger.warn('SOCKET', `Socket CORS blocked origin: "${origin}". Allowed origins: ${JSON.stringify(origins)}`);
                 return callback(new Error('Not allowed by CORS'));
             },
             credentials: true,

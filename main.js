@@ -60,6 +60,8 @@ const allowedOrigins = [
     'http://127.0.0.1:5173',
 ].map((origin) => typeof origin === 'string' ? origin.trim().replace(/\/+$/, '') : origin).filter(Boolean);
 
+logger.info('CORS', `Configured allowed origins: ${JSON.stringify(allowedOrigins)}`);
+
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin) return callback(null, true);
@@ -70,6 +72,7 @@ app.use(cors({
         ) {
             return callback(null, true);
         }
+        logger.warn('CORS', `Blocked origin: "${origin}". Allowed origins: ${JSON.stringify(allowedOrigins)}`);
         return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
