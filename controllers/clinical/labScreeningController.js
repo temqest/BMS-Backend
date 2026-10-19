@@ -275,9 +275,18 @@ const registerLabScreening = async (req, res, next) => {
         });
 
         if (existingRecord) {
+            const updatedRecord = await prisma.lab_Screening.update({
+                where: { screening_id: existingRecord.screening_id },
+                data: {
+                    result: (result && String(result).trim()) ? String(result).trim() : existingRecord.result,
+                    file_url: finalFileUrl || existingRecord.file_url,
+                    remarks: remarks !== undefined ? remarks : existingRecord.remarks,
+                    sync_status: "synced"
+                }
+            });
             return res.status(200).json({
-                message: "Lab Screening already registered",
-                data: existingRecord
+                message: "Lab Screening updated successfully",
+                data: updatedRecord
             });
         }
 
