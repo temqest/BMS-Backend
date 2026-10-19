@@ -262,9 +262,18 @@ const evaluate_clinical_vitals = async (visit_id, options = {}) => {
         baselineVisit,
     });
 
-    const finalRisk = (options.preserveExistingRisk && (options.overrideRiskLevel || visit.risk_level_assessed))
-        ? (options.overrideRiskLevel || visit.risk_level_assessed)
-        : assessment.risk_level;
+    const isOverride = Boolean(options.preserveExistingRisk && options.overrideRiskLevel);
+    let finalRisk;
+    if (isOverride) {
+        const norm = String(options.overrideRiskLevel).toLowerCase();
+        finalRisk = norm.includes("high") || norm.includes("critical")
+            ? "High Risk"
+            : (norm.includes("mod") || norm.includes("med") ? "Moderate Risk" : "Low Risk");
+    } else {
+        finalRisk = assessment.risk_level === "HIGH"
+            ? "High Risk"
+            : (assessment.risk_level === "MODERATE" ? "Moderate Risk" : "Low Risk");
+    }
 
     await prisma.prenatalVisit.update({
         where: { visit_id: visit_id },
@@ -275,15 +284,38 @@ const evaluate_clinical_vitals = async (visit_id, options = {}) => {
     const effectiveSeverity = String(finalRisk).toUpperCase();
     if (effectiveSeverity.includes("HIGH") || effectiveSeverity.includes("MODERATE")) {
         const severity = effectiveSeverity.includes("HIGH") ? "HIGH" : "MODERATE";
-        alertRecord = await prisma.cDSS_Alert.create({
-            data: {
-                pregnancy_id: visit.pregnancy_id,
-                visit_id: visit.visit_id,
-                alert_type: severity === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
-                alert_message: `TEWS Score: ${assessment.tews_score}. Risk level: ${finalRisk}.${assessment.triggers?.length ? ` Triggers: ${assessment.triggers.slice(0, 3).join("; ")}` : ""}`,
-                severity: severity,
-            },
+        const alertMsg = `TEWS Score: ${assessment.tews_score}. Risk level: ${finalRisk}.${assessment.triggers?.length ? ` Triggers: ${assessment.triggers.slice(0, 3).join("; ")}` : ""}${options.overrideReason ? ` Clinical override: ${options.overrideReason}` : ""}`;
+        
+        const existingAlert = await prisma.cDSS_Alert.findFirst({
+            where: { visit_id: visit.visit_id },
+            orderBy: { created_at: "desc" }
         });
+
+        if (existingAlert) {
+            alertRecord = await prisma.cDSS_Alert.update({
+                where: { alert_id: existingAlert.alert_id },
+                data: {
+                    alert_type: severity === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
+                    alert_message: alertMsg,
+                    severity: severity,
+                    updated_at: new Date()
+                }
+            });
+        } else {
+            alertRecord = await prisma.cDSS_Alert.create({
+                data: {
+                    pregnancy_id: visit.pregnancy_id,
+                    visit_id: visit.visit_id,
+                    alert_type: severity === "HIGH" ? "CRITICAL_RISK" : "MODERATE_RISK",
+                    alert_message: alertMsg,
+                    severity: severity,
+                },
+            });
+        }
+    } else {
+        await prisma.cDSS_Alert.deleteMany({
+            where: { visit_id: visit.visit_id }
+        }).catch(() => {});
     }
 
     return {

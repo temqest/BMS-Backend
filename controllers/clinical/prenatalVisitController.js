@@ -125,7 +125,10 @@ const registerPrenatalVisit = async (req, res, next) => {
             baselineVisit: baselineVisit,
         });
 
-        const finalRiskLevel = risk_level_assessed || assessment.risk_level;
+        const defaultAssessedRisk = assessment.risk_level === "HIGH"
+            ? "High Risk"
+            : (assessment.risk_level === "MODERATE" ? "Moderate Risk" : "Low Risk");
+        const finalRiskLevel = risk_level_assessed || defaultAssessedRisk;
 
         const newPrenatalVisit = await prisma.prenatalVisit.create({
             data: {
@@ -295,15 +298,20 @@ const updatePrenatalVisit = async (req, res, next) => {
         }
 
         const updatedVisit = mvccResult.record;
-        const isExplicitRisk = clientData.risk_level_assessed !== undefined && clientData.risk_level_assessed !== null;
+        const isExplicitOverride = Boolean(clientData.is_risk_overridden || clientData.override_reason);
         const cdssAssessment = await evaluate_clinical_vitals(updatedVisit.visit_id, {
-            preserveExistingRisk: isExplicitRisk,
-            overrideRiskLevel: clientData.risk_level_assessed,
+            preserveExistingRisk: isExplicitOverride,
+            overrideRiskLevel: isExplicitOverride ? clientData.risk_level_assessed : null,
+            overrideReason: clientData.override_reason,
+        });
+
+        const freshVisit = await prisma.prenatalVisit.findUnique({
+            where: { visit_id: updatedVisit.visit_id }
         });
 
         return res.status(200).json({
             message: "Prenatal visit successfully updated!",
-            result: updatedVisit,
+            result: freshVisit || updatedVisit,
             strategyUsed: mvccResult.strategyUsed,
             cdssAssessment: cdssAssessment,
         });
