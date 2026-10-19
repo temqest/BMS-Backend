@@ -288,7 +288,7 @@ const evaluate_clinical_vitals = async (visit_id, options = {}) => {
         
         const existingAlert = await prisma.cDSS_Alert.findFirst({
             where: { visit_id: visit.visit_id },
-            orderBy: { created_at: "desc" }
+            orderBy: { updated_at: "desc" }
         });
 
         if (existingAlert) {
