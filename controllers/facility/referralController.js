@@ -942,6 +942,16 @@ const respondPublicReferral = async (req, res, next) => {
                     { referral_id: identifier },
                     { secure_link: { endsWith: identifier } }
                 ]
+            },
+            include: {
+                fromFacility: true,
+                pregnancy: {
+                    include: {
+                        mother: {
+                            include: { user: true }
+                        }
+                    }
+                }
             }
         });
 
@@ -957,17 +967,61 @@ const respondPublicReferral = async (req, res, next) => {
 
         const standardStatus = normalizedStatus === "declined" ? "rejected" : normalizedStatus;
 
+        let updatedResponseNotes = referral.response_notes;
+        if (response_notes !== undefined && response_notes.trim()) {
+            const timestamp = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+            const stageLabel = standardStatus.toUpperCase().replace(/_/g, ' ');
+            const noteEntry = `[${timestamp}] [STAGE: ${stageLabel}]: ${response_notes.trim()}`;
+            if (referral.response_notes && referral.response_notes.trim()) {
+                if (!referral.response_notes.includes(response_notes.trim())) {
+                    updatedResponseNotes = `${referral.response_notes}\n${noteEntry}`;
+                }
+            } else {
+                updatedResponseNotes = noteEntry;
+            }
+        }
+
         const updated = await prisma.online_Referral.update({
             where: { referral_id: referral.referral_id },
             data: {
                 status: standardStatus,
-                ...(response_notes !== undefined && { response_notes: response_notes }),
+                ...(updatedResponseNotes !== undefined && { response_notes: updatedResponseNotes }),
                 ...(outcome !== undefined && { outcome: outcome }),
-                is_completed: standardStatus === "completed" || standardStatus === "accepted",
+                is_completed: standardStatus === "completed",
                 date_responded: new Date(),
                 version: { increment: 1 },
             }
         });
+
+        try {
+            const originStaff = await prisma.user.findMany({
+                where: {
+                    facility_id: referral.from_facility_id,
+                    role: { in: ['Admin', 'Doctor', 'Midwife', 'Nurse', 'HealthcareStaff', 'FacilityAdmin', 'Worker'] }
+                },
+                select: { user_id: true }
+            });
+
+            const patientName = referral.pregnancy?.mother?.user
+                ? `${referral.pregnancy.mother.user.first_name || ""} ${referral.pregnancy.mother.user.last_name || ""}`.trim()
+                : "Referred Patient";
+
+            const preview = response_notes ? ` - Note: "${response_notes.trim().slice(0, 60)}..."` : "";
+            const notifMsg = `Hospital Update for ${patientName}: Stage updated to ${standardStatus.toUpperCase().replace(/_/g, ' ')}${preview}`;
+
+            for (const staff of originStaff) {
+                await prisma.notification.create({
+                    data: {
+                        user_id: staff.user_id,
+                        notification_type: 'Referral',
+                        notification_message: notifMsg,
+                        notification_date: new Date()
+                    }
+                }).catch(() => {});
+            }
+        } catch (notifErr) {
+            console.warn("[respondPublicReferral] Notification dispatch notice:", notifErr.message);
+        }
 
         return res.status(200).json({
             message: `Referral status updated to ${standardStatus}`,
@@ -1037,17 +1091,29 @@ const clarifyPublicReferral = async (req, res, next) => {
             }
         });
 
-        // Dispatch in-app notification if referring facility user exists
-        const recipientUserId = referral.pregnancy?.mother?.assigned_worker_id || referral.pregnancy?.mother?.created_by_id;
-        if (recipientUserId) {
-            await prisma.notification.create({
-                data: {
-                    user_id: recipientUserId,
-                    title: `Referral Inquiry: ${patientName}`,
-                    message: `[${(priority || 'urgent').toUpperCase()}] ${topic ? topic + ': ' : ''}${message.trim()}`,
-                    type: 'referral_clarification',
-                }
-            }).catch(e => console.warn("[clarifyPublicReferral] Notification create notice:", e.message));
+        try {
+            const originStaff = await prisma.user.findMany({
+                where: {
+                    facility_id: referral.from_facility_id,
+                    role: { in: ['Admin', 'Doctor', 'Midwife', 'Nurse', 'HealthcareStaff', 'FacilityAdmin', 'Worker'] }
+                },
+                select: { user_id: true }
+            });
+
+            const inquiryMsg = `Hospital Inquiry [${(priority || 'urgent').toUpperCase()}]: ${topic ? topic + ' - ' : ''}${message.trim()}`;
+
+            for (const staff of originStaff) {
+                await prisma.notification.create({
+                    data: {
+                        user_id: staff.user_id,
+                        notification_type: 'Referral',
+                        notification_message: inquiryMsg,
+                        notification_date: new Date()
+                    }
+                }).catch(() => {});
+            }
+        } catch (notifErr) {
+            console.warn("[clarifyPublicReferral] Notification dispatch notice:", notifErr.message);
         }
 
         return res.status(200).json({
