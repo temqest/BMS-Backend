@@ -24,6 +24,7 @@ const auditTrailRouter = require('./router/communications/auditTrailRouter');
 const referralRouter = require('./router/facility/referralRouter');
 const cdssRouter = require('./router/clinical/cdssRouter');
 const appointmentRouter = require('./router/scheduling/appointmentRouter');
+const calendarRouter = require('./router/facility/calendarRouter');
 
 const { apiLimiter } = require('./middleware/rateLimmiter');
 
@@ -152,6 +153,7 @@ app.use('/api/v1/referral', referralRouter)
 app.use('/api/v1/cdss', cdssRouter)
 
 app.use('/api/v1/appointment', appointmentRouter)
+app.use('/api/v1/calendar', calendarRouter)
 
 app.use('/api/v1/sync', syncRouter)
 

@@ -27,6 +27,7 @@ model Facility {
   appointments        Appointment[]
   motherEnrollments   Mother_Facility_Enrollment[]
   facilityDocuments   Facility_Document[]
+  schedules Facility_Schedule[]
 }
 
 //User schema
@@ -511,3 +512,20 @@ model Facility_Document {
   @@index([category])
 }
 
+model Facility_Schedule {
+  schedule_id         String   @id @default(uuid())
+  facility_id         String
+  available_date      DateTime @db.Date
+  available_time_slot String?
+  max_slots           Int      @default(1)
+  booked_slots        Int      @default(0)
+  is_available        Boolean  @default(true)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @default(now()) @updatedAt
+
+  facility Facility @relation(fields: [facility_id], references: [facility_id], onDelete: Cascade)
+
+  @@unique([facility_id, available_date, available_time_slot])
+  @@index([facility_id, available_date])
+  @@index([available_date])
+}
