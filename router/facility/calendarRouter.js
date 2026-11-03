@@ -28,3 +28,4 @@ router.get('/facility/:facility_id', verifyToken, checkUserRole(allRoles), get_f
 router.get('/slots/:schedule_id', verifyToken, checkUserRole(allRoles), get_schedule_by_id);
 
 module.exports = router;
+

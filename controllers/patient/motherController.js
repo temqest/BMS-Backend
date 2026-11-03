@@ -801,7 +801,7 @@ const assignStaffToMother = async (req, res, next) => {
 const getAllActiveMother = async (req, res, next) => {
     try {
         const staffFacilityId = req.user?.facility_id;
-        const isSysAdmin = req.user?.role === 'SystemAdmin';
+        const isSysAdmin = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
         const isAdmin = req.user?.role === 'Admin';
         const currentUserId = req.user?.user_id;
 
@@ -963,17 +963,36 @@ const searchMotherByID = async (req, res, next) => {
             return res.status(404).json({ error: "Mother not found" });
         }
 
-        if (req.user?.role !== 'SystemAdmin') {
+        const isSuperAdmin = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+
+        if (!isSuperAdmin) {
             const homeFacilityMatch = searchMotherResult.user?.facility_id && searchMotherResult.user.facility_id === req.user?.facility_id;
             const enrollmentMatch = (searchMotherResult.facilityEnrollments || []).some(
                 e => e.facility_id === req.user?.facility_id && e.status === 'Active'
             );
-            if (searchMotherResult.user?.facility_id && !homeFacilityMatch && !enrollmentMatch) {
+
+            let referralMatch = false;
+            if (!homeFacilityMatch && !enrollmentMatch && req.user?.facility_id) {
+                const activeReferral = await prisma.online_Referral.findFirst({
+                    where: {
+                        pregnancy: { mother_id: searchMotherResult.mother_id },
+                        OR: [
+                            { from_facility_id: req.user.facility_id },
+                            { to_facility_id: req.user.facility_id }
+                        ]
+                    }
+                });
+                if (activeReferral) {
+                    referralMatch = true;
+                }
+            }
+
+            if (searchMotherResult.user?.facility_id && !homeFacilityMatch && !enrollmentMatch && !referralMatch) {
                 return res.status(403).json({ error: "Mother belongs to another facility" });
             }
         }
 
-        if (req.user?.role !== 'SystemAdmin' && req.user?.role !== 'Admin') {
+        if (!isSuperAdmin && req.user?.role !== 'Admin') {
             const isAssigned = searchMotherResult.assigned_worker_id === req.user?.user_id;
             const isCreator = searchMotherResult.created_by_id === req.user?.user_id;
             const isSelf = searchMotherResult.user_id === req.user?.user_id;

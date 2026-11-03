@@ -390,14 +390,15 @@ const createStaff = async (req, res, next) => {
             return res.status(400).json({ error: 'Missing required staff details' });
         }
 
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
         const allowedStaffRoles = ['Admin', 'Doctor', 'Nurse', 'Midwife', 'HealthWorker', 'Staff'];
 
         if (!allowedStaffRoles.includes(role)) {
             return res.status(400).json({ error: 'Invalid staff role specified' });
         }
 
-        if (role === "Admin" && req.user?.role !== "Admin") {
-            return res.status(403).json({ error: "Only Admin can create another Admin" });
+        if (role === "Admin" && !isSuper && req.user?.role !== "Admin") {
+            return res.status(403).json({ error: "Only Super Admin or Facility Admin can create an Admin account" });
         }
 
         const sanitizedPhone = phone_number && typeof phone_number === 'string' && phone_number.trim() !== '' ? phone_number.trim() : null;
@@ -420,7 +421,7 @@ const createStaff = async (req, res, next) => {
 
         let targetFacilityId = req.user?.facility_id || null;
 
-        if (req.user?.role === 'SystemAdmin') {
+        if (isSuper) {
             targetFacilityId = facility_id || req.user?.facility_id || null;
         } else if (facility_id && facility_id !== req.user?.facility_id) {
             return res.status(403).json({ error: "Cannot assign staff to a different facility." });

@@ -339,6 +339,60 @@ const getFacilityById = async (req, res, next) => {
     }
 };
 
+const getMunicipalOverview = async (req, res, next) => {
+    try {
+        const isSuperAdmin = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuperAdmin) {
+            return res.status(403).json({ error: "Access Denied. Only Super Admin can view municipal overview analytics." });
+        }
+
+        const [
+            totalFacilities,
+            totalMothers,
+            activePregnancies,
+            totalReferrals,
+            facilitiesSummary
+        ] = await Promise.all([
+            prisma.facility.count(),
+            prisma.mother.count(),
+            prisma.pregnancy.count({
+                where: { pregnancy_status: { in: ['Active', 'active', 'ACTIVE'] } }
+            }),
+            prisma.online_Referral.count(),
+            prisma.facility.findMany({
+                select: {
+                    facility_id: true,
+                    facility_name: true,
+                    type: true,
+                    address: true,
+                    _count: {
+                        select: {
+                            users: true,
+                            appointments: true,
+                            motherEnrollments: true,
+                            onlineReferralsFrom: true,
+                            onlineReferralsTo: true
+                        }
+                    }
+                }
+            })
+        ]);
+
+        return res.status(200).json({
+            message: "Municipal health system overview retrieved successfully",
+            result: {
+                totalFacilities,
+                totalMothers,
+                activePregnancies,
+                totalReferrals,
+                facilitiesSummary
+            }
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 module.exports = {
     registerFacility,
     publicRegisterFacility,
@@ -348,4 +402,5 @@ module.exports = {
     deleteFacility,
     viewAllFacility,
     getFacilityById,
+    getMunicipalOverview,
 };

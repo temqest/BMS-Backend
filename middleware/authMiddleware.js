@@ -37,15 +37,43 @@ const checkUserRole = (requiredRoles) => {
             return res.status(500).json({error : "Internal server error: User not authenticated before role check"});
         }
 
-        if(!requiredRoles.includes(req.user.role)) {
+        const normalizedRole = req.user.role === 'SuperAdmin' ? 'SystemAdmin' : req.user.role;
+        const normalizedRequired = requiredRoles.flatMap(r => (r === 'SuperAdmin' || r === 'SystemAdmin') ? ['SystemAdmin', 'SuperAdmin'] : [r]);
+
+        if(!normalizedRequired.includes(normalizedRole) && !normalizedRequired.includes(req.user.role)) {
             return res.status(403).json({error: "Access Denied. You do not have permission to perform this action"});
         }
 
         next();
     };
-}
+};
+
+const isSuperAdmin = (user) => {
+    return !!(user && (user.role === 'SystemAdmin' || user.role === 'SuperAdmin'));
+};
+
+const ensureFacilityAccess = (paramKey = 'facility_id') => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(500).json({ error: "Internal server error: User not authenticated" });
+        }
+
+        if (isSuperAdmin(req.user)) {
+            return next();
+        }
+
+        const targetFacilityId = req.params[paramKey] || req.body[paramKey] || req.query[paramKey];
+        if (targetFacilityId && req.user.facility_id && targetFacilityId !== req.user.facility_id) {
+            return res.status(403).json({ error: "Access Denied. You do not have permission to access another facility's records." });
+        }
+
+        next();
+    };
+};
 
 module.exports = {
     verifyToken,
     checkUserRole,
+    isSuperAdmin,
+    ensureFacilityAccess
 };

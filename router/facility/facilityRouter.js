@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { verifyToken, checkUserRole } = require('../../middleware/authMiddleware');
+const { verifyToken, checkUserRole, ensureFacilityAccess } = require('../../middleware/authMiddleware');
 const {
     registerFacility,
     publicRegisterFacility,
@@ -9,11 +9,14 @@ const {
     updateFacility,
     deleteFacility,
     viewAllFacility,
-    getFacilityById
+    getFacilityById,
+    getMunicipalOverview
 } = require('../../controllers/facility/facilityController');
 
-const sysAdminOnly = ['SystemAdmin'];
-const adminRoles = ['SystemAdmin', 'Admin'];
+const sysAdminOnly = ['SystemAdmin', 'SuperAdmin'];
+const adminRoles = ['SystemAdmin', 'SuperAdmin', 'Admin'];
+
+router.get('/overview', verifyToken, checkUserRole(sysAdminOnly), getMunicipalOverview);
 
 router.post('/register', verifyToken, checkUserRole(sysAdminOnly), registerFacility);
 
@@ -29,6 +32,6 @@ router.delete('/delete', verifyToken, checkUserRole(sysAdminOnly), deleteFacilit
 
 router.get('/getAll', verifyToken, checkUserRole(sysAdminOnly), viewAllFacility);
 
-router.get('/:facility_id', verifyToken, getFacilityById);
+router.get('/:facility_id', verifyToken, ensureFacilityAccess('facility_id'), getFacilityById);
 
 module.exports = router;

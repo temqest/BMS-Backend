@@ -94,7 +94,12 @@ async function saveBase64ToFile(fileUrl, req) {
 
 const getStaffByFacility = async (req, res, next) => {
     try {
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
         let facility_id = req.query.facility_id || req.user?.facility_id;
+
+        if (req.query.facility_id && !isSuper && req.user?.facility_id && req.query.facility_id !== req.user.facility_id) {
+            return res.status(403).json({ error: "Access Denied. You cannot view staff from another facility." });
+        }
 
         if (!facility_id && req.user?.user_id) {
             const dbUser = await prisma.user.findUnique({
@@ -102,6 +107,40 @@ const getStaffByFacility = async (req, res, next) => {
                 select: { facility_id: true }
             });
             facility_id = dbUser?.facility_id;
+        }
+
+        if (!facility_id && isSuper) {
+            const allStaff = await prisma.user.findMany({
+                where: {
+                    is_active: true,
+                    role: { notIn: ['Mother', 'MOTHER'] }
+                },
+                select: {
+                    user_id: true,
+                    facility_id: true,
+                    first_name: true,
+                    middle_name: true,
+                    last_name: true,
+                    role: true,
+                    phone_number: true,
+                    email: true,
+                    address: true,
+                    profile_url: true,
+                    is_active: true,
+                    updated_at: true,
+                    facility: {
+                        select: {
+                            facility_id: true,
+                            facility_name: true,
+                            type: true
+                        }
+                    }
+                }
+            });
+            return res.status(200).json({
+                message: "All municipal staff retrieved successfully",
+                result: allStaff
+            });
         }
 
         if (!facility_id) {
@@ -306,7 +345,7 @@ const updateStaffRole = async (req, res, next) => {
             return res.status(400).json({ error: "Role is required" });
         }
 
-        const isSuperAdmin = requestingUser?.role === 'SystemAdmin';
+        const isSuperAdmin = requestingUser?.role === 'SystemAdmin' || requestingUser?.role === 'SuperAdmin';
         const isAdmin = requestingUser?.role === 'Admin';
 
         if (!isSuperAdmin && !isAdmin) {
@@ -322,14 +361,14 @@ const updateStaffRole = async (req, res, next) => {
         }
 
         if (!isSuperAdmin) {
-            if (existingUser.role === 'SystemAdmin') {
-                return res.status(403).json({ error: "Facility admins cannot modify SystemAdmin accounts." });
+            if (existingUser.role === 'SystemAdmin' || existingUser.role === 'SuperAdmin') {
+                return res.status(403).json({ error: "Facility admins cannot modify SuperAdmin accounts." });
             }
             if (existingUser.facility_id !== requestingUser?.facility_id) {
                 return res.status(403).json({ error: "You cannot modify accounts from another facility." });
             }
-            if (role === 'SystemAdmin') {
-                return res.status(403).json({ error: "Only SystemAdmin can assign the SystemAdmin role." });
+            if (role === 'SystemAdmin' || role === 'SuperAdmin') {
+                return res.status(403).json({ error: "Only SuperAdmin can assign the SuperAdmin role." });
             }
         }
 
@@ -398,7 +437,7 @@ const deactivateStaff = async (req, res, next) => {
         }
 
         const isSelf = requestingUser?.user_id === existingUser.user_id;
-        const isSuperAdmin = requestingUser?.role === 'SystemAdmin';
+        const isSuperAdmin = requestingUser?.role === 'SystemAdmin' || requestingUser?.role === 'SuperAdmin';
         const isAdmin = requestingUser?.role === 'Admin';
 
         if (!isSelf && !isSuperAdmin && !isAdmin) {
@@ -406,8 +445,8 @@ const deactivateStaff = async (req, res, next) => {
         }
 
         if (!isSelf && !isSuperAdmin) {
-            if (existingUser.role === 'SystemAdmin') {
-                return res.status(403).json({ error: "Facility admins cannot modify SystemAdmin accounts." });
+            if (existingUser.role === 'SystemAdmin' || existingUser.role === 'SuperAdmin') {
+                return res.status(403).json({ error: "Facility admins cannot modify SuperAdmin accounts." });
             }
             if (existingUser.facility_id !== requestingUser?.facility_id) {
                 return res.status(403).json({ error: "You cannot modify accounts from another facility." });

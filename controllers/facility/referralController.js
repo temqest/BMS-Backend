@@ -454,6 +454,38 @@ const respondToReferral = async (req, res, next) => {
             });
         }
 
+        if (normalizedStatus === 'accepted' && existingReferral.to_facility_id) {
+            try {
+                const pregnancy = await prisma.pregnancy.findUnique({
+                    where: { pregnancy_id: existingReferral.pregnancy_id },
+                    select: { mother_id: true }
+                });
+
+                if (pregnancy?.mother_id) {
+                    await prisma.mother_Facility_Enrollment.upsert({
+                        where: {
+                            mother_id_facility_id: {
+                                mother_id: pregnancy.mother_id,
+                                facility_id: existingReferral.to_facility_id
+                            }
+                        },
+                        update: {
+                            status: 'Active',
+                            notes: `Automatically enrolled via accepted referral #${referral_id}`
+                        },
+                        create: {
+                            mother_id: pregnancy.mother_id,
+                            facility_id: existingReferral.to_facility_id,
+                            status: 'Active',
+                            notes: `Automatically enrolled via accepted referral #${referral_id}`
+                        }
+                    });
+                }
+            } catch (enrollErr) {
+                console.warn("Failed to auto-enroll mother on referral acceptance:", enrollErr.message);
+            }
+        }
+
         return res.status(200).json({
             message: "Referral response saved successfully",
             data: mvccResult.record,
@@ -508,7 +540,7 @@ const getReferralByFacility = async (req, res, next) => {
 
         const userRole = req.user?.role;
         const currentUserId = req.user?.user_id || req.user?.id;
-        const isSystemAdmin = userRole === 'SystemAdmin';
+        const isSystemAdmin = userRole === 'SystemAdmin' || userRole === 'SuperAdmin';
         const isAdmin = ['Admin', 'Administrator', 'FacilityAdmin'].includes(userRole);
 
         if (!isSystemAdmin && req.user?.facility_id !== facility_id) {
