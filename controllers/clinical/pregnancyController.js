@@ -3,6 +3,7 @@ const validate = require('../../util/validation');
 const { updateWithMVCC } = require('../../services/conflicResolution');
 const { logAuditTrail } = require('../../services/auditService');
 const { resolveEntityId } = require('../../middleware/idResolver');
+const { getTransferVisitDateFilter } = require('../../services/facilityTransferAccess');
 
 const registerPregnancy = async (req, res, next) => {
     try {
@@ -251,10 +252,23 @@ const getPregnancyByID = async (req, res, next) => {
             return res.status(400).json({ error: "Pregnancy ID is required" });
         }
 
+        const existingPregnancy = await prisma.pregnancy.findUnique({
+            where: { pregnancy_id: pregnancy_id },
+            select: { mother_id: true }
+        });
+
+        if (!existingPregnancy) {
+            return res.status(404).json({ error: "Pregnancy not found" });
+        }
+
+        const dateFilter = await getTransferVisitDateFilter(existingPregnancy.mother_id, pregnancy_id, req.user);
+        const prenatalWhere = dateFilter ? { visit_date: dateFilter } : undefined;
+
         const pregnancy = await prisma.pregnancy.findUnique({
             where: { pregnancy_id: pregnancy_id },
             include: {
                 prenatalVisits: {
+                    where: prenatalWhere,
                     orderBy: { visit_date: 'asc' },
                     include: {
                         healthWorker: {
@@ -271,10 +285,6 @@ const getPregnancyByID = async (req, res, next) => {
                 },
             },
         });
-
-        if (!pregnancy) {
-            return res.status(404).json({ error: "Pregnancy not found" });
-        }
 
         return res.status(200).json({
             message: "Pregnancy data retrieved successfully",

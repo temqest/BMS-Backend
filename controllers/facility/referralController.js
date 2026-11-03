@@ -462,24 +462,37 @@ const respondToReferral = async (req, res, next) => {
                 });
 
                 if (pregnancy?.mother_id) {
-                    await prisma.mother_Facility_Enrollment.upsert({
-                        where: {
-                            mother_id_facility_id: {
+                    await prisma.$transaction([
+                        prisma.mother_Facility_Enrollment.upsert({
+                            where: {
+                                mother_id_facility_id: {
+                                    mother_id: pregnancy.mother_id,
+                                    facility_id: existingReferral.to_facility_id
+                                }
+                            },
+                            update: {
+                                status: 'Active',
+                                notes: `Automatically enrolled via accepted referral #${referral_id}`
+                            },
+                            create: {
                                 mother_id: pregnancy.mother_id,
-                                facility_id: existingReferral.to_facility_id
+                                facility_id: existingReferral.to_facility_id,
+                                status: 'Active',
+                                notes: `Automatically enrolled via accepted referral #${referral_id}`
                             }
-                        },
-                        update: {
-                            status: 'Active',
-                            notes: `Automatically enrolled via accepted referral #${referral_id}`
-                        },
-                        create: {
-                            mother_id: pregnancy.mother_id,
-                            facility_id: existingReferral.to_facility_id,
-                            status: 'Active',
-                            notes: `Automatically enrolled via accepted referral #${referral_id}`
-                        }
-                    });
+                        }),
+                        prisma.mother_Facility_Enrollment.updateMany({
+                            where: {
+                                mother_id: pregnancy.mother_id,
+                                facility_id: existingReferral.from_facility_id,
+                                status: 'Active'
+                            },
+                            data: {
+                                status: 'Transferred',
+                                notes: `Transferred to facility #${existingReferral.to_facility_id} via referral #${referral_id}`
+                            }
+                        })
+                    ]);
                 }
             } catch (enrollErr) {
                 console.warn("Failed to auto-enroll mother on referral acceptance:", enrollErr.message);

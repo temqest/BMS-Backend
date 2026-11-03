@@ -4,6 +4,7 @@ const { evaluate_clinical_vitals, calculateTewsScore } = require('../../services
 const { updateWithMVCC } = require('../../services/conflicResolution');
 const { logAuditTrail } = require('../../services/auditService');
 const { resolveEntityId } = require('../../middleware/idResolver');
+const { getTransferVisitDateFilter, verifyFacilityWriteAccess } = require('../../services/facilityTransferAccess');
 
 const registerPrenatalVisit = async (req, res, next) => {
     try {
@@ -91,6 +92,11 @@ const registerPrenatalVisit = async (req, res, next) => {
         }
 
         targetPregnancyId = pregnancy.pregnancy_id;
+
+        const writeAccess = await verifyFacilityWriteAccess(pregnancy.mother_id, req.user);
+        if (!writeAccess.allowed) {
+            return res.status(403).json({ error: writeAccess.error });
+        }
 
         let healthWorkerIdToUse = health_worker_id;
         let health_worker = health_worker_id
@@ -442,10 +448,16 @@ const getPrentalVisitByPregnancy = async (req, res, next) => {
             return res.status(404).json({ error: "Pregnancy not found" });
         }
 
+        const pregRecord = await prisma.pregnancy.findUnique({
+            where: { pregnancy_id: pregnancy_id },
+            select: { mother_id: true }
+        });
+        const dateFilter = pregRecord ? await getTransferVisitDateFilter(pregRecord.mother_id, pregnancy_id, req.user) : null;
+        const visitWhere = { pregnancy_id: pregnancy_id };
+        if (dateFilter) visitWhere.visit_date = dateFilter;
+
         const visit = await prisma.prenatalVisit.findMany({
-            where: {
-                pregnancy_id: pregnancy_id
-            },
+            where: visitWhere,
             include: {
                 healthWorker: {
                     select: {
@@ -491,12 +503,16 @@ const getAllPrenatalVisitsByMother = async (req, res, next) => {
             return res.status(404).json({ error: "Mother not found" });
         }
 
+        const activePreg = await prisma.pregnancy.findFirst({
+            where: { mother_id: motherRecord.mother_id },
+            orderBy: { date_of_registration: 'desc' }
+        });
+        const dateFilterMother = activePreg ? await getTransferVisitDateFilter(motherRecord.mother_id, activePreg.pregnancy_id, req.user) : null;
+        const visitMotherWhere = { pregnancy: { mother_id: motherRecord.mother_id } };
+        if (dateFilterMother) visitMotherWhere.visit_date = dateFilterMother;
+
         const visits = await prisma.prenatalVisit.findMany({
-            where: {
-                pregnancy: {
-                    mother_id: motherRecord.mother_id
-                }
-            },
+            where: visitMotherWhere,
             include: {
                 healthWorker: {
                     select: {
