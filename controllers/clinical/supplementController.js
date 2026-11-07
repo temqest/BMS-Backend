@@ -2,6 +2,7 @@ const prisma = require('../../util/db');
 const validate = require('../../util/validation');
 const { updateWithMVCC } = require('../../services/conflicResolution');
 const { resolveEntityId } = require('../../middleware/idResolver');
+const { verifyFacilityReadAccess, verifyFacilityWriteAccess } = require('../../services/facilityTransferAccess');
 
 const registerSupplementRecord = async (req, res, next) => {
     try {
@@ -37,6 +38,11 @@ const registerSupplementRecord = async (req, res, next) => {
 
         if (!pregnancy) {
             return res.status(404).json({ error: "Pregnancy not found" });
+        }
+
+        const writeAccess = await verifyFacilityWriteAccess(pregnancy.mother_id, req.user);
+        if (!writeAccess.allowed) {
+            return res.status(403).json({ error: writeAccess.error });
         }
 
         targetPregnancyId = pregnancy.pregnancy_id;
@@ -199,11 +205,28 @@ const getSupplementRecordByID = async (req, res, next) => {
         const { supplement_id } = req.params;
 
         const supplement_record = await prisma.supplementation_Record.findUnique({
-            where: { supplement_id: supplement_id }
+            where: { supplement_id: supplement_id },
+            include: {
+                pregnancy: {
+                    select: {
+                        mother_id: true,
+                        pregnancy_id: true
+                    }
+                }
+            }
         });
 
         if (!supplement_record) {
             return res.status(404).json({ error: "Supplement record not found" });
+        }
+
+        const access = await verifyFacilityReadAccess(supplement_record.pregnancy?.mother_id, req.user, supplement_record.pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
+        if (access.dateFilter && access.dateFilter.lte && new Date(supplement_record.date_given) > new Date(access.dateFilter.lte)) {
+            return res.status(403).json({ error: "Access denied. Record was created after patient was transferred." });
         }
 
         return res.status(200).json({
@@ -220,12 +243,25 @@ const getSupplementRecordByPregnancy = async (req, res, next) => {
     try {
         const { pregnancy_id } = req.params;
 
-        if (!(await validate.isPregnancyExist(pregnancy_id))) {
+        const pregnancy = await prisma.pregnancy.findUnique({
+            where: { pregnancy_id: pregnancy_id },
+            select: { mother_id: true }
+        });
+
+        if (!pregnancy) {
             return res.status(404).json({ error: "Pregnancy not found" });
         }
 
+        const access = await verifyFacilityReadAccess(pregnancy.mother_id, req.user, pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
+        const suppWhere = { pregnancy_id: pregnancy_id };
+        if (access.dateFilter) suppWhere.date_given = access.dateFilter;
+
         const supplement_records = await prisma.supplementation_Record.findMany({
-            where: { pregnancy_id: pregnancy_id }
+            where: suppWhere
         });
 
         return res.status(200).json({
@@ -244,6 +280,11 @@ const getSupplementRecordByHealthWorker = async (req, res, next) => {
 
         if (!(await validate.isUserExist(health_worker_id))) {
             return res.status(404).json({ error: "Health worker not found" });
+        }
+
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuper && req.user?.user_id !== health_worker_id && req.user?.role !== 'Admin') {
+            return res.status(403).json({ error: "Cannot access another worker's supplement logs." });
         }
 
         const supplement_records = await prisma.supplementation_Record.findMany({
@@ -281,6 +322,11 @@ const getSupplementRecordByMother = async (req, res, next) => {
             return res.status(404).json({ error: "Mother record not found" });
         }
 
+        const access = await verifyFacilityReadAccess(motherRecord.mother_id, req.user);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
         const pregnancies = await prisma.pregnancy.findMany({
             where: { mother_id: motherRecord.mother_id },
             select: { pregnancy_id: true }
@@ -295,10 +341,13 @@ const getSupplementRecordByMother = async (req, res, next) => {
 
         const pregnancyIds = pregnancies.map(p => p.pregnancy_id);
 
+        const suppWhere = {
+            pregnancy_id: { in: pregnancyIds }
+        };
+        if (access.dateFilter) suppWhere.date_given = access.dateFilter;
+
         const supplement_records = await prisma.supplementation_Record.findMany({
-            where: {
-                pregnancy_id: { in: pregnancyIds }
-            },
+            where: suppWhere,
             orderBy: {
                 date_given: 'desc'
             }

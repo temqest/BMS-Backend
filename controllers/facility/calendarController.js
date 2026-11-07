@@ -8,6 +8,11 @@ const create_appointment_slots = async (req, res, next) => {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuper && req.user?.facility_id && facility_id !== req.user.facility_id) {
+            return res.status(403).json({ error: "Access denied. Cannot create schedule for another facility." });
+        }
+
         const parsedDate = new Date(day);
         if (isNaN(parsedDate.getTime())) {
             return res.status(400).json({ error: "Invalid date format" });
@@ -48,6 +53,11 @@ const update_appointment_slots = async (req, res, next) => {
 
         if (!schedule_id || !facility_id) {
             return res.status(400).json({ error: "schedule_id and facility_id are required" });
+        }
+
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuper && req.user?.facility_id && facility_id !== req.user.facility_id) {
+            return res.status(403).json({ error: "Access denied. Cannot modify another facility's schedule." });
         }
 
         const schedule = await prisma.facility_Schedule.findFirst({
@@ -134,6 +144,11 @@ const delete_appointment_slots = async (req, res, next) => {
             return res.status(404).json({ error: "Schedule slot not found" });
         }
 
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuper && req.user?.facility_id && schedule.facility_id !== req.user.facility_id) {
+            return res.status(403).json({ error: "Access denied. Cannot delete another facility's schedule." });
+        }
+
         if (schedule.booked_slots > 0) {
             return res.status(400).json({
                 error: `Cannot delete schedule slot with ${schedule.booked_slots} existing booking(s). Mark it as unavailable instead.`
@@ -217,6 +232,11 @@ const get_schedule_by_id = async (req, res, next) => {
 
         if (!schedule) {
             return res.status(404).json({ error: "Schedule slot not found" });
+        }
+
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuper && req.user?.facility_id && schedule.facility_id !== req.user.facility_id) {
+            return res.status(403).json({ error: "Access denied. Cannot delete another facility's schedule." });
         }
 
         return res.status(200).json({

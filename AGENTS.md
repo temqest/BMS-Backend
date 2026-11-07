@@ -8,8 +8,9 @@
 ---
 
 ## Clean Code & No Comments Rule (STRICT)
-1. **No Unnecessary Code Comments**: Do NOT add explanatory comments, inline explanations, or narrative text describing what code does. Write clean, self-documenting code.
-2. **No Section Dividers or Decorative Banners**: Do NOT add comment dividers, section headers, or ASCII banners.
-3. **No TODOs or Meta Commentary**: Never leave `// TODO`, `// NOTE`, or AI self-referential notes.
-4. **Exceptions Only When Mandatory**: Only include comments if explicitly requested by the user or strictly required for compiler/linter directives.
+1. **Purge Existing Comments on Encounter**: When coding, modifying, or editing any file, proactively remove any comments encountered from previous coding sessions, past authors, or AI generations.
+2. **Never Add Code Comments**: Do NOT add comments, inline explanations, or narrative text describing what code does. Write clean, self-documenting code.
+3. **No Section Dividers or Decorative Banners**: Do NOT add comment dividers, section headers, or ASCII banners. Remove existing ones immediately.
+4. **No TODOs or Meta Commentary**: Never leave `// TODO`, `// NOTE`, `// FIXME`, or AI self-referential notes.
+5. **Exceptions Only When Mandatory**: Only include comments if strictly required for compiler/linter directives.
 

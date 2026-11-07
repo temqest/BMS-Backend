@@ -2,6 +2,7 @@ const prisma = require('../../util/db');
 const validate = require('../../util/validation');
 const { updateWithMVCC } = require('../../services/conflicResolution');
 const { resolveEntityId } = require('../../middleware/idResolver');
+const { verifyFacilityReadAccess, verifyFacilityWriteAccess } = require('../../services/facilityTransferAccess');
 
 const path = require('path');
 const fs = require('fs');
@@ -207,6 +208,11 @@ const registerLabScreening = async (req, res, next) => {
 
         if (!pregnancy) {
             return res.status(404).json({ error: "Pregnancy not found" });
+        }
+
+        const writeAccess = await verifyFacilityWriteAccess(pregnancy.mother_id, req.user);
+        if (!writeAccess.allowed) {
+            return res.status(403).json({ error: writeAccess.error });
         }
 
         targetPregnancyId = pregnancy.pregnancy_id;
@@ -444,25 +450,27 @@ const getLabScreeningById = async (req, res, next) => {
     try {
         const { screening_id } = req.params;
 
-        const isScreeningExist = await validate.isLabScreeningExist(screening_id);
+        const screeningWithMother = await prisma.lab_Screening.findUnique({
+            where: { screening_id },
+            include: { pregnancy: { include: { mother: true } } }
+        });
 
-        if (!isScreeningExist) {
+        if (!screeningWithMother) {
             return res.status(404).json({ error: "Lab screening not found" });
         }
 
-        if (req.user?.role === 'Mother') {
-            const screeningWithMother = await prisma.lab_Screening.findUnique({
-                where: { screening_id },
-                include: { pregnancy: { include: { mother: true } } }
-            });
-            if (!screeningWithMother || screeningWithMother.pregnancy?.mother?.user_id !== req.user?.user_id) {
-                return res.status(403).json({ error: "You don't have permission to view this lab screening." });
-            }
+        const access = await verifyFacilityReadAccess(screeningWithMother.pregnancy?.mother_id, req.user, screeningWithMother.pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
+        if (access.dateFilter && access.dateFilter.lte && new Date(screeningWithMother.date_of_screening) > new Date(access.dateFilter.lte)) {
+            return res.status(403).json({ error: "Access denied. This screening occurred after the patient was transferred." });
         }
 
         return res.status(200).json({
             message: "Lab screening fetched successfully",
-            data: isScreeningExist
+            data: screeningWithMother
         });
 
     } catch (error) {
@@ -474,12 +482,25 @@ const getLabScreeningByPregnancy = async (req, res, next) => {
     try {
         const { pregnancy_id } = req.params;
 
-        if (!(await validate.isPregnancyExist(pregnancy_id))) {
+        const pregnancy = await prisma.pregnancy.findUnique({
+            where: { pregnancy_id: pregnancy_id },
+            select: { mother_id: true }
+        });
+
+        if (!pregnancy) {
             return res.status(404).json({ error: "Pregnancy not found" });
         }
 
+        const access = await verifyFacilityReadAccess(pregnancy.mother_id, req.user, pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
+        const screeningWhere = { pregnancy_id: pregnancy_id };
+        if (access.dateFilter) screeningWhere.date_of_screening = access.dateFilter;
+
         const labScreening = await prisma.lab_Screening.findMany({
-            where: { pregnancy_id: pregnancy_id },
+            where: screeningWhere,
             include: {
                 visit: {
                     select: {
@@ -503,8 +524,18 @@ const getLabScreeningByVisit = async (req, res, next) => {
     try {
         const { visit_id } = req.params;
 
-        if (!(await validate.isPrenatalVisitExist(visit_id))) {
+        const visit = await prisma.prenatalVisit.findUnique({
+            where: { visit_id: visit_id },
+            include: { pregnancy: { select: { mother_id: true, pregnancy_id: true } } }
+        });
+
+        if (!visit) {
             return res.status(404).json({ error: "Visit not found" });
+        }
+
+        const access = await verifyFacilityReadAccess(visit.pregnancy?.mother_id, req.user, visit.pregnancy?.pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
         }
 
         const labScreening = await prisma.lab_Screening.findMany({
@@ -538,8 +569,9 @@ const getLabScreeningByMother = async (req, res, next) => {
             return res.status(404).json({ error: "Mother record not found" });
         }
 
-        if (req.user?.role === 'Mother' && motherRecord.user_id !== req.user?.user_id) {
-            return res.status(403).json({ error: "You can only view your own lab screenings." });
+        const access = await verifyFacilityReadAccess(motherRecord.mother_id, req.user);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
         }
 
         const pregnancies = await prisma.pregnancy.findMany({

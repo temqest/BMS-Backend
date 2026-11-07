@@ -1,6 +1,7 @@
 const prisma = require('../../util/db');
 const validate = require('../../util/validation');
 const { updateWithMVCC } = require('../../services/conflicResolution');
+const { verifyFacilityReadAccess, verifyFacilityWriteAccess } = require('../../services/facilityTransferAccess');
 
 const registerDeliveryOutcome = async (req, res, next) => {
     try {
@@ -23,8 +24,18 @@ const registerDeliveryOutcome = async (req, res, next) => {
             return res.status(400).json({ error: "Required fields are missing" });
         }
 
-        if (!(await validate.isPregnancyExist(pregnancy_id))) {
+        const preg = await prisma.pregnancy.findUnique({
+            where: { pregnancy_id: pregnancy_id },
+            select: { mother_id: true }
+        });
+
+        if (!preg) {
             return res.status(404).json({ error: "Pregnancy not found" });
+        }
+
+        const writeAccess = await verifyFacilityWriteAccess(preg.mother_id, req.user);
+        if (!writeAccess.allowed) {
+            return res.status(403).json({ error: writeAccess.error });
         }
 
         const result = await prisma.$transaction(async (tx) => {
@@ -196,6 +207,12 @@ const getDeliveryOutcomeById = async (req, res, next) => {
         const delivery = await prisma.delivery_Outcome.findUnique({
             where: { delivery_id },
             include: {
+                pregnancy: {
+                    select: {
+                        mother_id: true,
+                        pregnancy_id: true
+                    }
+                },
                 newbornRecords: true,
                 postpartumVisits: true
             }
@@ -203,6 +220,15 @@ const getDeliveryOutcomeById = async (req, res, next) => {
 
         if (!delivery) {
             return res.status(404).json({ error: "Delivery outcome not found" });
+        }
+
+        const access = await verifyFacilityReadAccess(delivery.pregnancy?.mother_id, req.user, delivery.pregnancy?.pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
+        if (access.dateFilter && access.dateFilter.lte && new Date(delivery.delivery_date) > new Date(access.dateFilter.lte)) {
+            return res.status(403).json({ error: "Access denied. Delivery occurred after patient was transferred." });
         }
 
         return res.status(200).json({
@@ -219,12 +245,25 @@ const getDeliveryOutcomeByPregnancy = async (req, res, next) => {
     try {
         const { pregnancy_id } = req.params;
 
-        if (!(await validate.isPregnancyExist(pregnancy_id))) {
+        const preg = await prisma.pregnancy.findUnique({
+            where: { pregnancy_id: pregnancy_id },
+            select: { mother_id: true }
+        });
+
+        if (!preg) {
             return res.status(404).json({ error: "Pregnancy not found" });
         }
 
+        const access = await verifyFacilityReadAccess(preg.mother_id, req.user, pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
+        const deliveryWhere = { pregnancy_id: pregnancy_id };
+        if (access.dateFilter) deliveryWhere.delivery_date = access.dateFilter;
+
         const deliveryOutcomes = await prisma.delivery_Outcome.findMany({
-            where: { pregnancy_id: pregnancy_id },
+            where: deliveryWhere,
             include: {
                 newbornRecords: true,
                 postpartumVisits: true

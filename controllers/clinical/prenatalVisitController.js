@@ -4,7 +4,7 @@ const { evaluate_clinical_vitals, calculateTewsScore } = require('../../services
 const { updateWithMVCC } = require('../../services/conflicResolution');
 const { logAuditTrail } = require('../../services/auditService');
 const { resolveEntityId } = require('../../middleware/idResolver');
-const { getTransferVisitDateFilter, verifyFacilityWriteAccess } = require('../../services/facilityTransferAccess');
+const { getTransferVisitDateFilter, verifyFacilityWriteAccess, verifyFacilityReadAccess } = require('../../services/facilityTransferAccess');
 
 const registerPrenatalVisit = async (req, res, next) => {
     try {
@@ -365,7 +365,27 @@ const deletePrenatalVisit = async (req, res, next) => {
 
 const getAllPrenatalVisits = async (req, res, next) => {
     try {
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        const staffFacilityId = req.user?.facility_id;
+
+        const whereCondition = isSuper ? {} : {
+            OR: [
+                { healthWorker: { facility_id: staffFacilityId } },
+                {
+                    pregnancy: {
+                        mother: {
+                            OR: [
+                                { user: { facility_id: staffFacilityId } },
+                                { facilityEnrollments: { some: { facility_id: staffFacilityId, status: 'Active' } } }
+                            ]
+                        }
+                    }
+                }
+            ]
+        };
+
         const prenatalVisits = await prisma.prenatalVisit.findMany({
+            where: whereCondition,
             include: {
                 healthWorker: {
                     select: {
@@ -398,21 +418,17 @@ const getPrenatalVisitById = async (req, res, next) => {
             return res.status(400).json({ error: "Visit ID is required" });
         }
 
-        const isVisitExist = await prisma.prenatalVisit.findUnique({
-            where: {
-                visit_id: visit_id
-            }
-        });
-
-        if (!isVisitExist) {
-            return res.status(404).json({ error: "Prenatal visit not found" });
-        }
-
         const visitResult = await prisma.prenatalVisit.findUnique({
             where: {
                 visit_id: visit_id
             },
             include: {
+                pregnancy: {
+                    select: {
+                        pregnancy_id: true,
+                        mother_id: true
+                    }
+                },
                 healthWorker: {
                     select: {
                         user_id: true,
@@ -425,6 +441,19 @@ const getPrenatalVisitById = async (req, res, next) => {
                 }
             }
         });
+
+        if (!visitResult) {
+            return res.status(404).json({ error: "Prenatal visit not found" });
+        }
+
+        const access = await verifyFacilityReadAccess(visitResult.pregnancy?.mother_id, req.user, visitResult.pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
+        if (access.dateFilter && access.dateFilter.lte && new Date(visitResult.visit_date) > new Date(access.dateFilter.lte)) {
+            return res.status(403).json({ error: "Access denied. This visit occurred after the patient was transferred." });
+        }
 
         return res.status(200).json({
             message: "Prenatal visit data retrieved successfully",
@@ -444,17 +473,22 @@ const getPrentalVisitByPregnancy = async (req, res, next) => {
             return res.status(400).json({ error: "Pregnancy ID is required" });
         }
 
-        if (!(await validate.isPregnancyExist(pregnancy_id))) {
-            return res.status(404).json({ error: "Pregnancy not found" });
-        }
-
         const pregRecord = await prisma.pregnancy.findUnique({
             where: { pregnancy_id: pregnancy_id },
             select: { mother_id: true }
         });
-        const dateFilter = pregRecord ? await getTransferVisitDateFilter(pregRecord.mother_id, pregnancy_id, req.user) : null;
+
+        if (!pregRecord) {
+            return res.status(404).json({ error: "Pregnancy not found" });
+        }
+
+        const access = await verifyFacilityReadAccess(pregRecord.mother_id, req.user, pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
         const visitWhere = { pregnancy_id: pregnancy_id };
-        if (dateFilter) visitWhere.visit_date = dateFilter;
+        if (access.dateFilter) visitWhere.visit_date = access.dateFilter;
 
         const visit = await prisma.prenatalVisit.findMany({
             where: visitWhere,
@@ -507,9 +541,14 @@ const getAllPrenatalVisitsByMother = async (req, res, next) => {
             where: { mother_id: motherRecord.mother_id },
             orderBy: { date_of_registration: 'desc' }
         });
-        const dateFilterMother = activePreg ? await getTransferVisitDateFilter(motherRecord.mother_id, activePreg.pregnancy_id, req.user) : null;
+
+        const access = await verifyFacilityReadAccess(motherRecord.mother_id, req.user, activePreg?.pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
         const visitMotherWhere = { pregnancy: { mother_id: motherRecord.mother_id } };
-        if (dateFilterMother) visitMotherWhere.visit_date = dateFilterMother;
+        if (access.dateFilter) visitMotherWhere.visit_date = access.dateFilter;
 
         const visits = await prisma.prenatalVisit.findMany({
             where: visitMotherWhere,
@@ -583,6 +622,11 @@ const getAllPrenatalVisitByFacility = async (req, res, next) => {
 
         if (!facility_id) {
             return res.status(400).json({ error: "Facility ID is required" });
+        }
+
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuper && req.user?.facility_id !== facility_id) {
+            return res.status(403).json({ error: "Cannot view prenatal visits from another facility." });
         }
 
         if (!(await validate.isFacilityExist(facility_id))) {

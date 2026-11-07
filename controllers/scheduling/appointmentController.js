@@ -124,14 +124,22 @@ const createAppointment = async (req, res, next) => {
 
 const getAllAppointments = async (req, res, next) => {
     try {
-        const whereClause = req.user?.role === 'SystemAdmin' 
-            ? {} 
-            : {
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        let whereClause = {};
+
+        if (req.user?.role === 'Mother') {
+            whereClause = { user_id: req.user?.user_id };
+        } else if (isSuper) {
+            whereClause = req.query.facility_id ? { facility_id: req.query.facility_id } : {};
+        } else {
+            const staffFacilityId = req.user?.facility_id;
+            whereClause = {
                 OR: [
-                    { facility_id: req.user?.facility_id },
-                    { user: { facility_id: req.user?.facility_id } }
+                    { facility_id: staffFacilityId },
+                    { user: { facility_id: staffFacilityId } }
                 ]
-              };
+            };
+        }
 
         const appointments = await prisma.appointment.findMany({
             where: whereClause,

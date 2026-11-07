@@ -1,6 +1,7 @@
 const prisma = require('../../util/db');
 const validate = require('../../util/validation');
 const { updateWithMVCC } = require('../../services/conflicResolution');
+const { verifyFacilityReadAccess, verifyFacilityWriteAccess } = require('../../services/facilityTransferAccess');
 
 const registerPostpartumVisit = async (req, res, next) => {
     try {
@@ -31,8 +32,18 @@ const registerPostpartumVisit = async (req, res, next) => {
             return res.status(400).json({ error: "Required fields are missing" });
         }
 
-        if (!(await validate.isDeliveryOutcomeExist(delivery_id))) {
+        const delivery = await prisma.delivery_Outcome.findUnique({
+            where: { delivery_id },
+            include: { pregnancy: { select: { mother_id: true } } }
+        });
+
+        if (!delivery) {
             return res.status(404).json({ error: "Delivery outcome not found" });
+        }
+
+        const writeAccess = await verifyFacilityWriteAccess(delivery.pregnancy?.mother_id, req.user);
+        if (!writeAccess.allowed) {
+            return res.status(403).json({ error: writeAccess.error });
         }
 
         const postpartumVisit = await prisma.postpartum_visit.create({
@@ -165,8 +176,9 @@ const getPostpartumVisitById = async (req, res, next) => {
                 delivery: {
                     include: {
                         pregnancy: {
-                            include: {
-                                mother: true
+                            select: {
+                                mother_id: true,
+                                pregnancy_id: true
                             }
                         }
                     }
@@ -176,6 +188,15 @@ const getPostpartumVisitById = async (req, res, next) => {
 
         if (!visit) {
             return res.status(404).json({ error: "Postpartum visit not found" });
+        }
+
+        const access = await verifyFacilityReadAccess(visit.delivery?.pregnancy?.mother_id, req.user, visit.delivery?.pregnancy?.pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
+        if (access.dateFilter && access.dateFilter.lte && new Date(visit.visit_date) > new Date(access.dateFilter.lte)) {
+            return res.status(403).json({ error: "Access denied. Postpartum visit occurred after patient was transferred." });
         }
 
         return res.status(200).json({
@@ -192,12 +213,25 @@ const getPostpartumVisitByDelivery = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
 
-        if (!(await validate.isDeliveryOutcomeExist(delivery_id))) {
+        const delivery = await prisma.delivery_Outcome.findUnique({
+            where: { delivery_id },
+            include: { pregnancy: { select: { mother_id: true, pregnancy_id: true } } }
+        });
+
+        if (!delivery) {
             return res.status(404).json({ error: "Delivery outcome not found" });
         }
 
+        const access = await verifyFacilityReadAccess(delivery.pregnancy?.mother_id, req.user, delivery.pregnancy?.pregnancy_id);
+        if (!access.allowed) {
+            return res.status(403).json({ error: access.error });
+        }
+
+        const visitWhere = { delivery_id: delivery_id };
+        if (access.dateFilter) visitWhere.visit_date = access.dateFilter;
+
         const visits = await prisma.postpartum_visit.findMany({
-            where: { delivery_id: delivery_id }
+            where: visitWhere
         });
 
         return res.status(200).json({

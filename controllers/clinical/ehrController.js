@@ -2,6 +2,7 @@ const prisma = require('../../util/db');
 const validate = require('../../util/validation');
 const { updateWithMVCC } = require('../../services/conflicResolution');
 const { resolveEntityId } = require('../../middleware/idResolver');
+const { verifyFacilityReadAccess } = require('../../services/facilityTransferAccess');
 const path = require('path');
 const fs = require('fs');
 
@@ -238,7 +239,16 @@ const getAllEhrDocuments = async (req, res, next) => {
             const motherRecord = await prisma.mother.findFirst({
                 where: { OR: [{ mother_id: requestedMotherId }, { user_id: requestedMotherId }] }
             });
-            filter = motherRecord ? { mother_id: motherRecord.mother_id } : { mother_id: requestedMotherId };
+            if (!motherRecord) {
+                return res.status(404).json({ error: "Mother record not found" });
+            }
+            if (!isSystemAdmin) {
+                const access = await verifyFacilityReadAccess(motherRecord.mother_id, req.user);
+                if (!access.allowed) {
+                    return res.status(403).json({ error: access.error });
+                }
+            }
+            filter = { mother_id: motherRecord.mother_id };
         } else if (!isSystemAdmin && facilityId) {
             filter = { facility_id: facilityId };
         }

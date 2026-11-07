@@ -1,7 +1,7 @@
 require('dotenv').config();
 const prisma = require('../util/db');
-const { checkUserRole, isSuperAdmin } = require('../middleware/authMiddleware');
-const { getTransferVisitDateFilter, verifyFacilityWriteAccess } = require('../services/facilityTransferAccess');
+const { checkUserRole, isSuperAdmin, ensureFacilityAccess } = require('../middleware/authMiddleware');
+const { getTransferVisitDateFilter, verifyFacilityWriteAccess, verifyFacilityReadAccess } = require('../services/facilityTransferAccess');
 
 let totalTests = 0;
 let passedTests = 0;
@@ -340,6 +340,58 @@ async function runTestSuite() {
             superAdminUser
         );
         assert(filterForSuperAdmin === null, 'SuperAdmin has NO cutoff filter (sees complete audit trail)');
+
+        console.log('\n--- 7. Testing Independent Multi-Tenant Isolation & Access Guards ---');
+
+        const unaffiliatedWorkerC = {
+            user_id: 'test-worker-c',
+            role: 'HealthWorker',
+            facility_id: 'fac-completely-unrelated'
+        };
+
+        const readAccessC = await verifyFacilityReadAccess(createdMother.mother_id, unaffiliatedWorkerC, createdPregnancy.pregnancy_id);
+        assert(readAccessC.allowed === false, 'Unaffiliated Facility C worker is BLOCKED from reading patient data');
+
+        const writeAccessC = await verifyFacilityWriteAccess(createdMother.mother_id, unaffiliatedWorkerC);
+        assert(writeAccessC.allowed === false, 'Unaffiliated Facility C worker is BLOCKED from writing patient data');
+
+        const readAccessSuper = await verifyFacilityReadAccess(createdMother.mother_id, superAdminUser, createdPregnancy.pregnancy_id);
+        assert(readAccessSuper.allowed === true && readAccessSuper.dateFilter === null, 'SuperAdmin has unrestricted global read access');
+
+        const readAccessFacilityB = await verifyFacilityReadAccess(createdMother.mother_id, staffWorkerB, createdPregnancy.pregnancy_id);
+        assert(readAccessFacilityB.allowed === true && readAccessFacilityB.dateFilter === null, 'Active Facility B has full read access');
+
+        const readAccessFacilityA = await verifyFacilityReadAccess(createdMother.mother_id, staffWorkerA, createdPregnancy.pregnancy_id);
+        assert(readAccessFacilityA.allowed === true && readAccessFacilityA.dateFilter !== null, 'Transferred Facility A has cutoff-bounded read access');
+
+        let guardPassed = false;
+        let guardBlocked = false;
+        const mockGuardRes = {
+            status: (code) => ({
+                json: () => {
+                    if (code === 403) guardBlocked = true;
+                }
+            })
+        };
+
+        const reqCrossFacility = {
+            user: staffWorkerA,
+            body: { facility_id: createdFacilityB.facility_id },
+            params: {},
+            query: {}
+        };
+        ensureFacilityAccess('facility_id')(reqCrossFacility, mockGuardRes, () => { guardPassed = true; });
+        assert(guardBlocked === true && guardPassed === false, 'ensureFacilityAccess blocks Facility A from mutating Facility B data with 403');
+
+        guardPassed = false;
+        const reqSuperAccess = {
+            user: superAdminUser,
+            body: { facility_id: createdFacilityB.facility_id },
+            params: {},
+            query: {}
+        };
+        ensureFacilityAccess('facility_id')(reqSuperAccess, mockGuardRes, () => { guardPassed = true; });
+        assert(guardPassed === true, 'ensureFacilityAccess permits SuperAdmin cross-facility management');
 
     } catch (err) {
         console.error('💥 Test execution threw an error:', err);
