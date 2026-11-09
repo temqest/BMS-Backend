@@ -303,13 +303,12 @@ const registerLabScreening = async (req, res, next) => {
                 screening_type: screening_type,
                 result: (result && String(result).trim()) ? String(result).trim() : "Pending",
                 file_url: finalFileUrl,
-                date_of_screening: date_of_screening,
+                date_of_screening: new Date(date_of_screening),
                 remarks: remarks,
                 sync_status: "synced"
             }
         });
 
-        // Also index into Facility_Document if document has a file attachment so staff can see it under EHR
         if (finalFileUrl) {
             try {
                 const motherData = await prisma.pregnancy.findUnique({
