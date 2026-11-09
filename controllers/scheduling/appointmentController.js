@@ -110,6 +110,20 @@ const createAppointment = async (req, res, next) => {
                 status: "scheduled",
                 sync_status: "synced",
             },
+            include: {
+                user: {
+                    select: {
+                        user_id: true,
+                        first_name: true,
+                        middle_name: true,
+                        last_name: true,
+                        role: true,
+                        phone_number: true,
+                        email: true,
+                    },
+                },
+                facility: true,
+            },
         });
 
         return res.status(201).json({
