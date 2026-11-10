@@ -88,16 +88,35 @@ const createAppointment = async (req, res, next) => {
             return res.status(404).json({ error: "Facility not found" });
         }
 
+        const targetFacilityId = req.user?.role === 'SystemAdmin'
+            ? (facility_id || null)
+            : (req.user?.facility_id || facility_id || null);
+
+        if (targetFacilityId && appointment_date) {
+            const appointmentDateObj = new Date(appointment_date);
+            if (!isNaN(appointmentDateObj.getTime())) {
+                const closedSchedule = await prisma.facility_Schedule.findFirst({
+                    where: {
+                        facility_id: targetFacilityId,
+                        available_date: appointmentDateObj,
+                        is_available: false,
+                    }
+                });
+
+                if (closedSchedule) {
+                    return res.status(400).json({
+                        error: "Facility is closed or has an exemption on this date. Appointments cannot be scheduled."
+                    });
+                }
+            }
+        }
+
         if (isConflict) {
             return res.status(200).json({
                 message: "Appointment already scheduled for this user at this date/time",
                 data: isConflict,
             });
         }
-
-        const targetFacilityId = req.user?.role === 'SystemAdmin'
-            ? (facility_id || null)
-            : (req.user?.facility_id || facility_id || null);
 
         const newAppointment = await prisma.appointment.create({
             data: {
