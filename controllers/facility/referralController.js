@@ -116,21 +116,63 @@ const createReferral = async (req, res, next) => {
             });
         }
 
-        if (!pregnancy && mother_id) {
-            pregnancy = await prisma.pregnancy.findFirst({
-                where: { mother_id: mother_id },
-                orderBy: { date_of_registration: 'desc' },
-                include: {
-                    mother: {
-                        include: {
-                            user: true,
-                            facilityEnrollments: true,
+        const effectiveMotherId = mother_id || req.body.motherId;
+
+        if (!pregnancy && effectiveMotherId) {
+            const motherRecord = await prisma.mother.findFirst({
+                where: { OR: [{ mother_id: effectiveMotherId }, { user_id: effectiveMotherId }] },
+                include: { user: true, facilityEnrollments: true }
+            });
+            if (motherRecord) {
+                pregnancy = await prisma.pregnancy.findFirst({
+                    where: { mother_id: motherRecord.mother_id, pregnancy_status: "Active" },
+                    orderBy: { date_of_registration: 'desc' },
+                    include: {
+                        mother: {
+                            include: {
+                                user: true,
+                                facilityEnrollments: true,
+                            }
                         }
                     }
+                }) || await prisma.pregnancy.findFirst({
+                    where: { mother_id: motherRecord.mother_id },
+                    orderBy: { date_of_registration: 'desc' },
+                    include: {
+                        mother: {
+                            include: {
+                                user: true,
+                                facilityEnrollments: true,
+                            }
+                        }
+                    }
+                });
+
+                if (!pregnancy) {
+                    pregnancy = await prisma.pregnancy.create({
+                        data: {
+                            mother_id: motherRecord.mother_id,
+                            date_of_registration: new Date(),
+                            lmp_date: new Date(),
+                            gravida: 1,
+                            parity: 0,
+                            age_group: "Adult",
+                            pregnancy_status: "Referred",
+                            sync_status: "synced"
+                        },
+                        include: {
+                            mother: {
+                                include: {
+                                    user: true,
+                                    facilityEnrollments: true,
+                                }
+                            }
+                        }
+                    });
                 }
-            });
-            if (pregnancy) {
-                resolvedPregnancyId = pregnancy.pregnancy_id;
+                if (pregnancy) {
+                    resolvedPregnancyId = pregnancy.pregnancy_id;
+                }
             }
         }
 

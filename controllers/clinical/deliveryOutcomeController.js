@@ -20,18 +20,59 @@ const registerDeliveryOutcome = async (req, res, next) => {
             postpartum_visit 
         } = req.body;
 
-        if (!pregnancy_id || !place_of_delivery || !mode_of_delivery) {
+        if (!place_of_delivery || !mode_of_delivery) {
             return res.status(400).json({ error: "Required fields are missing" });
         }
 
-        const preg = await prisma.pregnancy.findUnique({
-            where: { pregnancy_id: pregnancy_id },
-            select: { mother_id: true }
-        });
+        let targetPregnancyId = pregnancy_id;
+        let preg = (pregnancy_id && !pregnancy_id.startsWith("temp-"))
+            ? await prisma.pregnancy.findUnique({
+                where: { pregnancy_id: pregnancy_id },
+                select: { mother_id: true, pregnancy_id: true }
+            })
+            : null;
+
+        if (!preg) {
+            const effectiveMotherId = req.body.mother_id || req.body.motherId;
+            if (effectiveMotherId) {
+                const motherRecord = await prisma.mother.findFirst({
+                    where: { OR: [{ mother_id: effectiveMotherId }, { user_id: effectiveMotherId }] }
+                });
+                if (motherRecord) {
+                    preg = await prisma.pregnancy.findFirst({
+                        where: { mother_id: motherRecord.mother_id, pregnancy_status: "Active" },
+                        orderBy: { date_of_registration: "desc" },
+                        select: { mother_id: true, pregnancy_id: true }
+                    }) || await prisma.pregnancy.findFirst({
+                        where: { mother_id: motherRecord.mother_id },
+                        orderBy: { date_of_registration: "desc" },
+                        select: { mother_id: true, pregnancy_id: true }
+                    });
+
+                    if (!preg) {
+                        preg = await prisma.pregnancy.create({
+                            data: {
+                                mother_id: motherRecord.mother_id,
+                                date_of_registration: new Date(delivery_date || Date.now()),
+                                lmp_date: new Date(delivery_date || Date.now()),
+                                gravida: 1,
+                                parity: 1,
+                                age_group: "Adult",
+                                pregnancy_status: "Delivered",
+                                sync_status: "synced"
+                            },
+                            select: { mother_id: true, pregnancy_id: true }
+                        });
+                    }
+                }
+            }
+        }
 
         if (!preg) {
             return res.status(404).json({ error: "Pregnancy not found" });
         }
+
+        targetPregnancyId = preg.pregnancy_id;
 
         const writeAccess = await verifyFacilityWriteAccess(preg.mother_id, req.user);
         if (!writeAccess.allowed) {
@@ -41,7 +82,7 @@ const registerDeliveryOutcome = async (req, res, next) => {
         const result = await prisma.$transaction(async (tx) => {
             const deliveryOutcome = await tx.delivery_Outcome.create({
                 data: {
-                    pregnancy_id,
+                    pregnancy_id: targetPregnancyId,
                     delivery_date: delivery_date ? new Date(delivery_date) : new Date(),
                     place_of_delivery,
                     mode_of_delivery,
@@ -110,7 +151,7 @@ const registerDeliveryOutcome = async (req, res, next) => {
             }
 
             await tx.pregnancy.update({
-                where: { pregnancy_id },
+                where: { pregnancy_id: targetPregnancyId },
                 data: { pregnancy_status: "Delivered" }
             });
 

@@ -84,6 +84,22 @@ const registerPrenatalVisit = async (req, res, next) => {
                     orderBy: { date_of_registration: "desc" },
                     include: { mother: true }
                 });
+
+                if (!pregnancy) {
+                    pregnancy = await prisma.pregnancy.create({
+                        data: {
+                            mother_id: motherRecord.mother_id,
+                            date_of_registration: new Date(),
+                            lmp_date: new Date(),
+                            gravida: 1,
+                            parity: 0,
+                            age_group: "Adult",
+                            pregnancy_status: "Active",
+                            sync_status: "synced"
+                        },
+                        include: { mother: true }
+                    });
+                }
             }
         }
 

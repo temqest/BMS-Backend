@@ -42,9 +42,37 @@ const registerPregnancy = async (req, res, next) => {
             return res.status(400).json({ error: "Required fields are missing" });
         }
 
-        const motherRecord = await prisma.mother.findFirst({
-            where: { OR: [{ mother_id: targetMotherId }, { user_id: targetMotherId }] }
-        });
+        let motherRecord = (targetMotherId && !targetMotherId.startsWith("temp-"))
+            ? await prisma.mother.findFirst({
+                where: { OR: [{ mother_id: targetMotherId }, { user_id: targetMotherId }] }
+            })
+            : null;
+
+        if (!motherRecord && targetMotherId) {
+            motherRecord = await prisma.mother.findFirst({
+                where: { OR: [{ mother_id: targetMotherId }, { user_id: targetMotherId }] }
+            });
+        }
+
+        if (!motherRecord && (req.body.phone_number || req.body.email || (req.body.first_name && req.body.last_name))) {
+            const userMatch = await prisma.user.findFirst({
+                where: {
+                    role: "Mother",
+                    OR: [
+                        req.body.phone_number ? { phone_number: req.body.phone_number.trim() } : undefined,
+                        req.body.email ? { email: req.body.email.trim() } : undefined,
+                        (req.body.first_name && req.body.last_name) ? {
+                            first_name: req.body.first_name.trim(),
+                            last_name: req.body.last_name.trim()
+                        } : undefined
+                    ].filter(Boolean)
+                },
+                include: { mother: true }
+            });
+            if (userMatch?.mother) {
+                motherRecord = userMatch.mother;
+            }
+        }
 
         if (motherRecord) {
             targetMotherId = motherRecord.mother_id;
