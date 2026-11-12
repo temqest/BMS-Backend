@@ -29,6 +29,8 @@ router.get('/search', searchFacility);
 router.put('/update', verifyToken, checkUserRole(adminRoles), updateFacility);
 
 router.delete('/delete', verifyToken, checkUserRole(sysAdminOnly), deleteFacility);
+router.delete('/delete/:facility_id', verifyToken, checkUserRole(sysAdminOnly), deleteFacility);
+router.delete('/:facility_id', verifyToken, checkUserRole(sysAdminOnly), deleteFacility);
 
 router.get('/getAll', verifyToken, checkUserRole(sysAdminOnly), viewAllFacility);
 

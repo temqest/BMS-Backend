@@ -267,7 +267,7 @@ const updateFacility = async (req, res, next) => {
 
 const deleteFacility = async (req, res, next) => {
     try {
-        const { facility_id } = req.params;
+        const facility_id = req.params.facility_id || req.body?.facility_id || req.query?.facility_id;
 
         if (!facility_id) {
             return res.status(400).json({ error: "Facility ID is required" });
@@ -275,6 +275,14 @@ const deleteFacility = async (req, res, next) => {
 
         if (!(await validate.isFacilityExist(facility_id))) {
             return res.status(404).json({ error: "Facility not found" });
+        }
+
+        const relatedUsers = await prisma.user.count({ where: { facility_id } });
+        const relatedEnrollments = await prisma.mother_Facility_Enrollment.count({ where: { facility_id } });
+        if (relatedUsers > 0 || relatedEnrollments > 0) {
+            return res.status(400).json({ 
+                error: "Cannot delete facility with active staff members or enrolled mothers. Deactivate or reassign them first." 
+            });
         }
 
         await prisma.facility.delete({
@@ -286,6 +294,11 @@ const deleteFacility = async (req, res, next) => {
         });
 
     } catch (error) {
+        if (error.code === 'P2003') {
+            return res.status(400).json({ 
+                error: "Cannot delete facility because related clinical records exist." 
+            });
+        }
         return next(error);
     }
 };
