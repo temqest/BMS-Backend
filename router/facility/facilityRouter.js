@@ -10,13 +10,21 @@ const {
     deleteFacility,
     viewAllFacility,
     getFacilityById,
-    getMunicipalOverview
+    getFacilityHubDetails,
+    reassignStaffFacility,
+    getMunicipalOverview,
+    getMunicipalReports,
+    getDatabaseMaintenanceStats,
+    checkDuplicateMothers,
 } = require('../../controllers/facility/facilityController');
 
 const sysAdminOnly = ['SystemAdmin', 'SuperAdmin'];
 const adminRoles = ['SystemAdmin', 'SuperAdmin', 'Admin'];
 
 router.get('/overview', verifyToken, checkUserRole(sysAdminOnly), getMunicipalOverview);
+router.get('/municipal-reports', verifyToken, checkUserRole(sysAdminOnly), getMunicipalReports);
+router.get('/database-stats', verifyToken, checkUserRole(sysAdminOnly), getDatabaseMaintenanceStats);
+router.get('/check-duplicates', verifyToken, checkUserRole(sysAdminOnly), checkDuplicateMothers);
 
 router.post('/register', verifyToken, checkUserRole(sysAdminOnly), registerFacility);
 
@@ -33,6 +41,9 @@ router.delete('/delete/:facility_id', verifyToken, checkUserRole(sysAdminOnly), 
 router.delete('/:facility_id', verifyToken, checkUserRole(sysAdminOnly), deleteFacility);
 
 router.get('/getAll', verifyToken, checkUserRole(sysAdminOnly), viewAllFacility);
+
+router.get('/:facility_id/hub', verifyToken, checkUserRole(adminRoles), getFacilityHubDetails);
+router.put('/:facility_id/reassign-staff', verifyToken, checkUserRole(sysAdminOnly), reassignStaffFacility);
 
 router.get('/:facility_id', verifyToken, ensureFacilityAccess('facility_id'), getFacilityById);
 

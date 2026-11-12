@@ -101,20 +101,18 @@ const getStaffByFacility = async (req, res, next) => {
             return res.status(403).json({ error: "Access Denied. You cannot view staff from another facility." });
         }
 
-        if (!facility_id && req.user?.user_id) {
-            const dbUser = await prisma.user.findUnique({
-                where: { user_id: req.user.user_id },
-                select: { facility_id: true }
-            });
-            facility_id = dbUser?.facility_id;
-        }
-
-        if (!facility_id && isSuper) {
+        if (isSuper && (!req.query.facility_id || req.query.all === 'true')) {
+            const whereClause = {
+                role: req.query.role ? req.query.role : { notIn: ['Mother', 'MOTHER'] }
+            };
+            if (req.query.is_active !== undefined && req.query.is_active !== 'all') {
+                whereClause.is_active = req.query.is_active === 'true';
+            }
+            if (req.query.facility_id && req.query.facility_id !== 'all') {
+                whereClause.facility_id = req.query.facility_id;
+            }
             const allStaff = await prisma.user.findMany({
-                where: {
-                    is_active: true,
-                    role: { notIn: ['Mother', 'MOTHER'] }
-                },
+                where: whereClause,
                 select: {
                     user_id: true,
                     facility_id: true,
@@ -135,12 +133,23 @@ const getStaffByFacility = async (req, res, next) => {
                             type: true
                         }
                     }
+                },
+                orderBy: {
+                    last_name: 'asc'
                 }
             });
             return res.status(200).json({
                 message: "All municipal staff retrieved successfully",
                 result: allStaff
             });
+        }
+
+        if (!facility_id && req.user?.user_id) {
+            const dbUser = await prisma.user.findUnique({
+                where: { user_id: req.user.user_id },
+                select: { facility_id: true }
+            });
+            facility_id = dbUser?.facility_id;
         }
 
         if (!facility_id) {
@@ -564,7 +573,7 @@ const adminResetStaffPassword = async (req, res, next) => {
         const { newPassword } = req.body;
         const requestingUser = req.user;
 
-        const isSuperAdmin = requestingUser?.role === 'SystemAdmin';
+        const isSuperAdmin = requestingUser?.role === 'SystemAdmin' || requestingUser?.role === 'SuperAdmin';
         const isAdmin = requestingUser?.role === 'Admin';
 
         if (!isSuperAdmin && !isAdmin) {
@@ -588,8 +597,8 @@ const adminResetStaffPassword = async (req, res, next) => {
         }
 
         if (!isSuperAdmin) {
-            if (existingUser.role === 'SystemAdmin') {
-                return res.status(403).json({ error: "Facility admins cannot reset SystemAdmin passwords." });
+            if (existingUser.role === 'SystemAdmin' || existingUser.role === 'SuperAdmin') {
+                return res.status(403).json({ error: "Facility admins cannot reset SuperAdmin passwords." });
             }
             if (existingUser.facility_id !== requestingUser?.facility_id) {
                 return res.status(403).json({ error: "Cannot reset passwords for staff in another facility." });

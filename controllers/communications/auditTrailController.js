@@ -36,13 +36,29 @@ const createAuditTrail = async (req, res, next) => {
 const getAllAuditLogs = async (req, res, next) => {
     try {
         const page = parseInt(req.query.page) || 1;
-        const pageSize = parseInt(req.query.page_size) || 10;
+        const pageSize = Math.min(parseInt(req.query.page_size) || 50, 200);
         const skip = (page - 1) * pageSize;
         const limit = pageSize;
 
         const allLogs = await prisma.audit_Revision_Log.findMany({
             skip: skip,
             take: limit,
+            include: {
+                user: {
+                    select: {
+                        first_name: true,
+                        last_name: true,
+                        role: true,
+                        email: true,
+                        facility: {
+                            select: {
+                                facility_name: true,
+                                type: true
+                            }
+                        }
+                    }
+                }
+            },
             orderBy: {
                 client_timestamp: "desc"
             }
