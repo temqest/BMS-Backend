@@ -12,6 +12,7 @@ const {
     getFacilityById,
     getFacilityHubDetails,
     reassignStaffFacility,
+    reassignMotherFacility,
     getMunicipalOverview,
     getMunicipalReports,
     getDatabaseMaintenanceStats,
@@ -44,6 +45,8 @@ router.get('/getAll', verifyToken, checkUserRole(sysAdminOnly), viewAllFacility)
 
 router.get('/:facility_id/hub', verifyToken, checkUserRole(adminRoles), getFacilityHubDetails);
 router.put('/:facility_id/reassign-staff', verifyToken, checkUserRole(sysAdminOnly), reassignStaffFacility);
+router.put('/:facility_id/reassign-mother', verifyToken, checkUserRole(sysAdminOnly), reassignMotherFacility);
+router.put('/reassign-mother', verifyToken, checkUserRole(sysAdminOnly), reassignMotherFacility);
 
 router.get('/:facility_id', verifyToken, ensureFacilityAccess('facility_id'), getFacilityById);
 

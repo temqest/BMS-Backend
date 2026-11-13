@@ -420,10 +420,29 @@ const getFacilityHubDetails = async (req, res, next) => {
                                 facility_name: true,
                                 type: true
                             }
+                        },
+                        pregnancy: {
+                            select: {
+                                pregnancy_id: true,
+                                gravida: true,
+                                parity: true,
+                                mother: {
+                                    select: {
+                                        mother_id: true,
+                                        family_serial_no: true,
+                                        user: {
+                                            select: {
+                                                first_name: true,
+                                                last_name: true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     },
                     orderBy: { date_referred: 'desc' },
-                    take: 30
+                    take: 50
                 },
                 onlineReferralsTo: {
                     select: {
@@ -436,10 +455,29 @@ const getFacilityHubDetails = async (req, res, next) => {
                                 facility_name: true,
                                 type: true
                             }
+                        },
+                        pregnancy: {
+                            select: {
+                                pregnancy_id: true,
+                                gravida: true,
+                                parity: true,
+                                mother: {
+                                    select: {
+                                        mother_id: true,
+                                        family_serial_no: true,
+                                        user: {
+                                            select: {
+                                                first_name: true,
+                                                last_name: true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     },
                     orderBy: { date_referred: 'desc' },
-                    take: 30
+                    take: 50
                 },
                 schedules: {
                     select: {
@@ -513,6 +551,110 @@ const reassignStaffFacility = async (req, res, next) => {
         return res.status(200).json({
             message: "Staff member reassigned successfully",
             result: updatedUser
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const reassignMotherFacility = async (req, res, next) => {
+    try {
+        const isSuperAdmin = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuperAdmin) {
+            return res.status(403).json({ error: "Only Super Admin can reassign mothers across facilities." });
+        }
+
+        const sourceFacilityId = req.params.facility_id || req.body.facility_id;
+        const { mother_id, target_facility_id, notes } = req.body;
+
+        if (!mother_id || !target_facility_id) {
+            return res.status(400).json({ error: "Mother ID and target facility ID are required." });
+        }
+
+        if (sourceFacilityId && sourceFacilityId === target_facility_id) {
+            return res.status(400).json({ error: "Target facility must be different from current facility." });
+        }
+
+        const targetFacility = await prisma.facility.findUnique({
+            where: { facility_id: target_facility_id }
+        });
+
+        if (!targetFacility) {
+            return res.status(404).json({ error: "Target facility not found." });
+        }
+
+        const mother = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id },
+                    { user_id: mother_id }
+                ]
+            },
+            include: { user: true }
+        });
+
+        if (!mother) {
+            return res.status(404).json({ error: "Mother record not found." });
+        }
+
+        const auditNote = notes?.trim()
+            ? `Transferred to ${targetFacility.facility_name} by Super Admin: ${notes.trim()}`
+            : `Transferred to ${targetFacility.facility_name} by Super Admin`;
+
+        const enrollmentNote = notes?.trim()
+            ? `Transferred from previous facility by Super Admin: ${notes.trim()}`
+            : `Enrolled via Super Admin facility transfer`;
+
+        const [transferredEnrollments, newEnrollment] = await prisma.$transaction([
+            prisma.mother_Facility_Enrollment.updateMany({
+                where: {
+                    mother_id: mother.mother_id,
+                    ...(sourceFacilityId ? { facility_id: sourceFacilityId } : {}),
+                    status: 'Active'
+                },
+                data: {
+                    status: 'Transferred',
+                    notes: auditNote
+                }
+            }),
+            prisma.mother_Facility_Enrollment.upsert({
+                where: {
+                    mother_id_facility_id: {
+                        mother_id: mother.mother_id,
+                        facility_id: target_facility_id
+                    }
+                },
+                update: {
+                    status: 'Active',
+                    notes: enrollmentNote
+                },
+                create: {
+                    mother_id: mother.mother_id,
+                    facility_id: target_facility_id,
+                    status: 'Active',
+                    notes: enrollmentNote
+                },
+                include: {
+                    facility: {
+                        select: {
+                            facility_id: true,
+                            facility_name: true,
+                            type: true
+                        }
+                    }
+                }
+            }),
+            ...(mother.user_id ? [
+                prisma.user.update({
+                    where: { user_id: mother.user_id },
+                    data: { facility_id: target_facility_id }
+                })
+            ] : [])
+        ]);
+
+        return res.status(200).json({
+            message: "Mother successfully transferred to new facility",
+            result: newEnrollment
         });
     } catch (error) {
         return next(error);
@@ -895,6 +1037,7 @@ module.exports = {
     getFacilityById,
     getFacilityHubDetails,
     reassignStaffFacility,
+    reassignMotherFacility,
     getMunicipalOverview,
     getMunicipalReports,
     getDatabaseMaintenanceStats,
