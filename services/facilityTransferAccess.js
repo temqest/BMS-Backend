@@ -120,6 +120,23 @@ async function verifyFacilityWriteAccess(motherId, user) {
         return { allowed: true };
     }
 
+    if (user.role === 'Mother') {
+        const motherRecord = await prisma.mother.findFirst({
+            where: {
+                OR: [
+                    { mother_id: motherId },
+                    { user_id: motherId }
+                ]
+            },
+            select: { user_id: true }
+        });
+
+        if (motherRecord && motherRecord.user_id === user.user_id) {
+            return { allowed: true };
+        }
+        return { allowed: false, error: "Access denied. You can only manage your own health records." };
+    }
+
     const userFacilityId = user.facility_id;
     if (!userFacilityId) {
         return { allowed: false, error: "Access denied. Healthcare staff must belong to a facility." };

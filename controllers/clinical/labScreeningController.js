@@ -191,6 +191,16 @@ const registerLabScreening = async (req, res, next) => {
                 });
 
                 if (!pregnancy) {
+                    let calculatedAgeGroup = "Adult";
+                    if (motherRecord.birth_date) {
+                        const birthYear = new Date(motherRecord.birth_date).getFullYear();
+                        const currentYear = new Date().getFullYear();
+                        const approxAge = currentYear - birthYear;
+                        if (approxAge < 20) {
+                            calculatedAgeGroup = "Adolescent";
+                        }
+                    }
+
                     pregnancy = await prisma.pregnancy.create({
                         data: {
                             mother_id: motherRecord.mother_id,
@@ -198,6 +208,7 @@ const registerLabScreening = async (req, res, next) => {
                             lmp_date: new Date(date_of_screening || Date.now()),
                             gravida: 1,
                             parity: 0,
+                            age_group: calculatedAgeGroup,
                             pregnancy_status: "Active",
                             sync_status: "synced"
                         }
