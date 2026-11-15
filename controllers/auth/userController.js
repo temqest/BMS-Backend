@@ -159,7 +159,6 @@ const getStaffByFacility = async (req, res, next) => {
             });
         }
 
-        // Security & Scoping: If caller is a Mother, only return her assigned care provider or direct message contacts
         if (req.user?.role === 'Mother') {
             const motherRecord = await prisma.mother.findUnique({
                 where: { user_id: req.user.user_id },
@@ -247,11 +246,14 @@ const getStaffByFacility = async (req, res, next) => {
         
         const whereCondition = {
             facility_id: facility_id,
-            is_active: true,
-            role: {
+            role: req.query.role ? req.query.role : {
                 notIn: ['Mother', 'MOTHER']
             }
         };
+
+        if (req.query.is_active !== undefined && req.query.is_active !== 'all') {
+            whereCondition.is_active = req.query.is_active === 'true';
+        }
 
         const staff = await prisma.user.findMany({
             where: whereCondition,
@@ -445,15 +447,14 @@ const deactivateStaff = async (req, res, next) => {
             return res.status(404).json({ error: "User not found" });
         }
 
-        const isSelf = requestingUser?.user_id === existingUser.user_id;
         const isSuperAdmin = requestingUser?.role === 'SystemAdmin' || requestingUser?.role === 'SuperAdmin';
         const isAdmin = requestingUser?.role === 'Admin';
 
-        if (!isSelf && !isSuperAdmin && !isAdmin) {
-            return res.status(403).json({ error: "You don't have permission to modify this account." });
+        if (!isSuperAdmin && !isAdmin) {
+            return res.status(403).json({ error: "Access denied. Only administrators and above can deactivate or activate staff accounts." });
         }
 
-        if (!isSelf && !isSuperAdmin) {
+        if (!isSuperAdmin) {
             if (existingUser.role === 'SystemAdmin' || existingUser.role === 'SuperAdmin') {
                 return res.status(403).json({ error: "Facility admins cannot modify SuperAdmin accounts." });
             }

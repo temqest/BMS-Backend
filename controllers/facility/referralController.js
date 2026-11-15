@@ -503,7 +503,7 @@ const respondToReferral = async (req, res, next) => {
 
         const normalizedStatus = status.toLowerCase();
 
-        if (['accepted', 'rejected', 'completed'].includes(normalizedStatus)) {
+        if (['accepted', 'admitted', 'rejected', 'declined', 'completed'].includes(normalizedStatus)) {
             if (!isSystemAdmin && !isDestination) {
                 return res.status(403).json({
                     error: "Access denied. Only the receiving destination facility can accept, decline or complete this referral."
@@ -516,7 +516,7 @@ const respondToReferral = async (req, res, next) => {
             status: status,
             ...(response_notes !== undefined && { response_notes: response_notes }),
             ...(outcome !== undefined && { outcome: outcome }),
-            is_completed: is_completed !== undefined ? is_completed : (status === "completed" || status === "accepted"),
+            is_completed: is_completed !== undefined ? is_completed : (status === "completed" || status === "accepted" || status === "admitted"),
             date_responded: new Date(),
         }, {
             strategy,
@@ -530,7 +530,7 @@ const respondToReferral = async (req, res, next) => {
             });
         }
 
-        if (normalizedStatus === 'accepted' && existingReferral.to_facility_id) {
+        if (['accepted', 'admitted'].includes(normalizedStatus) && existingReferral.to_facility_id) {
             try {
                 const pregnancy = await prisma.pregnancy.findUnique({
                     where: { pregnancy_id: existingReferral.pregnancy_id },
@@ -778,8 +778,9 @@ const getPublicReferral = async (req, res, next) => {
             return res.status(400).json({ error: "Referral identifier is required" });
         }
 
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
         let referral = await prisma.online_Referral.findFirst({
-            where: {
+            where: isUuid ? { referral_id: identifier } : {
                 OR: [
                     { referral_id: identifier },
                     { secure_link: { endsWith: identifier } }
@@ -947,54 +948,53 @@ const getPublicReferral = async (req, res, next) => {
             publicData.cdss_alerts = referral.pregnancy?.cdssAlerts || [];
 
             let deliveryOutcomes = referral.pregnancy?.deliveryOutcomes || [];
+            const motherId = referral.pregnancy?.mother_id;
+            const motherUserId = motherUser?.user_id;
 
-            if (deliveryOutcomes.length === 0 && referral.pregnancy?.mother_id) {
-                const motherId = referral.pregnancy.mother_id;
-                const motherUser = referral.pregnancy?.mother?.user;
+            const secondaryTasks = [];
 
-                const motherDeliveries = await prisma.delivery_Outcome.findMany({
-                    where: {
-                        OR: [
-                            { pregnancy: { mother_id: motherId } },
-                            ...(motherUser?.user_id ? [{ pregnancy: { mother: { user_id: motherUser.user_id } } }] : []),
-                            ...(motherUser?.last_name ? [{ pregnancy: { mother: { user: { last_name: { equals: motherUser.last_name, mode: 'insensitive' } } } } }] : []),
-                        ]
-                    },
-                    include: {
-                        newbornRecords: true,
-                        postpartumVisits: {
-                            orderBy: { visit_date: 'desc' }
-                        }
-                    },
-                    orderBy: { delivery_date: 'desc' }
-                });
-
-                if (motherDeliveries && motherDeliveries.length > 0) {
-                    deliveryOutcomes = motherDeliveries;
-                }
+            if (deliveryOutcomes.length === 0 && motherId) {
+                secondaryTasks.push(
+                    prisma.delivery_Outcome.findMany({
+                        where: {
+                            pregnancy: {
+                                OR: [
+                                    { mother_id: motherId },
+                                    ...(motherUserId ? [{ mother: { user_id: motherUserId } }] : [])
+                                ]
+                            }
+                        },
+                        include: {
+                            newbornRecords: true,
+                            postpartumVisits: {
+                                orderBy: { visit_date: 'desc' }
+                            }
+                        },
+                        orderBy: { delivery_date: 'desc' }
+                    }).then((deliveries) => {
+                        if (deliveries && deliveries.length > 0) deliveryOutcomes = deliveries;
+                    }).catch(() => {})
+                );
             }
 
-            publicData.delivery_outcomes = deliveryOutcomes;
-
-            try {
-                if (motherUser?.user_id) {
-                    const appointments = await prisma.appointment.findMany({
-                        where: { user_id: motherUser.user_id },
+            if (motherUserId) {
+                secondaryTasks.push(
+                    prisma.appointment.findMany({
+                        where: { user_id: motherUserId },
                         orderBy: { appointment_date: 'desc' },
                         take: 5
-                    });
-                    publicData.appointments = appointments || [];
-                } else {
-                    publicData.appointments = [];
-                }
-            } catch (appErr) {
-                console.warn("[getPublicReferral] Appointments fetch notice:", appErr.message);
+                    }).then((appts) => {
+                        publicData.appointments = appts || [];
+                    }).catch(() => {
+                        publicData.appointments = [];
+                    })
+                );
+            } else {
                 publicData.appointments = [];
             }
 
-            // Fetch previous referrals for the same pregnancy/mother for continuity of care
-            try {
-                const prevReferrals = await prisma.online_Referral.findMany({
+            secondaryTasks.push(
+                prisma.online_Referral.findMany({
                     where: {
                         pregnancy_id: referral.pregnancy_id,
                         referral_id: { not: referral.referral_id }
@@ -1010,12 +1010,16 @@ const getPublicReferral = async (req, res, next) => {
                     },
                     orderBy: { date_referred: 'desc' },
                     take: 3
-                });
-                publicData.previous_referrals = prevReferrals || [];
-            } catch (prevErr) {
-                console.warn("[getPublicReferral] Previous referrals fetch notice:", prevErr.message);
-                publicData.previous_referrals = [];
-            }
+                }).then((prev) => {
+                    publicData.previous_referrals = prev || [];
+                }).catch(() => {
+                    publicData.previous_referrals = [];
+                })
+            );
+
+            await Promise.all(secondaryTasks);
+
+            publicData.delivery_outcomes = deliveryOutcomes;
         }
 
         return res.status(200).json({
@@ -1043,6 +1047,9 @@ const respondPublicReferral = async (req, res, next) => {
             "accepted",
             "in_progress",
             "in progress",
+            "in_transit",
+            "in transit",
+            "admitted",
             "completed",
             "transferred",
             "rejected",
@@ -1056,8 +1063,9 @@ const respondPublicReferral = async (req, res, next) => {
             return res.status(400).json({ error: `Invalid status option. Must be one of: ${validStatuses.join(", ")}` });
         }
 
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
         let referral = await prisma.online_Referral.findFirst({
-            where: {
+            where: isUuid ? { referral_id: identifier } : {
                 OR: [
                     { referral_id: identifier },
                     { secure_link: { endsWith: identifier } }
@@ -1107,11 +1115,56 @@ const respondPublicReferral = async (req, res, next) => {
                 status: standardStatus,
                 ...(updatedResponseNotes !== undefined && { response_notes: updatedResponseNotes }),
                 ...(outcome !== undefined && { outcome: outcome }),
-                is_completed: standardStatus === "completed",
+                is_completed: standardStatus === "completed" || standardStatus === "admitted",
                 date_responded: new Date(),
                 version: { increment: 1 },
             }
         });
+
+        if (['accepted', 'admitted'].includes(standardStatus) && referral.to_facility_id) {
+            try {
+                const pregnancy = await prisma.pregnancy.findUnique({
+                    where: { pregnancy_id: referral.pregnancy_id },
+                    select: { mother_id: true }
+                });
+
+                if (pregnancy?.mother_id) {
+                    await prisma.$transaction([
+                        prisma.mother_Facility_Enrollment.upsert({
+                            where: {
+                                mother_id_facility_id: {
+                                    mother_id: pregnancy.mother_id,
+                                    facility_id: referral.to_facility_id
+                                }
+                            },
+                            update: {
+                                status: 'Active',
+                                notes: `Automatically enrolled via accepted referral #${referral.referral_id}`
+                            },
+                            create: {
+                                mother_id: pregnancy.mother_id,
+                                facility_id: referral.to_facility_id,
+                                status: 'Active',
+                                notes: `Automatically enrolled via accepted referral #${referral.referral_id}`
+                            }
+                        }),
+                        prisma.mother_Facility_Enrollment.updateMany({
+                            where: {
+                                mother_id: pregnancy.mother_id,
+                                facility_id: referral.from_facility_id,
+                                status: 'Active'
+                            },
+                            data: {
+                                status: 'Transferred',
+                                notes: `Transferred to facility #${referral.to_facility_id} on ${new Date().toISOString()}`
+                            }
+                        })
+                    ]);
+                }
+            } catch (enrollErr) {
+                console.warn("[respondPublicReferral] Facility enrollment update notice:", enrollErr.message);
+            }
+        }
 
         try {
             const originStaff = await prisma.user.findMany({
@@ -1122,22 +1175,22 @@ const respondPublicReferral = async (req, res, next) => {
                 select: { user_id: true }
             });
 
-            const patientName = referral.pregnancy?.mother?.user
-                ? `${referral.pregnancy.mother.user.first_name || ""} ${referral.pregnancy.mother.user.last_name || ""}`.trim()
-                : "Referred Patient";
+            if (originStaff.length > 0) {
+                const patientName = referral.pregnancy?.mother?.user
+                    ? `${referral.pregnancy.mother.user.first_name || ""} ${referral.pregnancy.mother.user.last_name || ""}`.trim()
+                    : "Referred Patient";
 
-            const preview = response_notes ? ` - Note: "${response_notes.trim().slice(0, 60)}..."` : "";
-            const notifMsg = `Hospital Update for ${patientName}: Stage updated to ${standardStatus.toUpperCase().replace(/_/g, ' ')}${preview}`;
+                const preview = response_notes ? ` - Note: "${response_notes.trim().slice(0, 60)}..."` : "";
+                const notifMsg = `Hospital Update for ${patientName}: Stage updated to ${standardStatus.toUpperCase().replace(/_/g, ' ')}${preview}`;
 
-            for (const staff of originStaff) {
-                await prisma.notification.create({
-                    data: {
+                await prisma.notification.createMany({
+                    data: originStaff.map((staff) => ({
                         user_id: staff.user_id,
                         notification_type: 'Referral',
                         notification_message: notifMsg,
                         notification_date: new Date()
-                    }
-                }).catch(() => {});
+                    }))
+                });
             }
         } catch (notifErr) {
             console.warn("[respondPublicReferral] Notification dispatch notice:", notifErr.message);
@@ -1162,8 +1215,9 @@ const clarifyPublicReferral = async (req, res, next) => {
             return res.status(400).json({ error: "Missing required fields: message is required" });
         }
 
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
         let referral = await prisma.online_Referral.findFirst({
-            where: {
+            where: isUuid ? { referral_id: identifier } : {
                 OR: [
                     { referral_id: identifier },
                     { secure_link: { endsWith: identifier } }
@@ -1220,17 +1274,17 @@ const clarifyPublicReferral = async (req, res, next) => {
                 select: { user_id: true }
             });
 
-            const inquiryMsg = `Hospital Inquiry [${(priority || 'urgent').toUpperCase()}]: ${topic ? topic + ' - ' : ''}${message.trim()}`;
+            if (originStaff.length > 0) {
+                const inquiryMsg = `Hospital Inquiry [${(priority || 'urgent').toUpperCase()}]: ${topic ? topic + ' - ' : ''}${message.trim()}`;
 
-            for (const staff of originStaff) {
-                await prisma.notification.create({
-                    data: {
+                await prisma.notification.createMany({
+                    data: originStaff.map((staff) => ({
                         user_id: staff.user_id,
                         notification_type: 'Referral',
                         notification_message: inquiryMsg,
                         notification_date: new Date()
-                    }
-                }).catch(() => {});
+                    }))
+                });
             }
         } catch (notifErr) {
             console.warn("[clarifyPublicReferral] Notification dispatch notice:", notifErr.message);

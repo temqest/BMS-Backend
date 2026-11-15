@@ -9,14 +9,14 @@ const {
     get_schedule_by_id
 } = require('../../controllers/facility/calendarController');
 
-const staffRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff'];
+const adminRoles = ['SystemAdmin', 'Admin', 'SuperAdmin'];
 const allRoles = ['SystemAdmin', 'Admin', 'Doctor', 'HealthWorker', 'Nurse', 'Midwife', 'Staff', 'Mother'];
 
-router.post('/slots', verifyToken, checkUserRole(staffRoles), ensureFacilityAccess('facility_id'), create_appointment_slots);
+router.post('/slots', verifyToken, checkUserRole(adminRoles), ensureFacilityAccess('facility_id'), create_appointment_slots);
 
-router.put('/slots', verifyToken, checkUserRole(staffRoles), ensureFacilityAccess('facility_id'), update_appointment_slots);
+router.put('/slots', verifyToken, checkUserRole(adminRoles), ensureFacilityAccess('facility_id'), update_appointment_slots);
 
-router.delete('/slots/:schedule_id', verifyToken, checkUserRole(staffRoles), delete_appointment_slots);
+router.delete('/slots/:schedule_id', verifyToken, checkUserRole(adminRoles), delete_appointment_slots);
 
 router.get('/facility/:facility_id', verifyToken, checkUserRole(allRoles), get_facility_schedules);
 

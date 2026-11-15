@@ -388,8 +388,8 @@ const createStaff = async (req, res, next) => {
     try {
         const { first_name, middle_name, last_name, role, phone_number, email, password, address, facility_id } = req.body;
 
-        if (!first_name || !last_name || !role || !password) {
-            return res.status(400).json({ error: 'Missing required staff details' });
+        if (!first_name || !last_name || !role || !password || !email) {
+            return res.status(400).json({ error: 'Missing required staff details: first name, last name, role, email, and password are required.' });
         }
 
         const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';

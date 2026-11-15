@@ -1321,7 +1321,7 @@ const getCompositeMotherProfile = async (req, res, next) => {
         const allVisits = allPregnancies.flatMap(p => (p.prenatalVisits || []).map(v => ({ ...v, mother_id: canonicalMotherId })));
         const allLabs = allPregnancies.flatMap(p => (p.labScreenings || []).map(l => ({ ...l, mother_id: canonicalMotherId })));
         const allSupplements = allPregnancies.flatMap(p => (p.supplementationRecords || []).map(s => ({ ...s, mother_id: canonicalMotherId })));
-        const allAppointments = (motherProfile.user?.appointments || []).map(a => ({ ...a, mother_id: canonicalMotherId }));
+        const allAppointments = (motherProfile.appointments || motherProfile.user?.appointments || []).map(a => ({ ...a, mother_id: canonicalMotherId }));
 
         return res.status(200).json({
             message: "Composite mother profile retrieved",

@@ -2,6 +2,11 @@ const prisma = require('../../util/db');
 
 const create_appointment_slots = async (req, res, next) => {
     try {
+        const isAdminOrAbove = ['SystemAdmin', 'Admin', 'SuperAdmin'].includes(req.user?.role);
+        if (!isAdminOrAbove) {
+            return res.status(403).json({ error: "Access denied. Only administrators and above can edit schedule." });
+        }
+
         const { facility_id, day, time, slots } = req.body;
 
         if (!facility_id || !day || !time || slots === undefined) {
@@ -49,6 +54,11 @@ const create_appointment_slots = async (req, res, next) => {
 
 const update_appointment_slots = async (req, res, next) => {
     try {
+        const isAdminOrAbove = ['SystemAdmin', 'Admin', 'SuperAdmin'].includes(req.user?.role);
+        if (!isAdminOrAbove) {
+            return res.status(403).json({ error: "Access denied. Only administrators and above can edit schedule." });
+        }
+
         const { schedule_id, facility_id, day, slots, time, is_available } = req.body;
 
         if (!schedule_id || !facility_id) {
@@ -124,6 +134,11 @@ const update_appointment_slots = async (req, res, next) => {
 
 const delete_appointment_slots = async (req, res, next) => {
     try {
+        const isAdminOrAbove = ['SystemAdmin', 'Admin', 'SuperAdmin'].includes(req.user?.role);
+        if (!isAdminOrAbove) {
+            return res.status(403).json({ error: "Access denied. Only administrators and above can delete schedule." });
+        }
+
         const { schedule_id } = req.params;
         const { facility_id } = req.body;
 

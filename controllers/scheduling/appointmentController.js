@@ -186,10 +186,43 @@ const createAppointment = async (req, res, next) => {
 const getAllAppointments = async (req, res, next) => {
     try {
         const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        const isAdmin = req.user?.role === 'Admin';
+        const currentUserId = req.user?.user_id;
+        const requestedScope = req.query.scope;
+
         let whereClause = {};
 
         if (req.user?.role === 'Mother') {
             whereClause = { user_id: req.user?.user_id };
+        } else if (requestedScope === 'user' || (!isSuper && !isAdmin && requestedScope !== 'facility')) {
+            const staffFacilityId = req.user?.facility_id;
+            const facilityCondition = staffFacilityId ? {
+                OR: [
+                    { facility_id: staffFacilityId },
+                    { user: { facility_id: staffFacilityId } }
+                ]
+            } : {};
+
+            whereClause = {
+                AND: [
+                    facilityCondition,
+                    {
+                        OR: [
+                            { user_id: currentUserId },
+                            {
+                                user: {
+                                    mother: {
+                                        OR: [
+                                            { assigned_worker_id: currentUserId },
+                                            { created_by_id: currentUserId }
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                ]
+            };
         } else if (isSuper) {
             whereClause = req.query.facility_id ? { facility_id: req.query.facility_id } : {};
         } else {
