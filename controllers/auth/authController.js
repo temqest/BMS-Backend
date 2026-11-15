@@ -3,6 +3,8 @@ const validate = require('../../util/validation');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const checkOtp = require('../../services/otpServices');
+const { sendEmail } = require('../../services/sendProvider');
+const { sendNotificationToUser: sendPushToUser } = require('../../services/pushNotificationService');
 
 const SYSTEM_ADMIN_BYPASS_CODE = process.env.BYPASSCODE;
 
@@ -716,6 +718,153 @@ const googleAuth = async (req, res, next) => {
     }
 };
 
+const contactAdmin = async (req, res, next) => {
+    try {
+        const { adminEmail, senderName, senderEmail, senderPhone, senderContact, facilityName, subject, message, priority } = req.body;
+
+        const effectiveSenderEmail = (senderEmail || senderContact || "").trim().toLowerCase();
+        const trimmedAdminEmail = (adminEmail || "").trim().toLowerCase();
+        const trimmedSenderName = (senderName || "").trim();
+        const trimmedSenderPhone = (senderPhone || "").trim();
+        const trimmedFacility = (facilityName || "").trim();
+        const trimmedSubject = (subject || "Account & Access Assistance Request").trim();
+        const trimmedMessage = (message || "").trim();
+        const isUrgent = priority === "urgent";
+
+        if (!trimmedAdminEmail || !trimmedSenderName || !effectiveSenderEmail || !trimmedMessage) {
+            return res.status(400).json({ error: "Please fill in all required fields: Admin Email, Your Name, Your Email Address, and Message." });
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(trimmedAdminEmail)) {
+            return res.status(400).json({ error: "Please enter a valid administrator email address." });
+        }
+
+        if (!emailRegex.test(effectiveSenderEmail)) {
+            return res.status(400).json({ error: "Please enter a valid email address for yourself." });
+        }
+
+        const formattedSenderContact = trimmedSenderPhone
+            ? `${effectiveSenderEmail} (Phone: ${trimmedSenderPhone})`
+            : effectiveSenderEmail;
+
+        const targetAdmin = await prisma.user.findFirst({
+            where: {
+                email: {
+                    equals: trimmedAdminEmail,
+                    mode: 'insensitive'
+                }
+            },
+            select: {
+                user_id: true,
+                first_name: true,
+                last_name: true,
+                role: true,
+                email: true,
+                facility_id: true
+            }
+        });
+
+        let inSystemNotificationCreated = false;
+        let createdNotification = null;
+
+        if (targetAdmin) {
+            createdNotification = await prisma.notification.create({
+                data: {
+                    user_id: targetAdmin.user_id,
+                    notification_type: isUrgent ? 'URGENT_ADMIN_ASSISTANCE' : 'ADMIN_ASSISTANCE_REQUEST',
+                    notification_message: `[${isUrgent ? 'URGENT ' : ''}Support Request] From ${trimmedSenderName} (${formattedSenderContact})${trimmedFacility ? ` [${trimmedFacility}]` : ''}: "${trimmedSubject} - ${trimmedMessage.slice(0, 120)}${trimmedMessage.length > 120 ? '...' : ''}"`,
+                    notification_date: new Date()
+                }
+            });
+
+            inSystemNotificationCreated = true;
+
+            const socketService = req.socketService || require('../../services/socketService');
+            if (socketService?.emitToUser) {
+                socketService.emitToUser(targetAdmin.user_id, 'notification:new', createdNotification);
+            }
+
+            sendPushToUser(
+                targetAdmin.user_id,
+                `Support Request: ${trimmedSenderName}`,
+                `${trimmedSubject} - ${trimmedMessage.slice(0, 100)}`,
+                { notification_id: createdNotification.notification_id, type: 'ADMIN_SUPPORT' }
+            ).catch((err) => {
+                console.warn('[ContactAdmin] Push notification dispatch skipped:', err.message);
+            });
+        }
+
+        const emailSubject = `[Pili Health Support${isUrgent ? ' - URGENT' : ''}] ${trimmedSubject} (From: ${trimmedSenderName})`;
+        const emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; color: #1e293b; background-color: #ffffff;">
+                <div style="background-color: #003f2c; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
+                    <h2 style="color: #ffffff; margin: 0; font-size: 20px; letter-spacing: 0.5px;">Pili Municipal Health Office</h2>
+                    <p style="color: #94d3a2; margin: 4px 0 0; font-size: 13px;">Clinical Network & Access Administration</p>
+                </div>
+                <div style="padding: 24px 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                        <h3 style="color: #0f172a; margin: 0; font-size: 17px;">User Access Assistance Request</h3>
+                        ${isUrgent ? '<span style="background-color: #fee2e2; color: #b91c1c; font-weight: bold; font-size: 11px; padding: 4px 8px; border-radius: 4px; border: 1px solid #fca5a5;">URGENT</span>' : ''}
+                    </div>
+                    <p style="font-size: 14px; line-height: 1.6; color: #475569; margin-top: 0;">
+                        A healthcare worker or facility staff member has submitted a request from the sign-in portal. Please review their details below:
+                    </p>
+                    <table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px;">
+                        <tr style="background-color: #f8fafc;">
+                            <td style="padding: 10px; font-weight: bold; width: 150px; border-bottom: 1px solid #e2e8f0; color: #475569;">Requester Name:</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-weight: 600;">${trimmedSenderName}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; font-weight: bold; border-bottom: 1px solid #e2e8f0; color: #475569;">Requester Email:</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #0f172a;"><a href="mailto:${effectiveSenderEmail}" style="color: #003f2c; text-decoration: underline;">${effectiveSenderEmail}</a></td>
+                        </tr>
+                        <tr style="background-color: #f8fafc;">
+                            <td style="padding: 10px; font-weight: bold; border-bottom: 1px solid #e2e8f0; color: #475569;">Requester Phone:</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${trimmedSenderPhone || 'Not provided (Optional)'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; font-weight: bold; border-bottom: 1px solid #e2e8f0; color: #475569;">Facility / Station:</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${trimmedFacility || 'Unspecified Facility'}</td>
+                        </tr>
+                        <tr style="background-color: #f8fafc;">
+                            <td style="padding: 10px; font-weight: bold; border-bottom: 1px solid #e2e8f0; color: #475569;">Subject / Category:</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${trimmedSubject}</td>
+                        </tr>
+                    </table>
+                    <div style="background-color: #f1f5f9; padding: 18px; border-radius: 8px; border-left: 4px solid #003f2c; margin-top: 16px;">
+                        <p style="margin: 0; font-weight: bold; font-size: 12px; color: #475569; text-transform: uppercase; letter-spacing: 0.5px;">Message Content:</p>
+                        <p style="margin: 8px 0 0; font-size: 14px; line-height: 1.6; color: #1e293b; white-space: pre-wrap;">${trimmedMessage}</p>
+                    </div>
+                </div>
+                <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center; font-size: 11px; color: #64748b;">
+                    <p style="margin: 0;">Dispatched automatically from Pili Birth Monitoring & Clinical Portal</p>
+                    <p style="margin: 4px 0 0;">${inSystemNotificationCreated ? 'An in-system notification was logged directly to your administrator dashboard.' : 'Administrator email was contacted directly.'}</p>
+                </div>
+            </div>
+        `;
+
+        let emailDispatched = false;
+        try {
+            await sendEmail(trimmedAdminEmail, trimmedMessage, emailSubject, { html: emailHtml, replyTo: effectiveSenderEmail });
+            emailDispatched = true;
+        } catch (emailErr) {
+            console.error('[ContactAdmin] Failed to send email via Resend:', emailErr.message);
+        }
+
+        return res.status(200).json({
+            message: "Assistance request processed successfully",
+            emailSent: emailDispatched,
+            inSystemNotificationSent: inSystemNotificationCreated,
+            adminFound: Boolean(targetAdmin),
+            adminName: targetAdmin ? `${targetAdmin.first_name} ${targetAdmin.last_name}` : null
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     register,
     login,
@@ -724,4 +873,5 @@ module.exports = {
     createStaff,
     changePassword,
     googleAuth,
+    contactAdmin,
 };

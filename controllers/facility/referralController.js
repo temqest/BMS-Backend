@@ -942,7 +942,6 @@ const getPublicReferral = async (req, res, next) => {
 
             publicData.delivery_outcomes = deliveryOutcomes;
 
-            // Fetch recent appointments for patient if available
             try {
                 if (motherUser?.user_id) {
                     const appointments = await prisma.appointment.findMany({

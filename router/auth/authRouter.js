@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, setupPassword, resetPassword, createStaff, changePassword, googleAuth } = require('../../controllers/auth/authController');
+const { register, login, setupPassword, resetPassword, createStaff, changePassword, googleAuth, contactAdmin } = require('../../controllers/auth/authController');
 const { verifyToken, checkUserRole } = require('../../middleware/authMiddleware');
 
 router.post('/register', register);
@@ -12,6 +12,8 @@ router.post('/google', googleAuth);
 router.post('/setup-password', setupPassword);
 
 router.post('/reset-password', resetPassword);
+
+router.post('/contact-admin', contactAdmin);
 
 router.post('/change-password', verifyToken, changePassword);
 

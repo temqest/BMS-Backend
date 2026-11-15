@@ -38,6 +38,7 @@ async function sendEmail(identifier, message, subject = "Notification from Birth
             from: options.from || "Birth Monitoring System <noreply@mail.pkov.online>",
             to: Array.isArray(identifier) ? identifier : [identifier],
             subject: subject,
+            reply_to: options.replyTo || options.reply_to || undefined,
             html: options.html || `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; color: #333;">
                     <div style="background-color: #2563eb; padding: 16px; border-radius: 6px 6px 0 0; text-align: center;">
