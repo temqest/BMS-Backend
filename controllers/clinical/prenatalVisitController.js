@@ -285,7 +285,7 @@ const updatePrenatalVisit = async (req, res, next) => {
         const { strategy, version, ...clientData } = req.body;
         const formattedData = { ...clientData };
 
-        if (formattedData.visit_number !== undefined) {
+        if (formattedData.visit_number !== undefined && formattedData.visit_number !== null && formattedData.visit_number !== '') {
             formattedData.visit_number = parseInt(formattedData.visit_number, 10);
             if (formattedData.visit_number >= 8 && existing.pregnancy_id) {
                 await prisma.pregnancy.update({
@@ -293,6 +293,36 @@ const updatePrenatalVisit = async (req, res, next) => {
                     data: { completed_8anc: true }
                 });
             }
+        }
+        if (formattedData.age_of_gestation_weeks !== undefined && formattedData.age_of_gestation_weeks !== null && formattedData.age_of_gestation_weeks !== '') {
+            formattedData.age_of_gestation_weeks = parseFloat(formattedData.age_of_gestation_weeks);
+        }
+        if (formattedData.trimester !== undefined && formattedData.trimester !== null && formattedData.trimester !== '') {
+            formattedData.trimester = parseInt(formattedData.trimester, 10);
+        }
+        if (formattedData.bp_systolic !== undefined && formattedData.bp_systolic !== null && formattedData.bp_systolic !== '') {
+            formattedData.bp_systolic = parseInt(formattedData.bp_systolic, 10);
+        }
+        if (formattedData.bp_diastolic !== undefined && formattedData.bp_diastolic !== null && formattedData.bp_diastolic !== '') {
+            formattedData.bp_diastolic = parseInt(formattedData.bp_diastolic, 10);
+        }
+        if (formattedData.weight_kg !== undefined && formattedData.weight_kg !== null && formattedData.weight_kg !== '') {
+            formattedData.weight_kg = parseFloat(formattedData.weight_kg);
+        }
+        if (formattedData.pulse_rate_bpm !== undefined && formattedData.pulse_rate_bpm !== null && formattedData.pulse_rate_bpm !== '') {
+            formattedData.pulse_rate_bpm = parseInt(formattedData.pulse_rate_bpm, 10);
+        }
+        if (formattedData.temperature_celsius !== undefined && formattedData.temperature_celsius !== null && formattedData.temperature_celsius !== '') {
+            formattedData.temperature_celsius = parseFloat(formattedData.temperature_celsius);
+        }
+        if (formattedData.fundic_height_cm !== undefined) {
+            formattedData.fundic_height_cm = (formattedData.fundic_height_cm !== null && formattedData.fundic_height_cm !== '') ? parseFloat(formattedData.fundic_height_cm) : null;
+        }
+        if (formattedData.fetal_heart_tone_bpm !== undefined) {
+            formattedData.fetal_heart_tone_bpm = (formattedData.fetal_heart_tone_bpm !== null && formattedData.fetal_heart_tone_bpm !== '') ? parseInt(formattedData.fetal_heart_tone_bpm, 10) : null;
+        }
+        if (formattedData.visit_date !== undefined && formattedData.visit_date) {
+            formattedData.visit_date = new Date(formattedData.visit_date);
         }
         if (formattedData.has_vaginal_bleeding !== undefined) {
             formattedData.has_vaginal_bleeding = Boolean(formattedData.has_vaginal_bleeding);

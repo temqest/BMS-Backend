@@ -177,6 +177,16 @@ const updateSupplementRecord = async (req, res, next) => {
 
         targetId = resolvedId;
 
+        if (clientData.date_given) {
+            const parsed = new Date(clientData.date_given);
+            if (!isNaN(parsed.getTime())) {
+                clientData.date_given = parsed;
+            }
+        }
+        if (clientData.tablets_given_count !== undefined) {
+            clientData.tablets_given_count = parseInt(clientData.tablets_given_count, 10);
+        }
+
         const mvccResult = await updateWithMVCC('supplementation_Record', targetId, { version, ...clientData }, {
             strategy,
             userId: req.user?.user_id || req.user?.id

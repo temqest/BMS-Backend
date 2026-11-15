@@ -177,7 +177,7 @@ const registerDeliveryOutcome = async (req, res, next) => {
 const updateDeliveryOutcome = async (req, res, next) => {
     try {
         const { delivery_id } = req.params;
-        const { strategy, version, ...clientData } = req.body;
+        const { strategy, version, newborns, ...clientData } = req.body;
 
         if (!(await validate.isDeliveryOutcomeExist(delivery_id))) {
             return res.status(404).json({ error: "Delivery outcome not found" });
@@ -209,9 +209,61 @@ const updateDeliveryOutcome = async (req, res, next) => {
             });
         }
 
+        if (Array.isArray(newborns)) {
+            const incomingIds = newborns.map(nb => nb.newborn_id).filter(Boolean);
+            if (incomingIds.length > 0) {
+                await prisma.newborn_Record.deleteMany({
+                    where: {
+                        delivery_id: delivery_id,
+                        newborn_id: { notIn: incomingIds }
+                    }
+                });
+            } else if (newborns.length === 0) {
+                await prisma.newborn_Record.deleteMany({
+                    where: { delivery_id: delivery_id }
+                });
+            }
+
+            for (const nb of newborns) {
+                const birthWeight = (nb.birth_weight_kg !== null && nb.birth_weight_kg !== undefined && nb.birth_weight_kg !== '') ? parseFloat(nb.birth_weight_kg) : 0;
+                const apgarScore = (nb.apgar_score !== null && nb.apgar_score !== undefined && nb.apgar_score !== '') ? parseInt(nb.apgar_score, 10) : 0;
+                const sex = nb.sex || "Indeterminate";
+                const status = nb.status_at_birth || "Alive";
+
+                if (nb.newborn_id) {
+                    await prisma.newborn_Record.update({
+                        where: { newborn_id: nb.newborn_id },
+                        data: {
+                            sex,
+                            birth_weight_kg: birthWeight,
+                            status_at_birth: status,
+                            apgar_score: apgarScore,
+                            updated_at: new Date()
+                        }
+                    });
+                } else {
+                    await prisma.newborn_Record.create({
+                        data: {
+                            delivery_id: delivery_id,
+                            sex,
+                            birth_weight_kg: birthWeight,
+                            status_at_birth: status,
+                            apgar_score: apgarScore,
+                            sync_status: "synced"
+                        }
+                    });
+                }
+            }
+        }
+
+        const fullRecord = await prisma.delivery_Outcome.findUnique({
+            where: { delivery_id },
+            include: { newbornRecords: true }
+        });
+
         return res.status(200).json({
             message: "Delivery outcome updated successfully",
-            data: mvccResult.record,
+            data: fullRecord || mvccResult.record,
             strategyUsed: mvccResult.strategyUsed
         });
 

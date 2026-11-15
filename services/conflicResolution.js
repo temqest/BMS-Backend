@@ -35,8 +35,16 @@ function getConflictingFields(serverRecord, clientRecord) {
         const clientVal = clientRecord[key];
 
         if (clientVal !== undefined && clientVal !== null) {
-            const sVal = serverVal instanceof Date ? serverVal.toISOString() : serverVal;
-            const cVal = clientVal instanceof Date ? clientVal.toISOString() : clientVal;
+            let sVal = serverVal instanceof Date ? serverVal.toISOString() : serverVal;
+            let cVal = clientVal instanceof Date ? clientVal.toISOString() : clientVal;
+            if (typeof sVal === "string" && typeof cVal === "string" && (key.endsWith("_date") || key.endsWith("_at") || key === "date_given")) {
+                const sDate = new Date(sVal);
+                const cDate = new Date(cVal);
+                if (!isNaN(sDate.getTime()) && !isNaN(cDate.getTime())) {
+                    sVal = sDate.toISOString();
+                    cVal = cDate.toISOString();
+                }
+            }
             if (sVal !== cVal && JSON.stringify(sVal) !== JSON.stringify(cVal)) {
                 fields.push(key);
             }
@@ -76,6 +84,14 @@ function getModelScalarFields(modelName) {
     return null;
 }
 
+const DATE_SCALAR_FIELDS = new Set([
+    "date_given", "birth_date", "date_of_registration", "lmp_date", "edd_date",
+    "deworming_date", "visit_date", "date_of_screening", "resolved_at", "date_referred",
+    "date_responded", "delivery_date", "fp_follow_up_date", "appointment_date",
+    "notification_date", "message_date", "available_date", "expires_at", "last_accessed_at",
+    "created_at", "updated_at", "enrolled_at"
+]);
+
 function sanitizePrismaUpdatePayload(payload, modelName = null) {
     const cleanPayload = {};
     const validScalars = getModelScalarFields(modelName);
@@ -93,6 +109,17 @@ function sanitizePrismaUpdatePayload(payload, modelName = null) {
             if (nonScalarFields.includes(key)) continue;
             if (typeof value === 'object' && value !== null && !(value instanceof Date)) {
                 continue;
+            }
+        }
+        if (value !== null && value !== undefined) {
+            if (DATE_SCALAR_FIELDS.has(key) || key.endsWith("_date") || key.endsWith("_at")) {
+                if (typeof value === "string" && value.trim()) {
+                    const parsedDate = new Date(value);
+                    if (!isNaN(parsedDate.getTime())) {
+                        cleanPayload[key] = parsedDate;
+                        continue;
+                    }
+                }
             }
         }
         cleanPayload[key] = value;
