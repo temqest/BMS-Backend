@@ -114,18 +114,43 @@ const getAllNotificationByUser = async (req, res, next) => {
             return res.status(404).json({ error: "User not found" });
         }
 
-        const directNotifications = user.notifications || [];
+        const directNotifications = (user.notifications || []).filter(n => {
+            if (n.notification_id.startsWith('cdss-') || n.notification_id.startsWith('ref-') || n.notification_id.startsWith('app-')) {
+                return false;
+            }
+            if (n.notification_type === 'facility_read_receipt') {
+                return false;
+            }
+            const msg = (n.notification_message || '').trim();
+            return msg.length > 0 && msg.toLowerCase() !== 'alert';
+        });
 
-        const readNotificationIds = new Set(
-            directNotifications.filter(n => n.is_read).map(n => n.notification_id)
-        );
+        const readReceiptRows = await prisma.notification.findMany({
+            where: {
+                user_id: user_id,
+                is_read: true,
+                OR: [
+                    { notification_id: { startsWith: 'cdss-' } },
+                    { notification_id: { startsWith: 'ref-' } },
+                    { notification_id: { startsWith: 'app-' } },
+                    { notification_type: 'facility_read_receipt' }
+                ]
+            },
+            select: { notification_id: true }
+        });
+
+        const readNotificationIds = new Set([
+            ...directNotifications.filter(n => n.is_read).map(n => n.notification_id),
+            ...readReceiptRows.map(n => n.notification_id)
+        ]);
 
         const formattedDirect = directNotifications.map(n => ({
             ...n,
             sender: n.notification_type === 'vitals' ? 'Clinical Alert'
-                  : n.notification_type === 'referral' ? 'Referral Service'
+                  : (n.notification_type === 'referral' || n.notification_type === 'Referral') ? 'Referral Service'
                   : n.notification_type === 'appointment' ? 'Appointment Service'
-                  : n.notification_type === 'team' ? 'Team Management'
+                  : (n.notification_type === 'team' || n.notification_type === 'PATIENT_ASSIGNMENT') ? 'Team Management'
+                  : n.notification_type === 'URGENT_ADMIN_ASSISTANCE' || n.notification_type === 'ADMIN_ASSISTANCE_REQUEST' ? 'Admin Support'
                   : 'System Alert',
             category: n.notification_type || 'system'
         }));
@@ -305,13 +330,14 @@ const updateNotification = async (req, res, next) => {
         let updatedNotification;
 
         if (user_id) {
+            const isFacilityAlert = notification_id.startsWith('cdss-') || notification_id.startsWith('ref-') || notification_id.startsWith('app-');
             updatedNotification = await prisma.notification.upsert({
                 where: { notification_id: notification_id },
                 create: {
                     notification_id: notification_id,
                     user_id: user_id,
-                    notification_type: 'facility',
-                    notification_message: 'Alert',
+                    notification_type: isFacilityAlert ? 'facility_read_receipt' : 'facility',
+                    notification_message: isFacilityAlert ? 'Read receipt' : 'Alert',
                     is_read: Boolean(is_read),
                     notification_date: new Date()
                 },
@@ -434,8 +460,8 @@ const markAllNotificationAsRead = async (req, res, next) => {
                     create: {
                         notification_id: notifId,
                         user_id: user_id,
-                        notification_type: 'facility',
-                        notification_message: 'Alert',
+                        notification_type: 'facility_read_receipt',
+                        notification_message: 'Read receipt',
                         is_read: true,
                         notification_date: new Date()
                     },
