@@ -8,7 +8,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-//Facility schema
 model Facility {
   facility_id          String   @id @default(uuid())
   facility_name        String
@@ -17,6 +16,7 @@ model Facility {
   email                String
   type                 String
   facility_profile_url String?
+  is_active            Boolean  @default(true)
   created_at           DateTime @default(now())
   updated_at           DateTime @default(now()) @updatedAt
   version              Int      @default(1)
@@ -27,7 +27,9 @@ model Facility {
   appointments        Appointment[]
   motherEnrollments   Mother_Facility_Enrollment[]
   facilityDocuments   Facility_Document[]
-  schedules Facility_Schedule[]
+  schedules           Facility_Schedule[]
+
+  @@index([is_active])
 }
 
 //User schema

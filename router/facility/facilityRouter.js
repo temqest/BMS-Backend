@@ -8,6 +8,7 @@ const {
     searchFacility,
     updateFacility,
     deleteFacility,
+    toggleFacilityStatus,
     viewAllFacility,
     getFacilityById,
     getFacilityHubDetails,
@@ -36,6 +37,9 @@ router.get('/public-list', getPublicFacilities);
 router.get('/search', searchFacility);
 
 router.put('/update', verifyToken, checkUserRole(adminRoles), updateFacility);
+
+router.patch('/:facility_id/status', verifyToken, checkUserRole(sysAdminOnly), toggleFacilityStatus);
+router.put('/:facility_id/status', verifyToken, checkUserRole(sysAdminOnly), toggleFacilityStatus);
 
 router.delete('/delete', verifyToken, checkUserRole(sysAdminOnly), deleteFacility);
 router.delete('/delete/:facility_id', verifyToken, checkUserRole(sysAdminOnly), deleteFacility);

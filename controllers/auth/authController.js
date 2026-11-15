@@ -196,7 +196,12 @@ const login = async (req, res, next) => {
         });
 
         if (!user) {
-            return res.status(401).json({ error: "User account not found" });
+            return res.status(401).json({ error: "User account not found or has been deactivated" });
+        }
+
+        const isSuperAdmin = user.role === 'SystemAdmin' || user.role === 'SuperAdmin';
+        if (user.facility && user.facility.is_active === false && !isSuperAdmin) {
+            return res.status(403).json({ error: "Access Denied. Your assigned healthcare facility has been deactivated by the municipal health office." });
         }
 
         if (!user.password) {
@@ -652,6 +657,15 @@ const googleAuth = async (req, res, next) => {
                     message: "No account found for this Google email."
                 });
             }
+        }
+
+        if (!user.is_active) {
+            return res.status(403).json({ error: "Access Denied. Your account has been deactivated." });
+        }
+
+        const isSuperAdmin = user.role === 'SystemAdmin' || user.role === 'SuperAdmin';
+        if (user.facility && user.facility.is_active === false && !isSuperAdmin) {
+            return res.status(403).json({ error: "Access Denied. Your assigned healthcare facility has been deactivated by the municipal health office." });
         }
 
         if (profileUrl && !user.profile_url) {

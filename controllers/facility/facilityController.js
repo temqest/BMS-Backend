@@ -13,30 +13,46 @@ const registerFacility = async (req, res, next) => {
     try {
         const { facility_name, address, contact_number, email, type } = req.body;
 
-        if (!facility_name || !address || !contact_number || !type) {
-            return res.status(400).json({ error: "Required fields are missing for facility registration" });
+        if (!facility_name || !facility_name.trim() || !address || !address.trim() || !type || !type.trim()) {
+            return res.status(400).json({ error: "Required fields are missing for facility registration (facility_name, address, type)" });
+        }
+
+        const trimmedName = facility_name.trim();
+        const trimmedAddress = address.trim();
+        const trimmedType = type.trim();
+        const trimmedContact = contact_number ? contact_number.trim() : "";
+        const trimmedEmail = email ? email.trim() : "";
+
+        const duplicateConditions = [
+            { facility_name: { equals: trimmedName, mode: 'insensitive' } }
+        ];
+
+        if (trimmedEmail) {
+            duplicateConditions.push({ email: { equals: trimmedEmail, mode: 'insensitive' } });
         }
 
         const isFacilityExist = await prisma.facility.findFirst({
             where: {
-                OR: [
-                    { facility_name: facility_name },
-                    { email: email },
-                ]
+                OR: duplicateConditions
             },
         });
 
         if (isFacilityExist) {
-            return res.status(400).json({ error: "Facility with this name or email already exist" });
+            const isNameMatch = isFacilityExist.facility_name.toLowerCase() === trimmedName.toLowerCase();
+            return res.status(400).json({
+                error: isNameMatch
+                    ? "Facility with this name already exists"
+                    : "Facility with this email already exists"
+            });
         }
 
         const facility = await prisma.facility.create({
             data: {
-                facility_name: facility_name,
-                address: address,
-                contact_number: contact_number,
-                email: email,
-                type: type,
+                facility_name: trimmedName,
+                address: trimmedAddress,
+                contact_number: trimmedContact,
+                email: trimmedEmail,
+                type: trimmedType,
             }
         });
 
@@ -267,6 +283,11 @@ const updateFacility = async (req, res, next) => {
 
 const deleteFacility = async (req, res, next) => {
     try {
+        const isSuperAdmin = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuperAdmin) {
+            return res.status(403).json({ error: "Access Denied. Only Super Admin can delete a facility." });
+        }
+
         const facility_id = req.params.facility_id || req.body?.facility_id || req.query?.facility_id;
 
         if (!facility_id) {
@@ -303,6 +324,85 @@ const deleteFacility = async (req, res, next) => {
     }
 };
 
+const toggleFacilityStatus = async (req, res, next) => {
+    try {
+        const isSuperAdmin = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuperAdmin) {
+            return res.status(403).json({ error: "Access Denied. Only Super Admin can change facility status." });
+        }
+
+        const facility_id = req.params.facility_id || req.body?.facility_id;
+        const { is_active } = req.body;
+
+        if (!facility_id) {
+            return res.status(400).json({ error: "Facility ID is required" });
+        }
+
+        if (typeof is_active !== 'boolean') {
+            return res.status(400).json({ error: "is_active boolean flag is required" });
+        }
+
+        const facility = await prisma.facility.findUnique({
+            where: { facility_id }
+        });
+
+        if (!facility) {
+            return res.status(404).json({ error: "Facility not found" });
+        }
+
+        const result = await prisma.$transaction(async (tx) => {
+            const updatedFacility = await tx.facility.update({
+                where: { facility_id },
+                data: { is_active }
+            });
+
+            if (!is_active) {
+                await tx.user.updateMany({
+                    where: { facility_id },
+                    data: { is_active: false }
+                });
+
+                await tx.mother_Facility_Enrollment.updateMany({
+                    where: {
+                        facility_id,
+                        status: 'Active'
+                    },
+                    data: {
+                        status: 'Unassigned',
+                        notes: `Facility deactivated by Super Admin on ${new Date().toISOString()}`
+                    }
+                });
+
+                const facilityStaff = await tx.user.findMany({
+                    where: { facility_id },
+                    select: { user_id: true }
+                });
+                const staffIds = facilityStaff.map(s => s.user_id);
+                if (staffIds.length > 0) {
+                    await tx.mother.updateMany({
+                        where: { assigned_worker_id: { in: staffIds } },
+                        data: { assigned_worker_id: null }
+                    });
+                }
+            } else {
+                await tx.user.updateMany({
+                    where: { facility_id },
+                    data: { is_active: true }
+                });
+            }
+
+            return updatedFacility;
+        });
+
+        return res.status(200).json({
+            message: `Facility successfully ${is_active ? 'activated' : 'deactivated'}`,
+            result
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 const viewAllFacility = async (req, res, next) => {
     try {
         const facility = await prisma.facility.findMany({
@@ -312,7 +412,9 @@ const viewAllFacility = async (req, res, next) => {
                 address: true,
                 contact_number: true,
                 email: true,
-                type: true
+                type: true,
+                facility_profile_url: true,
+                is_active: true
             }
         });
 
@@ -1033,6 +1135,7 @@ module.exports = {
     searchFacility,
     updateFacility,
     deleteFacility,
+    toggleFacilityStatus,
     viewAllFacility,
     getFacilityById,
     getFacilityHubDetails,
