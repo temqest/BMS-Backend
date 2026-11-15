@@ -156,6 +156,7 @@ model Pregnancy {
 
   @@index([mother_id])
   @@index([pregnancy_status])
+  @@index([mother_id, pregnancy_status])
 }
 
 //PrenatalVisit Schema
@@ -263,6 +264,7 @@ model CDSS_Alert {
   @@index([pregnancy_id])
   @@index([visit_id])
   @@index([is_resolved, severity])
+  @@index([pregnancy_id, is_resolved])
 }
 
 //Online Referral Schema
@@ -294,6 +296,8 @@ model Online_Referral {
   @@index([to_facility_id])
   @@index([shared_pin])
   @@index([status])
+  @@index([to_facility_id, is_completed])
+  @@index([from_facility_id, is_completed])
 }
 
 //Delivery Outcome Schema
@@ -395,6 +399,8 @@ model Appointment {
   @@index([facility_id])
   @@index([appointment_date])
   @@index([status])
+  @@index([facility_id, appointment_date, status])
+  @@index([user_id, appointment_date])
 }
 
 //Notification Schema

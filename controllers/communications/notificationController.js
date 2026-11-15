@@ -89,200 +89,147 @@ const getAllNotificationByUser = async (req, res, next) => {
             return res.status(400).json({ error: "Missing user ID" });
         }
 
-        const user = await prisma.user.findUnique({
-            where: { user_id: user_id },
-            select: {
-                user_id: true,
-                role: true,
-                facility_id: true,
-                first_name: true,
-                last_name: true,
-                facility: {
-                    select: {
-                        facility_id: true,
-                        facility_name: true
-                    }
-                },
-                notifications: {
-                    orderBy: { notification_date: "desc" },
-                    take: 50
-                }
-            }
-        });
+        const notifications = await prisma.$queryRaw`
+            WITH current_user_info AS (
+                SELECT user_id, role, facility_id
+                FROM "User"
+                WHERE user_id = ${user_id}
+                LIMIT 1
+            ),
+            user_read_receipts AS (
+                SELECT notification_id
+                FROM "Notification"
+                WHERE user_id = ${user_id}
+                  AND is_read = true
+                  AND (
+                    notification_id LIKE 'cdss-%'
+                    OR notification_id LIKE 'ref-%'
+                    OR notification_id LIKE 'app-%'
+                    OR notification_type = 'facility_read_receipt'
+                  )
+            ),
+            direct_notes AS (
+                SELECT 
+                    n.notification_id,
+                    n.user_id,
+                    n.notification_type,
+                    n.notification_message,
+                    n.notification_date,
+                    n.is_read,
+                    CASE 
+                        WHEN n.notification_type = 'vitals' THEN 'Clinical Alert'
+                        WHEN n.notification_type IN ('referral', 'Referral') THEN 'Referral Service'
+                        WHEN n.notification_type = 'appointment' THEN 'Appointment Service'
+                        WHEN n.notification_type IN ('team', 'PATIENT_ASSIGNMENT') THEN 'Team Management'
+                        WHEN n.notification_type IN ('URGENT_ADMIN_ASSISTANCE', 'ADMIN_ASSISTANCE_REQUEST') THEN 'Admin Support'
+                        ELSE 'System Alert'
+                    END AS sender,
+                    COALESCE(n.notification_type, 'system') AS category,
+                    NULL::text AS link
+                FROM "Notification" n
+                WHERE n.user_id = ${user_id}
+                  AND n.notification_id NOT LIKE 'cdss-%'
+                  AND n.notification_id NOT LIKE 'ref-%'
+                  AND n.notification_id NOT LIKE 'app-%'
+                  AND (n.notification_type IS NULL OR n.notification_type != 'facility_read_receipt')
+                  AND TRIM(COALESCE(n.notification_message, '')) != ''
+                  AND LOWER(TRIM(COALESCE(n.notification_message, ''))) != 'alert'
+                ORDER BY n.notification_date DESC
+                LIMIT 50
+            ),
+            cdss_notes AS (
+                SELECT 
+                    'cdss-' || ca.alert_id AS notification_id,
+                    ${user_id} AS user_id,
+                    'vitals'::text AS notification_type,
+                    'High-Risk CDSS Alert: ' || ca.alert_type || ' detected for ' || 
+                        COALESCE(TRIM(u.first_name || ' ' || u.last_name), 'Patient') || ' (' || ca.alert_message || ')' AS notification_message,
+                    ca.updated_at AS notification_date,
+                    EXISTS(SELECT 1 FROM user_read_receipts urr WHERE urr.notification_id = 'cdss-' || ca.alert_id) AS is_read,
+                    'Clinical CDSS System'::text AS sender,
+                    'vitals'::text AS category,
+                    '/dashboard/mothers'::text AS link
+                FROM "CDSS_Alert" ca
+                JOIN "Pregnancy" p ON ca.pregnancy_id = p.pregnancy_id
+                JOIN "Mother" m ON p.mother_id = m.mother_id
+                JOIN "User" u ON m.user_id = u.user_id
+                JOIN current_user_info cui ON u.facility_id = cui.facility_id
+                WHERE cui.facility_id IS NOT NULL 
+                  AND cui.role NOT IN ('Mother', 'MOTHER')
+                  AND ca.is_resolved = false
+                  AND LOWER(ca.severity) IN ('high', 'critical', 'critical_risk')
+                ORDER BY ca.updated_at DESC
+                LIMIT 10
+            ),
+            referral_notes AS (
+                SELECT 
+                    'ref-' || r.referral_id AS notification_id,
+                    ${user_id} AS user_id,
+                    'referral'::text AS notification_type,
+                    'Incoming Referral: ' || COALESCE(ff.facility_name, 'Partner Facility') || ' referred patient ' || 
+                        COALESCE(TRIM(u.first_name || ' ' || u.last_name), 'Patient') || ' (' || COALESCE(r.reason, 'Maternal Case') || '). Status: ' || r.status AS notification_message,
+                    r.date_referred AS notification_date,
+                    (EXISTS(SELECT 1 FROM user_read_receipts urr WHERE urr.notification_id = 'ref-' || r.referral_id) OR r.status IN ('accepted', 'completed')) AS is_read,
+                    COALESCE(ff.facility_name, 'Partner Facility') AS sender,
+                    'referral'::text AS category,
+                    '/dashboard/referrals'::text AS link
+                FROM "Online_Referral" r
+                LEFT JOIN "Facility" ff ON r.from_facility_id = ff.facility_id
+                LEFT JOIN "Pregnancy" p ON r.pregnancy_id = p.pregnancy_id
+                LEFT JOIN "Mother" m ON p.mother_id = m.mother_id
+                LEFT JOIN "User" u ON m.user_id = u.user_id
+                JOIN current_user_info cui ON r.to_facility_id = cui.facility_id
+                WHERE cui.facility_id IS NOT NULL 
+                  AND cui.role NOT IN ('Mother', 'MOTHER')
+                  AND r.is_completed = false
+                ORDER BY r.date_referred DESC
+                LIMIT 10
+            ),
+            appointment_notes AS (
+                SELECT 
+                    'app-' || a.appointment_id AS notification_id,
+                    ${user_id} AS user_id,
+                    'appointment'::text AS notification_type,
+                    'Upcoming Appointment: ' || a.appointment_type || ' for ' || 
+                        COALESCE(TRIM(u.first_name || ' ' || u.last_name), 'Patient') || ' on ' || 
+                        TO_CHAR(a.appointment_date, 'Mon DD') || ' at ' || a.appointment_time AS notification_message,
+                    COALESCE(a.updated_at, a.appointment_date) AS notification_date,
+                    EXISTS(SELECT 1 FROM user_read_receipts urr WHERE urr.notification_id = 'app-' || a.appointment_id) AS is_read,
+                    'Appointment Service'::text AS sender,
+                    'appointment'::text AS category,
+                    '/dashboard/appointments'::text AS link
+                FROM "Appointment" a
+                LEFT JOIN "User" u ON a.user_id = u.user_id
+                JOIN current_user_info cui ON a.facility_id = cui.facility_id
+                WHERE cui.facility_id IS NOT NULL 
+                  AND cui.role NOT IN ('Mother', 'MOTHER')
+                  AND LOWER(a.status) IN ('scheduled', 'pending')
+                ORDER BY a.appointment_date DESC
+                LIMIT 10
+            )
+            SELECT * FROM direct_notes
+            UNION ALL
+            SELECT * FROM cdss_notes
+            UNION ALL
+            SELECT * FROM referral_notes
+            UNION ALL
+            SELECT * FROM appointment_notes
+            ORDER BY notification_date DESC;
+        `;
 
-        if (!user) {
-            return res.status(404).json({ error: "User not found" });
+        if (notifications.length === 0) {
+            const userExists = await prisma.user.findUnique({
+                where: { user_id: user_id },
+                select: { user_id: true }
+            });
+            if (!userExists) {
+                return res.status(404).json({ error: "User not found" });
+            }
         }
-
-        const directNotifications = (user.notifications || []).filter(n => {
-            if (n.notification_id.startsWith('cdss-') || n.notification_id.startsWith('ref-') || n.notification_id.startsWith('app-')) {
-                return false;
-            }
-            if (n.notification_type === 'facility_read_receipt') {
-                return false;
-            }
-            const msg = (n.notification_message || '').trim();
-            return msg.length > 0 && msg.toLowerCase() !== 'alert';
-        });
-
-        const readReceiptRows = await prisma.notification.findMany({
-            where: {
-                user_id: user_id,
-                is_read: true,
-                OR: [
-                    { notification_id: { startsWith: 'cdss-' } },
-                    { notification_id: { startsWith: 'ref-' } },
-                    { notification_id: { startsWith: 'app-' } },
-                    { notification_type: 'facility_read_receipt' }
-                ]
-            },
-            select: { notification_id: true }
-        });
-
-        const readNotificationIds = new Set([
-            ...directNotifications.filter(n => n.is_read).map(n => n.notification_id),
-            ...readReceiptRows.map(n => n.notification_id)
-        ]);
-
-        const formattedDirect = directNotifications.map(n => ({
-            ...n,
-            sender: n.notification_type === 'vitals' ? 'Clinical Alert'
-                  : (n.notification_type === 'referral' || n.notification_type === 'Referral') ? 'Referral Service'
-                  : n.notification_type === 'appointment' ? 'Appointment Service'
-                  : (n.notification_type === 'team' || n.notification_type === 'PATIENT_ASSIGNMENT') ? 'Team Management'
-                  : n.notification_type === 'URGENT_ADMIN_ASSISTANCE' || n.notification_type === 'ADMIN_ASSISTANCE_REQUEST' ? 'Admin Support'
-                  : 'System Alert',
-            category: n.notification_type || 'system'
-        }));
-
-        let facilityAlerts = [];
-
-        if (user.facility_id && user.role !== 'Mother' && user.role !== 'MOTHER') {
-            const [cdssAlerts, incomingReferrals, upcomingAppointments] = await Promise.all([
-                prisma.cDSS_Alert.findMany({
-                    where: {
-                        is_resolved: false,
-                        severity: { in: ['HIGH', 'High', 'high', 'CRITICAL', 'Critical', 'critical', 'CRITICAL_RISK'] },
-                        pregnancy: {
-                            mother: {
-                                user: {
-                                    facility_id: user.facility_id
-                                }
-                            }
-                        }
-                    },
-                    include: {
-                        pregnancy: {
-                            include: {
-                                mother: {
-                                    include: {
-                                        user: {
-                                            select: { first_name: true, last_name: true }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    orderBy: { updated_at: 'desc' },
-                    take: 10
-                }),
-
-                prisma.online_Referral.findMany({
-                    where: {
-                        to_facility_id: user.facility_id,
-                        is_completed: false
-                    },
-                    include: {
-                        fromFacility: { select: { facility_name: true } },
-                        pregnancy: {
-                            include: {
-                                mother: {
-                                    include: {
-                                        user: { select: { first_name: true, last_name: true } }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    orderBy: { date_referred: 'desc' },
-                    take: 10
-                }),
-
-                prisma.appointment.findMany({
-                    where: {
-                        facility_id: user.facility_id,
-                        status: { in: ['scheduled', 'Scheduled', 'pending', 'Pending'] }
-                    },
-                    include: {
-                        user: { select: { first_name: true, last_name: true } }
-                    },
-                    orderBy: { appointment_date: 'desc' },
-                    take: 10
-                })
-            ]);
-
-            const formattedCDSS = cdssAlerts.map(alert => {
-                const motherUser = alert.pregnancy?.mother?.user;
-                const patientName = motherUser ? `${motherUser.first_name || ''} ${motherUser.last_name || ''}`.trim() : 'Patient';
-                const notifId = `cdss-${alert.alert_id}`;
-                return {
-                    notification_id: notifId,
-                    user_id: user_id,
-                    notification_type: 'vitals',
-                    notification_message: `High-Risk CDSS Alert: ${alert.alert_type} detected for ${patientName} (${alert.alert_message})`,
-                    notification_date: alert.updated_at,
-                    is_read: readNotificationIds.has(notifId),
-                    sender: 'Clinical CDSS System',
-                    category: 'vitals',
-                    link: '/dashboard/mothers'
-                };
-            });
-
-            const formattedReferrals = incomingReferrals.map(ref => {
-                const motherUser = ref.pregnancy?.mother?.user;
-                const patientName = motherUser ? `${motherUser.first_name || ''} ${motherUser.last_name || ''}`.trim() : 'Patient';
-                const fromFacilityName = ref.fromFacility?.facility_name || 'Partner Facility';
-                const notifId = `ref-${ref.referral_id}`;
-                return {
-                    notification_id: notifId,
-                    user_id: user_id,
-                    notification_type: 'referral',
-                    notification_message: `Incoming Referral: ${fromFacilityName} referred patient ${patientName} (${ref.reason || 'Maternal Case'}). Status: ${ref.status}`,
-                    notification_date: ref.date_referred,
-                    is_read: readNotificationIds.has(notifId) || ref.status === 'accepted' || ref.status === 'completed',
-                    sender: fromFacilityName,
-                    category: 'referral',
-                    link: '/dashboard/referrals'
-                };
-            });
-
-            const formattedAppointments = upcomingAppointments.map(app => {
-                const patientName = app.user ? `${app.user.first_name || ''} ${app.user.last_name || ''}`.trim() : 'Patient';
-                const appDateStr = new Date(app.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                const notifId = `app-${app.appointment_id}`;
-                return {
-                    notification_id: notifId,
-                    user_id: user_id,
-                    notification_type: 'appointment',
-                    notification_message: `Upcoming Appointment: ${app.appointment_type} for ${patientName} on ${appDateStr} at ${app.appointment_time}`,
-                    notification_date: app.updated_at || app.appointment_date,
-                    is_read: readNotificationIds.has(notifId),
-                    sender: 'Appointment Service',
-                    category: 'appointment',
-                    link: '/dashboard/appointments'
-                };
-            });
-
-            facilityAlerts = [...formattedCDSS, ...formattedReferrals, ...formattedAppointments];
-        }
-
-        const combined = [...formattedDirect, ...facilityAlerts];
-        combined.sort((a, b) => new Date(b.notification_date).getTime() - new Date(a.notification_date).getTime());
 
         return res.status(200).json({
             message: "Notifications fetched successfully",
-            notifications: combined
+            notifications: notifications
         });
 
     } catch (error) {

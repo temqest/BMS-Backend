@@ -1,4 +1,5 @@
 const prisma = require('../../util/db');
+const { Prisma } = require('@prisma/client');
 const validate = require('../../util/validation');
 const crypto = require('crypto');
 const { updateWithMVCC } = require('../../services/conflicResolution');
@@ -266,64 +267,97 @@ const getAllReferrals = async (req, res, next) => {
         const currentUserId = req.user?.user_id || req.user?.id;
         const staffFacilityId = req.user?.facility_id;
         const isSystemAdmin = userRole === 'SystemAdmin';
-        const isAdmin = ['Admin', 'Administrator', 'FacilityAdmin'].includes(userRole);
 
-        let facilityFilter = {};
-
+        let whereClause;
         if (isSystemAdmin) {
-            facilityFilter = {};
+            whereClause = Prisma.sql`1=1`;
         } else if (staffFacilityId) {
-            facilityFilter = {
-                OR: [
-                    { from_facility_id: staffFacilityId },
-                    { to_facility_id: staffFacilityId },
-                    { pregnancy: { mother: { assigned_worker_id: currentUserId } } },
-                    { pregnancy: { mother: { created_by_id: currentUserId } } },
-                ]
-            };
+            whereClause = Prisma.sql`(
+                r.from_facility_id = ${staffFacilityId}
+                OR r.to_facility_id = ${staffFacilityId}
+                OR m.assigned_worker_id = ${currentUserId}
+                OR m.created_by_id = ${currentUserId}
+            )`;
         } else {
-            facilityFilter = {
-                OR: [
-                    { pregnancy: { mother: { assigned_worker_id: currentUserId } } },
-                    { pregnancy: { mother: { created_by_id: currentUserId } } },
-                ]
-            };
+            whereClause = Prisma.sql`(
+                m.assigned_worker_id = ${currentUserId}
+                OR m.created_by_id = ${currentUserId}
+            )`;
         }
 
-        const referrals = await prisma.online_Referral.findMany({
-            where: facilityFilter,
-            include: {
-                pregnancy: {
-                    include: {
-                        mother: {
-                            include: {
-                                user: true,
-                            },
-                        },
-                        prenatalVisits: {
-                            orderBy: { visit_date: 'desc' },
-                            take: 1,
-                        },
-                        cdssAlerts: {
-                            where: { is_resolved: false },
-                            orderBy: { updated_at: 'desc' },
-                        },
-                        deliveryOutcomes: {
-                            include: {
-                                newbornRecords: true,
-                                postpartumVisits: {
-                                    orderBy: { visit_date: 'desc' },
-                                },
-                            },
-                            orderBy: { delivery_date: 'desc' },
-                        },
-                    },
-                },
-                fromFacility: true,
-                toFacility: true,
-            },
-            orderBy: { date_referred: 'desc' },
-        });
+        const referrals = await prisma.$queryRaw`
+            SELECT 
+                r.*,
+                json_build_object(
+                    'facility_id', ff.facility_id,
+                    'facility_name', ff.facility_name,
+                    'address', ff.address,
+                    'type', ff.type,
+                    'contact_number', ff.contact_number
+                ) AS "fromFacility",
+                CASE 
+                    WHEN tf.facility_id IS NOT NULL THEN json_build_object(
+                        'facility_id', tf.facility_id,
+                        'facility_name', tf.facility_name,
+                        'address', tf.address,
+                        'type', tf.type,
+                        'contact_number', tf.contact_number
+                    )
+                    ELSE NULL 
+                END AS "toFacility",
+                CASE 
+                    WHEN p.pregnancy_id IS NOT NULL THEN json_build_object(
+                        'pregnancy_id', p.pregnancy_id,
+                        'mother_id', p.mother_id,
+                        'gravida', p.gravida,
+                        'parity', p.parity,
+                        'lmp_date', p.lmp_date,
+                        'edd_date', p.edd_date,
+                        'pregnancy_status', p.pregnancy_status,
+                        'mother', json_build_object(
+                            'mother_id', m.mother_id,
+                            'family_serial_no', m.family_serial_no,
+                            'birth_date', m.birth_date,
+                            'age', m.age,
+                            'civil_status', m.civil_status,
+                            'blood_type', m.blood_type,
+                            'user', json_build_object(
+                                'first_name', u.first_name,
+                                'middle_name', u.middle_name,
+                                'last_name', u.last_name,
+                                'address', u.address,
+                                'phone_number', u.phone_number
+                            )
+                        ),
+                        'prenatalVisits', (
+                            SELECT COALESCE(json_agg(pv_row), '[]'::json)
+                            FROM (
+                                SELECT * FROM "PrenatalVisit" pv 
+                                WHERE pv.pregnancy_id = p.pregnancy_id 
+                                ORDER BY pv.visit_date DESC 
+                                LIMIT 1
+                            ) pv_row
+                        ),
+                        'cdssAlerts', (
+                            SELECT COALESCE(json_agg(ca_row), '[]'::json)
+                            FROM (
+                                SELECT * FROM "CDSS_Alert" ca 
+                                WHERE ca.pregnancy_id = p.pregnancy_id AND ca.is_resolved = false
+                                ORDER BY ca.updated_at DESC
+                            ) ca_row
+                        )
+                    )
+                    ELSE NULL 
+                END AS "pregnancy"
+            FROM "Online_Referral" r
+            LEFT JOIN "Facility" ff ON r.from_facility_id = ff.facility_id
+            LEFT JOIN "Facility" tf ON r.to_facility_id = tf.facility_id
+            LEFT JOIN "Pregnancy" p ON r.pregnancy_id = p.pregnancy_id
+            LEFT JOIN "Mother" m ON p.mother_id = m.mother_id
+            LEFT JOIN "User" u ON m.user_id = u.user_id
+            WHERE ${whereClause}
+            ORDER BY r.date_referred DESC;
+        `;
 
         return res.status(200).json({
             message: "Referral records loaded",

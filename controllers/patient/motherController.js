@@ -1,4 +1,5 @@
 const prisma = require('../../util/db');
+const { Prisma } = require('@prisma/client');
 const validate = require('../../util/validation');
 const { updateWithMVCC } = require('../../services/conflicResolution');
 
@@ -805,93 +806,173 @@ const getAllActiveMother = async (req, res, next) => {
         const isAdmin = req.user?.role === 'Admin';
         const currentUserId = req.user?.user_id;
 
-        let whereCondition;
-        if (isSysAdmin) {
-            whereCondition = { user: { role: "Mother", is_active: true } };
-        } else if (isAdmin) {
-            whereCondition = {
-                user: { role: "Mother", is_active: true },
-                OR: [
-                    { user: { facility_id: staffFacilityId } },
-                    {
-                        facilityEnrollments: {
-                            some: {
-                                facility_id: staffFacilityId,
-                                status: "Active"
-                            }
-                        }
-                    }
-                ]
-            };
-        } else {
-            whereCondition = {
-                user: { role: "Mother", is_active: true },
-                AND: [
-                    {
-                        OR: [
-                            { user: { facility_id: staffFacilityId } },
-                            {
-                                facilityEnrollments: {
-                                    some: {
-                                        facility_id: staffFacilityId,
-                                        status: "Active"
-                                    }
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        OR: [
-                            { assigned_worker_id: currentUserId },
-                            { created_by_id: currentUserId }
-                        ]
-                    }
-                ]
-            };
+        let condition = Prisma.sql`u.role = 'Mother' AND u.is_active = true`;
+        if (!isSysAdmin) {
+            if (isAdmin) {
+                condition = Prisma.sql`${condition} AND (u.facility_id = ${staffFacilityId} OR EXISTS (SELECT 1 FROM "Mother_Facility_Enrollment" mfe WHERE mfe.mother_id = m.mother_id AND mfe.facility_id = ${staffFacilityId} AND mfe.status = 'Active'))`;
+            } else {
+                condition = Prisma.sql`${condition} AND (u.facility_id = ${staffFacilityId} OR EXISTS (SELECT 1 FROM "Mother_Facility_Enrollment" mfe WHERE mfe.mother_id = m.mother_id AND mfe.facility_id = ${staffFacilityId} AND mfe.status = 'Active')) AND (m.assigned_worker_id = ${currentUserId} OR m.created_by_id = ${currentUserId})`;
+            }
         }
 
-        const allActiveMothers = await prisma.mother.findMany({
-            where: whereCondition,
-            include: {
-                user: { select: SAFE_USER_SELECT },
-                assignedWorker: { select: SAFE_WORKER_SELECT },
-                creator: { select: SAFE_WORKER_SELECT },
-                facilityEnrollments: {
-                    include: {
-                        facility: {
-                            select: {
-                                facility_id: true,
-                                facility_name: true,
-                                type: true
-                            }
-                        }
-                    }
-                },
-                pregnancies: {
-                    orderBy: { date_of_registration: "desc" },
-                    include: {
-                        prenatalVisits: {
-                            orderBy: { visit_date: "desc" }
-                        },
-                        labScreenings: {
-                            orderBy: { date_of_screening: "desc" }
-                        },
-                        supplementationRecords: {
-                            orderBy: { date_given: "desc" }
-                        },
-                        deliveryOutcomes: {
-                            orderBy: { delivery_date: "desc" },
-                            include: {
-                                newbornRecords: true,
-                                postpartumVisits: {
-                                    orderBy: { visit_date: "desc" }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-        });
+        const allActiveMothers = await prisma.$queryRaw`
+            SELECT 
+              m.*,
+              (
+                SELECT row_to_json(u_row) FROM (
+                  SELECT user_id, facility_id, first_name, middle_name, last_name, role, phone_number, email, address, profile_url, fcm_token, is_active, sync_status, version, updated_at
+                  FROM "User" WHERE user_id = m.user_id
+                ) u_row
+              ) as user,
+              (
+                SELECT row_to_json(w_row) FROM (
+                  SELECT user_id, facility_id, first_name, middle_name, last_name, role, phone_number, email, profile_url
+                  FROM "User" WHERE user_id = m.assigned_worker_id
+                ) w_row
+              ) as "assignedWorker",
+              (
+                SELECT row_to_json(c_row) FROM (
+                  SELECT user_id, facility_id, first_name, middle_name, last_name, role, phone_number, email, profile_url
+                  FROM "User" WHERE user_id = m.created_by_id
+                ) c_row
+              ) as creator,
+              (
+                SELECT coalesce(json_agg(
+                  json_build_object(
+                    'enrollment_id', e.enrollment_id,
+                    'mother_id', e.mother_id,
+                    'facility_id', e.facility_id,
+                    'status', e.status,
+                    'facility', json_build_object('facility_id', f.facility_id, 'facility_name', f.facility_name, 'type', f.type)
+                  )
+                ), '[]'::json)
+                FROM "Mother_Facility_Enrollment" e
+                JOIN "Facility" f ON f.facility_id = e.facility_id
+                WHERE e.mother_id = m.mother_id
+              ) as "facilityEnrollments",
+              (
+                SELECT coalesce(json_agg(
+                  json_build_object(
+                    'pregnancy_id', p.pregnancy_id,
+                    'mother_id', p.mother_id,
+                    'date_of_registration', p.date_of_registration,
+                    'lmp_date', p.lmp_date,
+                    'edd_date', p.edd_date,
+                    'gravida', p.gravida,
+                    'parity', p.parity,
+                    'previous_delivery_history', p.previous_delivery_history,
+                    'co_morbidities', p.co_morbidities,
+                    'age_group', p.age_group,
+                    'height_cm', p.height_cm,
+                    'bmi_1st_trimester', p.bmi_1st_trimester,
+                    'bmi_category', p.bmi_category,
+                    'pregnancy_status', p.pregnancy_status,
+                    'deworming_given', p.deworming_given,
+                    'deworming_date', p.deworming_date,
+                    'completed_8anc', p.completed_8anc,
+                    'prev_caesarean', p.prev_caesarean,
+                    'consecutive_miscarriages', p.consecutive_miscarriages,
+                    'stillbirth_history', p.stillbirth_history,
+                    'pph_history', p.pph_history,
+                    'has_tb', p.has_tb,
+                    'has_heart_disease', p.has_heart_disease,
+                    'has_diabetes', p.has_diabetes,
+                    'has_asthma', p.has_asthma,
+                    'has_goiter', p.has_goiter,
+                    'sync_status', p.sync_status,
+                    'version', p.version,
+                    'updated_at', p.updated_at,
+                    'prenatalVisits', (
+                      SELECT coalesce(json_agg(
+                        json_build_object(
+                          'visit_id', pv.visit_id,
+                          'pregnancy_id', pv.pregnancy_id,
+                          'health_worker_id', pv.health_worker_id,
+                          'visit_date', pv.visit_date,
+                          'trimester', pv.trimester,
+                          'visit_number', pv.visit_number,
+                          'age_of_gestation_weeks', pv.age_of_gestation_weeks,
+                          'weight_kg', pv.weight_kg,
+                          'temperature_celsius', pv.temperature_celsius,
+                          'pulse_rate_bpm', pv.pulse_rate_bpm,
+                          'bp_diastolic', pv.bp_diastolic,
+                          'bp_systolic', pv.bp_systolic,
+                          'fundic_height_cm', pv.fundic_height_cm,
+                          'fetal_heart_tone_bpm', pv.fetal_heart_tone_bpm,
+                          'fetal_presentation', pv.fetal_presentation,
+                          'chief_complaint', pv.chief_complaint,
+                          'danger_signs_observed', pv.danger_signs_observed,
+                          'risk_level_assessed', pv.risk_level_assessed,
+                          'has_vaginal_bleeding', pv.has_vaginal_bleeding,
+                          'has_pallor', pv.has_pallor,
+                          'has_edema', pv.has_edema,
+                          'has_fever', pv.has_fever,
+                          'sync_status', pv.sync_status,
+                          'version', pv.version,
+                          'updated_at', pv.updated_at,
+                          'healthWorker', json_build_object(
+                            'user_id', hw.user_id,
+                            'first_name', hw.first_name,
+                            'last_name', hw.last_name,
+                            'role', hw.role
+                          )
+                        ) ORDER BY pv.visit_date DESC
+                      ), '[]'::json)
+                      FROM "PrenatalVisit" pv
+                      LEFT JOIN "User" hw ON hw.user_id = pv.health_worker_id
+                      WHERE pv.pregnancy_id = p.pregnancy_id
+                    ),
+                    'labScreenings', (
+                      SELECT coalesce(json_agg(row_to_json(ls.*) ORDER BY ls.date_of_screening DESC), '[]'::json)
+                      FROM "Lab_Screening" ls WHERE ls.pregnancy_id = p.pregnancy_id
+                    ),
+                    'supplementationRecords', (
+                      SELECT coalesce(json_agg(row_to_json(sr.*) ORDER BY sr.date_given DESC), '[]'::json)
+                      FROM "Supplementation_Record" sr WHERE sr.pregnancy_id = p.pregnancy_id
+                    ),
+                    'cdssAlerts', (
+                      SELECT coalesce(json_agg(row_to_json(ca.*) ORDER BY ca.updated_at DESC), '[]'::json)
+                      FROM "CDSS_Alert" ca WHERE ca.pregnancy_id = p.pregnancy_id
+                    ),
+                    'onlineReferrals', (
+                      SELECT coalesce(json_agg(row_to_json(ref.*) ORDER BY ref.date_referred DESC), '[]'::json)
+                      FROM "Online_Referral" ref WHERE ref.pregnancy_id = p.pregnancy_id
+                    ),
+                    'deliveryOutcomes', (
+                      SELECT coalesce(json_agg(
+                        json_build_object(
+                          'delivery_id', d.delivery_id,
+                          'pregnancy_id', d.pregnancy_id,
+                          'delivery_date', d.delivery_date,
+                          'place_of_delivery', d.place_of_delivery,
+                          'mode_of_delivery', d.mode_of_delivery,
+                          'birth_attendant', d.birth_attendant,
+                          'maternal_outcome', d.maternal_outcome,
+                          'immediate_breastfeeding', d.immediate_breastfeeding,
+                          'duration_of_labor_hours', d.duration_of_labor_hours,
+                          'blood_loss_ml', d.blood_loss_ml,
+                          'delivery_complications', d.delivery_complications,
+                          'sync_status', d.sync_status,
+                          'version', d.version,
+                          'updated_at', d.updated_at,
+                          'newbornRecords', (SELECT coalesce(json_agg(row_to_json(nr.*)), '[]'::json) FROM "Newborn_Record" nr WHERE nr.delivery_id = d.delivery_id),
+                          'postpartumVisits', (SELECT coalesce(json_agg(row_to_json(ppv.*) ORDER BY ppv.visit_date DESC), '[]'::json) FROM "postpartum_visit" ppv WHERE ppv.delivery_id = d.delivery_id)
+                        ) ORDER BY d.delivery_date DESC
+                      ), '[]'::json)
+                      FROM "Delivery_Outcome" d WHERE d.pregnancy_id = p.pregnancy_id
+                    )
+                  ) ORDER BY p.date_of_registration DESC
+                ), '[]'::json)
+                FROM "Pregnancy" p
+                WHERE p.mother_id = m.mother_id
+              ) as pregnancies
+            FROM "Mother" m
+            JOIN "User" u ON u.user_id = m.user_id
+            LEFT JOIN "User" w ON w.user_id = m.assigned_worker_id
+            LEFT JOIN "User" c ON c.user_id = m.created_by_id
+            WHERE ${condition}
+            ORDER BY m.updated_at DESC
+        `;
 
         return res.status(200).json({
             message: "All active mothers",
@@ -1019,76 +1100,198 @@ const getCompositeMotherProfile = async (req, res, next) => {
             return res.status(400).json({ error: "Mother ID is required" });
         }
 
-        const motherProfile = await prisma.mother.findFirst({
-            where: {
-                OR: [
-                    { mother_id: mother_id },
-                    { user_id: mother_id }
-                ]
-            },
-            include: {
-                user: {
-                    select: {
-                        ...SAFE_USER_SELECT,
-                        appointments: {
-                            orderBy: { appointment_date: 'desc' },
-                            include: {
-                                facility: true
-                            }
-                        }
-                    }
-                },
-                assignedWorker: { select: SAFE_WORKER_SELECT },
-                creator: { select: SAFE_WORKER_SELECT },
-                facilityEnrollments: {
-                    include: {
-                        facility: {
-                            select: {
-                                facility_id: true,
-                                facility_name: true,
-                                type: true
-                            }
-                        }
-                    }
-                },
-                pregnancies: {
-                    orderBy: { date_of_registration: 'desc' },
-                    include: {
-                        prenatalVisits: {
-                            orderBy: { visit_date: 'desc' },
-                            include: {
-                                healthWorker: {
-                                    select: {
-                                        user_id: true,
-                                        first_name: true,
-                                        last_name: true,
-                                        role: true
-                                    }
-                                }
-                            }
-                        },
-                        supplementationRecords: {
-                            orderBy: { date_given: 'desc' }
-                        },
-                        labScreenings: {
-                            orderBy: { date_of_screening: 'desc' }
-                        },
-                        cdssAlerts: {
-                            orderBy: { updated_at: 'desc' }
-                        },
-                        onlineReferrals: {
-                            orderBy: { date_referred: 'desc' }
-                        },
-                        deliveryOutcomes: {
-                            include: {
-                                newbornRecords: true,
-                                postpartumVisits: true
-                            }
-                        }
-                    }
-                }
-            }
-        });
+        const rawRows = await prisma.$queryRaw`
+            SELECT 
+              m.*,
+              (
+                SELECT row_to_json(u_row) FROM (
+                  SELECT user_id, facility_id, first_name, middle_name, last_name, role, phone_number, email, address, profile_url, fcm_token, is_active, sync_status, version, updated_at
+                  FROM "User" WHERE user_id = m.user_id
+                ) u_row
+              ) as user,
+              (
+                SELECT row_to_json(w_row) FROM (
+                  SELECT user_id, facility_id, first_name, middle_name, last_name, role, phone_number, email, profile_url
+                  FROM "User" WHERE user_id = m.assigned_worker_id
+                ) w_row
+              ) as "assignedWorker",
+              (
+                SELECT row_to_json(c_row) FROM (
+                  SELECT user_id, facility_id, first_name, middle_name, last_name, role, phone_number, email, profile_url
+                  FROM "User" WHERE user_id = m.created_by_id
+                ) c_row
+              ) as creator,
+              (
+                SELECT coalesce(json_agg(
+                  json_build_object(
+                    'enrollment_id', e.enrollment_id,
+                    'mother_id', e.mother_id,
+                    'facility_id', e.facility_id,
+                    'status', e.status,
+                    'notes', e.notes,
+                    'enrolled_at', e.enrolled_at,
+                    'created_at', e.created_at,
+                    'updated_at', e.updated_at,
+                    'facility', json_build_object(
+                      'facility_id', f.facility_id,
+                      'facility_name', f.facility_name,
+                      'type', f.type
+                    )
+                  )
+                ), '[]'::json)
+                FROM "Mother_Facility_Enrollment" e
+                JOIN "Facility" f ON f.facility_id = e.facility_id
+                WHERE e.mother_id = m.mother_id
+              ) as "facilityEnrollments",
+              (
+                SELECT coalesce(json_agg(
+                  json_build_object(
+                    'appointment_id', a.appointment_id,
+                    'user_id', a.user_id,
+                    'facility_id', a.facility_id,
+                    'appointment_date', a.appointment_date,
+                    'appointment_time', a.appointment_time,
+                    'appointment_type', a.appointment_type,
+                    'reason', a.reason,
+                    'status', a.status,
+                    'sync_status', a.sync_status,
+                    'version', a.version,
+                    'updated_at', a.updated_at,
+                    'facility', row_to_json(af.*)
+                  ) ORDER BY a.appointment_date DESC
+                ), '[]'::json)
+                FROM "Appointment" a
+                LEFT JOIN "Facility" af ON af.facility_id = a.facility_id
+                WHERE a.user_id = m.user_id
+              ) as appointments,
+              (
+                SELECT coalesce(json_agg(
+                  json_build_object(
+                    'pregnancy_id', p.pregnancy_id,
+                    'mother_id', p.mother_id,
+                    'date_of_registration', p.date_of_registration,
+                    'lmp_date', p.lmp_date,
+                    'edd_date', p.edd_date,
+                    'gravida', p.gravida,
+                    'parity', p.parity,
+                    'previous_delivery_history', p.previous_delivery_history,
+                    'co_morbidities', p.co_morbidities,
+                    'age_group', p.age_group,
+                    'height_cm', p.height_cm,
+                    'bmi_1st_trimester', p.bmi_1st_trimester,
+                    'bmi_category', p.bmi_category,
+                    'pregnancy_status', p.pregnancy_status,
+                    'deworming_given', p.deworming_given,
+                    'deworming_date', p.deworming_date,
+                    'completed_8anc', p.completed_8anc,
+                    'prev_caesarean', p.prev_caesarean,
+                    'consecutive_miscarriages', p.consecutive_miscarriages,
+                    'stillbirth_history', p.stillbirth_history,
+                    'pph_history', p.pph_history,
+                    'has_tb', p.has_tb,
+                    'has_heart_disease', p.has_heart_disease,
+                    'has_diabetes', p.has_diabetes,
+                    'has_asthma', p.has_asthma,
+                    'has_goiter', p.has_goiter,
+                    'sync_status', p.sync_status,
+                    'version', p.version,
+                    'updated_at', p.updated_at,
+                    'prenatalVisits', (
+                      SELECT coalesce(json_agg(
+                        json_build_object(
+                          'visit_id', pv.visit_id,
+                          'pregnancy_id', pv.pregnancy_id,
+                          'health_worker_id', pv.health_worker_id,
+                          'visit_date', pv.visit_date,
+                          'trimester', pv.trimester,
+                          'visit_number', pv.visit_number,
+                          'age_of_gestation_weeks', pv.age_of_gestation_weeks,
+                          'weight_kg', pv.weight_kg,
+                          'temperature_celsius', pv.temperature_celsius,
+                          'pulse_rate_bpm', pv.pulse_rate_bpm,
+                          'bp_diastolic', pv.bp_diastolic,
+                          'bp_systolic', pv.bp_systolic,
+                          'fundic_height_cm', pv.fundic_height_cm,
+                          'fetal_heart_tone_bpm', pv.fetal_heart_tone_bpm,
+                          'fetal_presentation', pv.fetal_presentation,
+                          'chief_complaint', pv.chief_complaint,
+                          'danger_signs_observed', pv.danger_signs_observed,
+                          'risk_level_assessed', pv.risk_level_assessed,
+                          'has_vaginal_bleeding', pv.has_vaginal_bleeding,
+                          'has_pallor', pv.has_pallor,
+                          'has_edema', pv.has_edema,
+                          'has_fever', pv.has_fever,
+                          'sync_status', pv.sync_status,
+                          'version', pv.version,
+                          'updated_at', pv.updated_at,
+                          'healthWorker', json_build_object(
+                            'user_id', hw.user_id,
+                            'first_name', hw.first_name,
+                            'last_name', hw.last_name,
+                            'role', hw.role
+                          )
+                        ) ORDER BY pv.visit_date DESC
+                      ), '[]'::json)
+                      FROM "PrenatalVisit" pv
+                      LEFT JOIN "User" hw ON hw.user_id = pv.health_worker_id
+                      WHERE pv.pregnancy_id = p.pregnancy_id
+                    ),
+                    'labScreenings', (
+                      SELECT coalesce(json_agg(row_to_json(ls.*) ORDER BY ls.date_of_screening DESC), '[]'::json)
+                      FROM "Lab_Screening" ls WHERE ls.pregnancy_id = p.pregnancy_id
+                    ),
+                    'supplementationRecords', (
+                      SELECT coalesce(json_agg(row_to_json(sr.*) ORDER BY sr.date_given DESC), '[]'::json)
+                      FROM "Supplementation_Record" sr WHERE sr.pregnancy_id = p.pregnancy_id
+                    ),
+                    'cdssAlerts', (
+                      SELECT coalesce(json_agg(row_to_json(ca.*) ORDER BY ca.updated_at DESC), '[]'::json)
+                      FROM "CDSS_Alert" ca WHERE ca.pregnancy_id = p.pregnancy_id
+                    ),
+                    'onlineReferrals', (
+                      SELECT coalesce(json_agg(row_to_json(ref.*) ORDER BY ref.date_referred DESC), '[]'::json)
+                      FROM "Online_Referral" ref WHERE ref.pregnancy_id = p.pregnancy_id
+                    ),
+                    'deliveryOutcomes', (
+                      SELECT coalesce(json_agg(
+                        json_build_object(
+                          'delivery_id', d.delivery_id,
+                          'pregnancy_id', d.pregnancy_id,
+                          'delivery_date', d.delivery_date,
+                          'place_of_delivery', d.place_of_delivery,
+                          'mode_of_delivery', d.mode_of_delivery,
+                          'birth_attendant', d.birth_attendant,
+                          'maternal_outcome', d.maternal_outcome,
+                          'immediate_breastfeeding', d.immediate_breastfeeding,
+                          'duration_of_labor_hours', d.duration_of_labor_hours,
+                          'blood_loss_ml', d.blood_loss_ml,
+                          'delivery_complications', d.delivery_complications,
+                          'sync_status', d.sync_status,
+                          'version', d.version,
+                          'updated_at', d.updated_at,
+                          'newbornRecords', (
+                            SELECT coalesce(json_agg(row_to_json(nr.*)), '[]'::json)
+                            FROM "Newborn_Record" nr WHERE nr.delivery_id = d.delivery_id
+                          ),
+                          'postpartumVisits', (
+                            SELECT coalesce(json_agg(row_to_json(ppv.*)), '[]'::json)
+                            FROM "postpartum_visit" ppv WHERE ppv.delivery_id = d.delivery_id
+                          )
+                        )
+                      ), '[]'::json)
+                      FROM "Delivery_Outcome" d WHERE d.pregnancy_id = p.pregnancy_id
+                    )
+                  ) ORDER BY p.date_of_registration DESC
+                ), '[]'::json)
+                FROM "Pregnancy" p
+                WHERE p.mother_id = m.mother_id
+              ) as pregnancies
+            FROM "Mother" m
+            WHERE m.mother_id = ${mother_id} OR m.user_id = ${mother_id}
+            LIMIT 1
+        `;
+
+        const motherProfile = rawRows[0];
 
         if (!motherProfile) {
             return res.status(404).json({ error: "Mother not found" });
