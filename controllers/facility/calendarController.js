@@ -263,10 +263,197 @@ const get_schedule_by_id = async (req, res, next) => {
     }
 };
 
+function getDayRange(dateInput) {
+    const raw = typeof dateInput === 'string' ? dateInput.trim() : dateInput;
+    let year, month, day;
+    if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+        const parts = raw.slice(0, 10).split('-').map(Number);
+        year = parts[0];
+        month = parts[1] - 1;
+        day = parts[2];
+    } else {
+        const d = new Date(raw);
+        year = d.getFullYear();
+        month = d.getMonth();
+        day = d.getDate();
+    }
+    const start = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+    const end = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return { start, end, dateStr };
+}
+
+const save_facility_closed_date = async (req, res, next) => {
+    try {
+        const facility_id = req.params.facility_id || req.body.facility_id;
+        const { date, reason } = req.body;
+
+        if (!facility_id || !date) {
+            return res.status(400).json({ error: "facility_id and date are required" });
+        }
+
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuper && req.user?.facility_id && facility_id !== req.user.facility_id) {
+            return res.status(403).json({ error: "Access denied. Cannot modify another facility's closed dates." });
+        }
+
+        const { start, end, dateStr } = getDayRange(date);
+        if (isNaN(start.getTime())) {
+            return res.status(400).json({ error: "Invalid date format" });
+        }
+
+        const existing = await prisma.facility_Schedule.findFirst({
+            where: {
+                facility_id,
+                available_date: {
+                    gte: start,
+                    lte: end,
+                }
+            }
+        });
+
+        const timeSlotLabel = reason ? String(reason).trim() : "Clinic Closed / Exemption";
+
+        let result;
+        if (existing) {
+            result = await prisma.facility_Schedule.update({
+                where: { schedule_id: existing.schedule_id },
+                data: {
+                    is_available: false,
+                    max_slots: 0,
+                    available_time_slot: timeSlotLabel,
+                }
+            });
+        } else {
+            result = await prisma.facility_Schedule.create({
+                data: {
+                    facility_id,
+                    available_date: start,
+                    available_time_slot: timeSlotLabel,
+                    max_slots: 0,
+                    is_available: false,
+                }
+            });
+        }
+
+        return res.status(200).json({
+            message: "Closed date saved successfully",
+            data: {
+                id: result.schedule_id,
+                schedule_id: result.schedule_id,
+                facilityId: result.facility_id,
+                facility_id: result.facility_id,
+                date: dateStr,
+                reason: result.available_time_slot || "Clinic Closed",
+                createdAt: result.created_at,
+            }
+        });
+    } catch (err) {
+        return next(err);
+    }
+};
+
+const get_facility_closed_dates = async (req, res, next) => {
+    try {
+        const facility_id = req.params.facility_id || req.query.facility_id;
+
+        if (!facility_id) {
+            return res.status(400).json({ error: "facility_id is required" });
+        }
+
+        const records = await prisma.facility_Schedule.findMany({
+            where: {
+                facility_id,
+                is_available: false,
+            },
+            orderBy: {
+                available_date: 'asc'
+            }
+        });
+
+        const formatted = records.map((r) => {
+            const raw = new Date(r.available_date);
+            const y = raw.getFullYear();
+            const m = String(raw.getMonth() + 1).padStart(2, "0");
+            const d = String(raw.getDate()).padStart(2, "0");
+            const dateStr = `${y}-${m}-${d}`;
+            return {
+                id: r.schedule_id,
+                schedule_id: r.schedule_id,
+                facilityId: r.facility_id,
+                facility_id: r.facility_id,
+                date: dateStr,
+                reason: r.available_time_slot || "Clinic Closed",
+                createdAt: r.created_at,
+            };
+        });
+
+        return res.status(200).json({
+            facility_id,
+            count: formatted.length,
+            data: formatted,
+        });
+    } catch (err) {
+        return next(err);
+    }
+};
+
+const delete_facility_closed_date = async (req, res, next) => {
+    try {
+        const schedule_id = req.params.schedule_id || req.body.schedule_id;
+        const facility_id = req.params.facility_id || req.body.facility_id;
+        const dateStr = req.query.date || req.body.date;
+
+        let target = null;
+        if (schedule_id) {
+            target = await prisma.facility_Schedule.findUnique({
+                where: { schedule_id }
+            });
+        } else if (facility_id && dateStr) {
+            const { start, end } = getDayRange(dateStr);
+            if (!isNaN(start.getTime())) {
+                target = await prisma.facility_Schedule.findFirst({
+                    where: {
+                        facility_id,
+                        available_date: {
+                            gte: start,
+                            lte: end,
+                        },
+                        is_available: false,
+                    }
+                });
+            }
+        }
+
+        if (!target) {
+            return res.status(404).json({ error: "Closed date record not found" });
+        }
+
+        const isSuper = req.user?.role === 'SystemAdmin' || req.user?.role === 'SuperAdmin';
+        if (!isSuper && req.user?.facility_id && target.facility_id !== req.user.facility_id) {
+            return res.status(403).json({ error: "Access denied. Cannot delete another facility's closed date." });
+        }
+
+        await prisma.facility_Schedule.delete({
+            where: { schedule_id: target.schedule_id }
+        });
+
+        return res.status(200).json({
+            message: "Closed date successfully removed",
+            schedule_id: target.schedule_id,
+        });
+    } catch (err) {
+        return next(err);
+    }
+};
+
 module.exports = {
     create_appointment_slots,
     update_appointment_slots,
     delete_appointment_slots,
     get_facility_schedules,
-    get_schedule_by_id
+    get_schedule_by_id,
+    save_facility_closed_date,
+    get_facility_closed_dates,
+    delete_facility_closed_date,
 };

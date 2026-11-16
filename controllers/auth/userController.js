@@ -928,6 +928,124 @@ const updateStaffProfilePhoto = async (req, res, next) => {
     }
 };
 
+const DEFAULT_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const DEFAULT_START = "08:00";
+const DEFAULT_END = "17:00";
+
+const getStaffSchedule = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        if (!id) {
+            return res.status(400).json({ error: "User ID is required" });
+        }
+
+        const record = await prisma.staff_Schedule.findUnique({
+            where: { user_id: id }
+        });
+
+        if (record) {
+            const payload = {
+                schedule_id: record.schedule_id,
+                user_id: record.user_id,
+                days: record.days || DEFAULT_DAYS,
+                start_time: record.start_time || DEFAULT_START,
+                end_time: record.end_time || DEFAULT_END,
+                intervals: [{
+                    start: record.start_time || DEFAULT_START,
+                    end: record.end_time || DEFAULT_END
+                }]
+            };
+            return res.status(200).json({
+                message: "Staff schedule retrieved successfully",
+                ...payload,
+                schedule: payload,
+                data: payload
+            });
+        }
+
+        const defaultPayload = {
+            schedule_id: null,
+            user_id: id,
+            days: DEFAULT_DAYS,
+            start_time: DEFAULT_START,
+            end_time: DEFAULT_END,
+            intervals: [{
+                start: DEFAULT_START,
+                end: DEFAULT_END
+            }]
+        };
+        return res.status(200).json({
+            message: "Staff schedule retrieved successfully",
+            ...defaultPayload,
+            schedule: defaultPayload,
+            data: defaultPayload
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
+const updateStaffSchedule = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const requestingUser = req.user;
+
+        if (!id) {
+            return res.status(400).json({ error: "User ID is required" });
+        }
+
+        const isSuperAdmin = requestingUser?.role === 'SystemAdmin' || requestingUser?.role === 'SuperAdmin';
+        const isAdmin = requestingUser?.role === 'Admin';
+        const isSelf = requestingUser?.user_id === id;
+
+        if (!isSuperAdmin && !isAdmin && !isSelf) {
+            return res.status(403).json({ error: "Access denied. Only administrators can edit staff availability." });
+        }
+
+        const { days, intervals, start_time, end_time } = req.body;
+
+        const resolvedDays = Array.isArray(days) && days.length > 0 ? days : DEFAULT_DAYS;
+        const resolvedStart = intervals?.[0]?.start || start_time || DEFAULT_START;
+        const resolvedEnd = intervals?.[0]?.end || end_time || DEFAULT_END;
+
+        const updated = await prisma.staff_Schedule.upsert({
+            where: { user_id: id },
+            update: {
+                days: resolvedDays,
+                start_time: resolvedStart,
+                end_time: resolvedEnd,
+            },
+            create: {
+                user_id: id,
+                days: resolvedDays,
+                start_time: resolvedStart,
+                end_time: resolvedEnd,
+            }
+        });
+
+        const schedulePayload = {
+            schedule_id: updated.schedule_id,
+            user_id: updated.user_id,
+            days: updated.days,
+            start_time: updated.start_time,
+            end_time: updated.end_time,
+            intervals: [{
+                start: updated.start_time,
+                end: updated.end_time
+            }]
+        };
+
+        return res.status(200).json({
+            message: "Staff availability updated successfully",
+            ...schedulePayload,
+            schedule: schedulePayload,
+            data: schedulePayload
+        });
+    } catch (error) {
+        return next(error);
+    }
+};
+
 module.exports = {
     getStaffByFacility,
     getStaffById,
@@ -937,6 +1055,8 @@ module.exports = {
     adminResetStaffPassword,
     getStaffActivities,
     savePushToken,
-    updateStaffProfilePhoto
+    updateStaffProfilePhoto,
+    getStaffSchedule,
+    updateStaffSchedule
 };
 

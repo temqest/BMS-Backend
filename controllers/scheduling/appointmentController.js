@@ -121,12 +121,30 @@ const createAppointment = async (req, res, next) => {
             : (req.user?.facility_id || facility_id || null);
 
         if (targetFacilityId && appointment_date) {
-            const appointmentDateObj = new Date(appointment_date);
-            if (!isNaN(appointmentDateObj.getTime())) {
+            const raw = typeof appointment_date === 'string' ? appointment_date.trim() : appointment_date;
+            let year, month, day;
+            if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+                const parts = raw.slice(0, 10).split('-').map(Number);
+                year = parts[0];
+                month = parts[1] - 1;
+                day = parts[2];
+            } else {
+                const d = new Date(raw);
+                year = d.getFullYear();
+                month = d.getMonth();
+                day = d.getDate();
+            }
+            const dayStart = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+            const dayEnd = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+
+            if (!isNaN(dayStart.getTime())) {
                 const closedSchedule = await prisma.facility_Schedule.findFirst({
                     where: {
                         facility_id: targetFacilityId,
-                        available_date: appointmentDateObj,
+                        available_date: {
+                            gte: dayStart,
+                            lte: dayEnd,
+                        },
                         is_available: false,
                     }
                 });

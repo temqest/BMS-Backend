@@ -61,6 +61,7 @@ model User {
   appointments      Appointment[]
   notifications     Notification[]
   auditRevisionLogs Audit_Revision_Log[]
+  staffSchedule     Staff_Schedule?
 
   @@index([facility_id])
   @@index([role, is_active])
@@ -537,3 +538,18 @@ model Facility_Schedule {
   @@index([facility_id, available_date])
   @@index([available_date])
 }
+
+model Staff_Schedule {
+  schedule_id String   @id @default(uuid())
+  user_id     String   @unique
+  days        String[] @default(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
+  start_time  String   @default("08:00")
+  end_time    String   @default("17:00")
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+

@@ -10,7 +10,9 @@ const {
     adminResetStaffPassword,
     getStaffActivities,
     savePushToken,
-    updateStaffProfilePhoto
+    updateStaffProfilePhoto,
+    getStaffSchedule,
+    updateStaffSchedule
 } = require('../../controllers/auth/userController');
 
 router.post('/push-token', verifyToken, savePushToken);
@@ -18,6 +20,10 @@ router.post('/push-token', verifyToken, savePushToken);
 router.put('/profile', verifyToken, updateUserProfile);
 
 router.get('/facility', verifyToken, getStaffByFacility);
+
+router.get('/:id/schedule', verifyToken, getStaffSchedule);
+
+router.put('/:id/schedule', verifyToken, updateStaffSchedule);
 
 router.get('/:id/activities', verifyToken, getStaffActivities);
 
