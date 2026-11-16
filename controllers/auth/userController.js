@@ -301,6 +301,10 @@ const getStaffById = async (req, res, next) => {
             return res.status(400).json({ error: "User ID is required" });
         }
 
+        if (typeof id === 'string' && id.startsWith('temp-')) {
+            return res.status(404).json({ error: "Staff member not found" });
+        }
+
         const user = await prisma.user.findUnique({
             where: { user_id: id },
             select: {
@@ -350,6 +354,10 @@ const updateStaffRole = async (req, res, next) => {
 
         if (!id) {
             return res.status(400).json({ error: "User ID is required" });
+        }
+
+        if (typeof id === 'string' && id.startsWith('temp-')) {
+            return res.status(404).json({ error: "Staff member not found" });
         }
 
         if (!role) {
@@ -437,6 +445,10 @@ const deactivateStaff = async (req, res, next) => {
 
         if (!id) {
             return res.status(400).json({ error: "User ID is required" });
+        }
+
+        if (typeof id === 'string' && id.startsWith('temp-')) {
+            return res.status(404).json({ error: "Staff member not found" });
         }
 
         const existingUser = await prisma.user.findUnique({
@@ -641,6 +653,10 @@ const getStaffActivities = async (req, res, next) => {
 
         if (!id) {
             return res.status(400).json({ error: "User ID is required" });
+        }
+
+        if (typeof id === 'string' && id.startsWith('temp-')) {
+            return res.status(404).json({ error: "Staff member not found" });
         }
 
         const user = await prisma.user.findUnique({
