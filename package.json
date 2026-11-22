@@ -9,6 +9,7 @@
     "start": "node main.js",
     "dev": "nodemon main.js",
     "clean:db": "node scripts/clean-db.js",
+    "seed:realistic": "node scripts/seed-realistic-data.js",
     "delete:mothers": "node scripts/delete-all-mothers.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
