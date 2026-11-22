@@ -218,23 +218,21 @@ async function generateCompleteDataset() {
         const assignedStaff = staffMembers.find(s => s.facility_id === facility.facility_id && (s.role === 'Midwife' || s.role === 'Nurse'));
         const physicianStaff = staffMembers.find(s => s.facility_id === facility.facility_id && s.role === 'Doctor') || staffMembers[0];
 
-        let userId = null;
-        if (prof.hasUser && prof.email) {
-            userId = `c0000000-0000-4000-8000-${String(prof.num).padStart(12, '0')}`;
-            users.push({
-                user_id: userId,
-                facility_id: facility.facility_id,
-                first_name: prof.first_name,
-                middle_name: prof.middle_name,
-                last_name: prof.last_name,
-                role: 'Mother',
-                phone_number: prof.phone,
-                email: prof.email,
-                address: prof.address,
-                password: standardMotherPasswordHash,
-                is_active: true
-            });
-        }
+        const userId = `c0000000-0000-4000-8000-${String(prof.num).padStart(12, '0')}`;
+        const patientEmail = prof.email || `${prof.first_name.toLowerCase().replace(/[^a-z0-9]/g, '')}${prof.num}@gmail.com`;
+        users.push({
+            user_id: userId,
+            facility_id: facility.facility_id,
+            first_name: prof.first_name,
+            middle_name: prof.middle_name,
+            last_name: prof.last_name,
+            role: 'Mother',
+            phone_number: prof.phone,
+            email: patientEmail,
+            address: prof.address,
+            password: standardMotherPasswordHash,
+            is_active: true
+        });
 
         const birthYear = 2026 - prof.age;
         const birthDate = `${birthYear}-0${(prof.num % 9) + 1}-15T00:00:00.000Z`;
@@ -434,16 +432,17 @@ async function generateCompleteDataset() {
 
         if (prof.risk === 'High Risk') {
             const highRiskVisit = prenatalVisits[prenatalVisits.length - 1];
+            const refId = `50000000-0000-4000-8000-${String(refGlobalIdx++).padStart(12, '0')}`;
             onlineReferrals.push({
-                referral_id: `50000000-0000-4000-8000-${String(refGlobalIdx++).padStart(12, '0')}`,
+                referral_id: refId,
                 pregnancy_id: pregnancyId,
                 from_facility_id: facility.facility_id,
                 to_facility_id: prof.facIdx > 1 ? facilities[0].facility_id : null,
                 external_facility_name: prof.facIdx <= 1 ? 'Bicol Medical Center (BMC Naga City)' : null,
                 reason: `Urgent Maternal-Fetal Referral: ${prof.comorbidities}`,
                 date_referred: highRiskVisit.visit_date,
-                secure_link: `https://silang.ph/referral/${pregnancyId}`,
-                shared_pin: String(1000 + (prof.num * 17) % 9000),
+                secure_link: `http://localhost:5173/referral/${refId}`,
+                shared_pin: String(100000 + ((prof.num * 73819) % 899999)),
                 is_completed: false,
                 status: 'pending',
                 sync_status: 'synced',
@@ -538,7 +537,7 @@ async function generateCompleteDataset() {
 
             appointments.push({
                 appointment_id: apptId,
-                user_id: userId || assignedStaff.user_id,
+                user_id: userId,
                 facility_id: facility.facility_id,
                 appointment_date: `${apptDateStr}T${slotTime}:00.000Z`,
                 appointment_time: slotTime,
@@ -661,7 +660,7 @@ This dataset represents a clinically authentic, chronological maternal health co
 ## 3. Standard Test Credentials
 * **SuperAdmin**: \`superadmin@silang.ph\` (Existing Municipal SuperAdmin)
 * **All Healthcare Staff**: \`PiliHealth2026!\`
-* **All Patient Mobile App Accounts**: \`Password123!\` (27 mobile app accounts provisioned)
+* **All Patient Mobile App Accounts**: \`Password123!\` (All 62 patient mobile app accounts provisioned)
 
 ---
 

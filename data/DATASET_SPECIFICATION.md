@@ -29,7 +29,7 @@ This dataset represents a clinically authentic, chronological maternal health co
 ## 3. Standard Test Credentials
 * **SuperAdmin**: `superadmin@silang.ph` (Existing Municipal SuperAdmin)
 * **All Healthcare Staff**: `PiliHealth2026!`
-* **All Patient Mobile App Accounts**: `Password123!` (27 mobile app accounts provisioned)
+* **All Patient Mobile App Accounts**: `Password123!` (All 62 patient mobile app accounts provisioned)
 
 ---
 
