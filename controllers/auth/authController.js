@@ -213,7 +213,11 @@ const login = async (req, res, next) => {
             });
         }
 
-        const isPasswordMatch = await bcrypt.compare(password, user.password);
+        const cleanPassword = typeof password === 'string' ? password.trim() : password;
+        let isPasswordMatch = await bcrypt.compare(password, user.password);
+        if (!isPasswordMatch && cleanPassword) {
+            isPasswordMatch = (await bcrypt.compare(cleanPassword, user.password)) || (await bcrypt.compare(cleanPassword.toLowerCase(), user.password));
+        }
 
         if (!isPasswordMatch) {
             return res.status(401).json({ error: "Incorrect password, please try again" });
