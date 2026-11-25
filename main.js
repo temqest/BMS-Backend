@@ -116,6 +116,22 @@ app.get('/api/v1/health', (req, res) => {
     res.send("Birth Monitoring System's Backend is working fine")
 })
 
+app.get('/api/v1/health/channels', (req, res) => {
+    const { initFirebase } = require('./services/firebaseService');
+    const fcmReady = Boolean(initFirebase());
+    const smsReady = Boolean(process.env.SEMAPHORE_API_KEY && process.env.SEMAPHORE_API_KEY.trim().length > 0);
+    const emailReady = Boolean(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim().length > 0);
+
+    res.json({
+        status: 'ok',
+        channels: {
+            fcm: fcmReady ? 'Active' : 'Inactive',
+            sms: smsReady ? 'Active' : 'Inactive',
+            email: emailReady ? 'Active' : 'Inactive',
+        },
+    });
+})
+
 app.use('/api/v1', apiLimiter);
 
 app.use('/api/v1/auth', authRouter);
